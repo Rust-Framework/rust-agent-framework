@@ -50,29 +50,3 @@ impl From<&UsageStats> for CacheHitInfo {
         }
     }
 }
-
-/// Thinking mode config matching DeepSeek official API spec.
-/// Sent as `thinking: { "type": "enabled"/"disabled" }` via `extra_body`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ThinkingConfig {
-    #[serde(rename = "type")]
-    pub thinking_type: String,
-}
-
-impl ThinkingConfig {
-    pub fn enabled() -> Self {
-        Self { thinking_type: "enabled".into() }
-    }
-
-    pub fn disabled() -> Self {
-        Self { thinking_type: "disabled".into() }
-    }
-}
-
-/// Reasoning effort level matching DeepSeek official API spec.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ReasoningEffort {
-    High,
-    Max,
-}

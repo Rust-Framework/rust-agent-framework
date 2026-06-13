@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use crate::{AgentId, AgentMetadata, AgentStreamChunk, BoxStream, ChatMessage, Result};
+use crate::{AgentId, AgentMetadata, AgentStreamChunk, BoxStream, ChatAgentRunOptions, ChatMessage, Result};
 
 /// Core agent interface following MAF design.
 ///
@@ -12,7 +12,15 @@ pub trait IAgent: Send + Sync {
     fn metadata(&self) -> &AgentMetadata;
 
     /// Process messages and produce a streaming response.
-    async fn run(&self, messages: Vec<ChatMessage>) -> Result<BoxStream<Result<AgentStreamChunk>>>;
+    ///
+    /// `options` allows per-call overrides (instructions, temperature, etc.)
+    /// without mutating the agent's persistent state. Pass `Default::default()`
+    /// for standard behaviour.
+    async fn run(
+        &self,
+        messages: Vec<ChatMessage>,
+        options: ChatAgentRunOptions,
+    ) -> Result<BoxStream<Result<AgentStreamChunk>>>;
 
     /// Reset the agent's internal state.
     async fn reset(&self) -> Result<()>;

@@ -7,7 +7,7 @@ LLM provider 客户端实现层，遵循 MAF 的 provider-leading 命名规范�
 实现 `IChatClient` trait，封装与具体 LLM API 的通信细节，向上层暴露纯流式接口。
 
 - **OpenAIChatClient**: OpenAI API 的 `IChatClient` 实现（provider-leading 命名，致敬 MAF ADR-0021）
-- **ChatClientConfig**: 客户端配置（API base、key、model、temperature 等）
+- **ChatClientOptions**: 客户端配置（API base、key、model、temperature 等）
 
 ## 专属职责
 

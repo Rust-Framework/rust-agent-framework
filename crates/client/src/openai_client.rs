@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 
-use rust_agent_core::{BoxStream, ChatMessage, ChatStreamChunk, IChatClient, Result};
+use rust_agent_core::{BoxStream, ChatClientRunOptions, ChatMessage, ChatStreamChunk, IChatClient, Result};
 
 use crate::chat_client::ChatClient;
-use crate::config::ChatClientConfig;
+use crate::options::ChatClientOptions;
 use crate::types::{ModelListEntry, UsageStats};
 
 /// OpenAI chat client implementing IChatClient.
@@ -15,16 +15,12 @@ pub struct OpenAiChatClient {
 }
 
 impl OpenAiChatClient {
-    pub fn new(config: ChatClientConfig) -> Result<Self> {
-        Ok(Self { inner: ChatClient::new(config)? })
+    pub fn new(options: ChatClientOptions) -> Result<Self> {
+        Ok(Self { inner: ChatClient::new(options)? })
     }
 
     pub fn inner(&self) -> &ChatClient {
         &self.inner
-    }
-
-    pub fn inner_mut(&mut self) -> &mut ChatClient {
-        &mut self.inner
     }
 
     /// List available models.
@@ -32,14 +28,14 @@ impl OpenAiChatClient {
     pub async fn list_models(&self) -> Result<Vec<ModelListEntry>> {
         let url = format!(
             "{}/models",
-            self.inner.config().api_base.trim_end_matches('/')
+            self.inner.options().api_base.trim_end_matches('/')
         );
         let client = reqwest::Client::new();
         let resp = client
             .get(&url)
             .header(
                 "Authorization",
-                format!("Bearer {}", self.inner.config().api_key),
+                format!("Bearer {}", self.inner.options().api_key),
             )
             .send()
             .await
@@ -62,7 +58,6 @@ impl OpenAiChatClient {
     }
 
     /// Get usage statistics (placeholder — OpenAI billing API).
-    /// In production this would call the OpenAI billing/usage endpoint.
     pub async fn get_usage(&self) -> Result<UsageStats> {
         Ok(UsageStats::default())
     }
@@ -73,8 +68,9 @@ impl IChatClient for OpenAiChatClient {
     async fn run(
         &self,
         messages: &[ChatMessage],
+        options: ChatClientRunOptions,
     ) -> Result<BoxStream<Result<ChatStreamChunk>>> {
-        self.inner.run(messages).await
+        self.inner.run(messages, options).await
     }
 
     fn model_id(&self) -> &str {

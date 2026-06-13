@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rust_agent_core::{AgentStreamChunk, BoxStream, ChatMessage, IAgent, Result};
+use rust_agent_core::{AgentStreamChunk, BoxStream, ChatAgentRunOptions, ChatMessage, IAgent, Result};
 
 /// Concurrent (fan-out/fan-in) orchestration pattern —
 /// agents run in parallel, streams are merged.
@@ -14,11 +14,11 @@ impl ConcurrentPattern {
     }
 
     /// Execute agents concurrently and merge their streams.
-    pub async fn run(&self, input: Vec<ChatMessage>) -> Result<BoxStream<Result<AgentStreamChunk>>> {
+    pub async fn run(&self, input: Vec<ChatMessage>, options: ChatAgentRunOptions) -> Result<BoxStream<Result<AgentStreamChunk>>> {
         let mut streams = Vec::new();
 
         for agent in &self.agents {
-            let s = agent.run(input.clone()).await?;
+            let s = agent.run(input.clone(), options.clone()).await?;
             streams.push(s);
         }
 

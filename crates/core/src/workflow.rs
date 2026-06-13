@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use crate::{AgentId, AgentStreamChunk, BoxStream, ChatMessage, Result};
+use crate::{AgentId, AgentStreamChunk, BoxStream, ChatAgentRunOptions, ChatMessage, Result};
 
 /// Workflow interface following MAF's graph-based orchestration.
 ///
@@ -8,12 +8,17 @@ use crate::{AgentId, AgentStreamChunk, BoxStream, ChatMessage, Result};
 #[async_trait]
 pub trait IWorkflow: Send + Sync {
     /// Execute the workflow and produce a streaming response.
-    async fn run(&self, input: Vec<ChatMessage>) -> Result<BoxStream<Result<AgentStreamChunk>>>;
+    async fn run(
+        &self,
+        input: Vec<ChatMessage>,
+        options: ChatAgentRunOptions,
+    ) -> Result<BoxStream<Result<AgentStreamChunk>>>;
 
     /// Execute the workflow starting from a specific agent.
     async fn run_from(
         &self,
         agent_id: &AgentId,
         input: Vec<ChatMessage>,
+        options: ChatAgentRunOptions,
     ) -> Result<BoxStream<Result<AgentStreamChunk>>>;
 }

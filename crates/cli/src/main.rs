@@ -1,18 +1,21 @@
 use std::sync::Arc;
 
-use rust_agent_client::{
-    ChatClientConfig, DeepSeekChatClient, OpenAiChatClient,
-};
+use futures_util::StreamExt;
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
+
+use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
 use rust_agent_core::{
-    AgentId, AgentSession, ChatMessage, IAgent, ISession, IWorkflow,
-    ToolRegistry, collect_agent_response,
+    ChatAgentRunOptions, ChatMessage, IAgent, ISession, AgentSession,
+    ReasoningEffort, ToolRegistry,
 };
 use rust_agent_framework::tool;
 use rust_agent_framework::ChatClientAgent;
-use rust_agent_workflow::GraphFlow;
-use tracing_subscriber::EnvFilter;
 
-// Define tools with the #[tool] macro — minimal boilerplate
+// ── Hardcoded API key for development ──────────────────────────
+const DEEPSEEK_API_KEY: &str = "sk-6e2ab5986594445abab4dfd0bd2957ee";
+
+// ── Tool definitions ───────────────────────────────────────────
 #[tool(description = "Echoes back the input text")]
 async fn echo(#[param(desc = "The text to echo")] text: String) -> String {
     text
@@ -23,81 +26,180 @@ async fn add(#[param(desc = "First number")] a: i64, #[param(desc = "Second numb
     format!("{}", a + b)
 }
 
+// ── Commands ───────────────────────────────────────────────────
+fn print_help() {
+    println!("Commands:");
+    println!("  /help        Show this help");
+    println!("  /clear       Clear conversation history");
+    println!("  /think on    Enable thinking mode");
+    println!("  /think off   Disable thinking mode");
+    println!("  /model NAME  Switch model (e.g. deepseek-chat, deepseek-reasoner)");
+    println!("  /quit|exit   Exit (also: quit, exit without slash)");
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Minimal logging — only warnings and above to keep chat output clean
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("warn".parse()?)
+        )
         .init();
 
-    // ---- Demo 1: OpenAI Chat Client ----
-    tracing::info!("=== OpenAI Demo ===");
-    let oai_config = ChatClientConfig::openai("gpt-4.1-mini", std::env::var("OPENAI_API_KEY").unwrap_or_default());
-    let oai_client = OpenAiChatClient::new(oai_config)?;
+    // ── Build client & agent ───────────────────────────────────
+    let options = ChatClientOptions::deepseek("deepseek-v4-flash", DEEPSEEK_API_KEY);
+    let client = DeepSeekChatClient::new(options)?;
 
-    // List available models (provider-specific API)
-    match oai_client.list_models().await {
-        Ok(models) => {
-            tracing::info!("OpenAI models: {}",
-                models.iter().take(5).map(|m| m.id.as_str()).collect::<Vec<_>>().join(", "));
-        }
-        Err(e) => tracing::warn!("list_models failed (check API key): {}", e),
-    }
-
-    // ---- Demo 2: DeepSeek Chat Client with Thinking Mode ----
-    tracing::info!("=== DeepSeek Demo ===");
-    let ds_config = ChatClientConfig::deepseek(
-        "deepseek-v4-pro",
-        std::env::var("DEEPSEEK_API_KEY").unwrap_or_default(),
-    );
-    let mut ds_client = DeepSeekChatClient::new(ds_config)?;
-    ds_client.enable_thinking(true);
-    ds_client.set_reasoning_effort(rust_agent_client::ReasoningEffort::High);
-
-    // List available DeepSeek models (provider-specific API)
-    match ds_client.list_models().await {
-        Ok(models) => {
-            tracing::info!("DeepSeek models: {}",
-                models.iter().take(5).map(|m| m.id.as_str()).collect::<Vec<_>>().join(", "));
-        }
-        Err(e) => tracing::warn!("list_models failed (check API key): {}", e),
-    }
-
-    // ---- Full conversation flow with DeepSeek ----
-    // 1. Create tools
     let mut tools = ToolRegistry::new();
     tools.register(Echo);
     tools.register(Add);
 
-    // 2. Create agent (IAgent) with DeepSeek
-    let agent = ChatClientAgent::new("assistant", Arc::new(ds_client))
-        .with_instructions("You are a helpful AI assistant.")
+    let agent = ChatClientAgent::new("assistant", Arc::new(client))
+        .with_instructions("You are a helpful AI assistant. Respond concisely.")
         .with_tools(tools)
-        .with_description("A general-purpose assistant agent");
+        .with_description("Interactive chat agent");
 
-    // 3. Create session (ISession)
     let session = Arc::new(AgentSession::new());
-    session.add_message(ChatMessage::user("Hello, world!")).await?;
+    let mut thinking_enabled = true;
 
-    // 4. Run agent — streaming output
-    let messages = session.get_messages().await?;
-    let stream = agent.run(messages).await?;
+    // ── REPL ───────────────────────────────────────────────────
+    println!("rust-agent-cli — Interactive Chat (DeepSeek)");
+    println!("Type /help for commands, /quit to exit.\n");
 
-    print!("Agent [{}]: ", agent.id());
-    let response = collect_agent_response(stream).await?;
-    println!("{}", response.text);
+    let mut rl = DefaultEditor::new()?;
+    let prompt = "> ".to_string();
 
-    // 5. Store assistant response in session for conversation continuity
-    session.add_message(ChatMessage::assistant(&response.text)).await?;
+    loop {
+        let line = rl.readline(&prompt);
+        match line {
+            Ok(input) => {
+                let trimmed = input.trim();
 
-    // 6. Workflow example (IWorkflow)
-    let mut workflow = GraphFlow::new();
-    workflow.add_agent(Arc::new(agent));
-    workflow.set_entry(AgentId::new("assistant"));
+                if trimmed.is_empty() {
+                    continue;
+                }
 
-    let wf_stream = workflow.run(vec![ChatMessage::user("Hello from workflow!")]).await?;
-    print!("Workflow: ");
-    let wf_response = collect_agent_response(wf_stream).await?;
-    println!("{}", wf_response.text);
+                let _ = rl.add_history_entry(trimmed);
+
+                // ── Handle commands ────────────────────────────
+                if trimmed == "/quit" || trimmed == "/exit" || trimmed == "quit" || trimmed == "exit" {
+                    println!("Bye!");
+                    break;
+                }
+                if trimmed == "/help" {
+                    print_help();
+                    continue;
+                }
+                if trimmed == "/clear" {
+                    session.clear().await?;
+                    println!("[History cleared]\n");
+                    continue;
+                }
+                if let Some(arg) = trimmed.strip_prefix("/think") {
+                    match arg.trim() {
+                        "on" => {
+                            thinking_enabled = true;
+                            println!("[Thinking mode enabled]\n");
+                        }
+                        "off" => {
+                            thinking_enabled = false;
+                            println!("[Thinking mode disabled]\n");
+                        }
+                        _ => println!("Usage: /think on|off\n"),
+                    }
+                    continue;
+                }
+                if let Some(arg) = trimmed.strip_prefix("/model") {
+                    let model = arg.trim();
+                    if model.is_empty() {
+                        println!("Usage: /model <name>\n");
+                    } else {
+                        // Rebuild client with new model
+                        let new_options = ChatClientOptions::deepseek(model, DEEPSEEK_API_KEY);
+                        match DeepSeekChatClient::new(new_options) {
+                            Ok(_new_client) => {
+                                // We need to rebuild the agent — for simplicity,
+                                // just inform the user this needs a restart
+                                println!("[Model switch requires restart. Set model at launch.]\n");
+                            }
+                            Err(e) => println!("[Error creating client: {}]\n", e),
+                        }
+                    }
+                    continue;
+                }
+
+                // ── Chat ──────────────────────────────────────
+                session.add_message(ChatMessage::user(trimmed)).await?;
+
+                let messages = session.get_messages().await?;
+                let mut run_opts = ChatAgentRunOptions::new();
+                if thinking_enabled {
+                    run_opts = run_opts
+                        .with_thinking(true)
+                        .with_reasoning_effort(ReasoningEffort::High);
+                }
+
+                let stream = agent.run(messages, run_opts).await?;
+
+                // Stream output token by token
+                let mut full_text = String::new();
+                let mut reasoning_buf = String::new();
+                let mut in_reasoning = false;
+
+                tokio::pin!(stream);
+                while let Some(chunk_result) = stream.next().await {
+                    let chunk = match chunk_result {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("\n[Stream error: {}]", e);
+                            break;
+                        }
+                    };
+
+                    // Print reasoning (thinking) content in dim style
+                    if let Some(reasoning) = &chunk.reasoning_delta {
+                        if !in_reasoning {
+                            print!("\x1b[90m[Thinking] ");
+                            in_reasoning = true;
+                        }
+                        reasoning_buf.push_str(reasoning);
+                        print!("{}", reasoning);
+                    }
+
+                    // Print main content
+                    if let Some(delta) = &chunk.text_delta {
+                        if in_reasoning {
+                            println!("\x1b[0m");
+                            in_reasoning = false;
+                        }
+                        full_text.push_str(delta);
+                        print!("{}", delta);
+                    }
+                }
+                if in_reasoning {
+                    println!("\x1b[0m");
+                }
+                println!("\n");
+
+                // Store assistant response in session
+                if !full_text.is_empty() {
+                    session.add_message(ChatMessage::assistant(&full_text)).await?;
+                }
+            }
+            Err(ReadlineError::Interrupted) => {
+                println!("(Ctrl+C — type /quit to exit)\n");
+            }
+            Err(ReadlineError::Eof) => {
+                println!("Bye!");
+                break;
+            }
+            Err(err) => {
+                eprintln!("Read error: {}", err);
+                break;
+            }
+        }
+    }
 
     Ok(())
 }

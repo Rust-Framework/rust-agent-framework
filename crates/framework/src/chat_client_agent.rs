@@ -4,8 +4,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use rust_agent_core::{
-    AgentId, AgentMetadata, AgentStreamChunk, BoxStream, ChatMessage,
-    IAgent, IChatClient, IMiddleware, MessageRole, Result, ToolRegistry,
+    AgentId, AgentMetadata, AgentStreamChunk, BoxStream, ChatAgentRunOptions,
+    ChatMessage, IAgent, IChatClient, IMiddleware, MessageRole, Result, ToolRegistry,
 };
 
 /// ChatClientAgent — the primary IAgent implementation following MAF.
@@ -74,7 +74,11 @@ impl IAgent for ChatClientAgent {
     fn id(&self) -> &AgentId { &self.id }
     fn metadata(&self) -> &AgentMetadata { &self.metadata }
 
-    async fn run(&self, messages: Vec<ChatMessage>) -> Result<BoxStream<Result<AgentStreamChunk>>> {
+    async fn run(
+        &self,
+        messages: Vec<ChatMessage>,
+        options: ChatAgentRunOptions,
+    ) -> Result<BoxStream<Result<AgentStreamChunk>>> {
         // Apply request middleware
         let mut processed_messages = messages;
         for mw in &self.middleware {
@@ -82,9 +86,11 @@ impl IAgent for ChatClientAgent {
         }
 
         // Build full message list: instructions + history + new messages
+        // Per-call instructions override the agent's default
+        let effective_instructions = options.instructions.as_deref().unwrap_or(&self.instructions);
         let mut full_messages = Vec::new();
-        if !self.instructions.is_empty() {
-            full_messages.push(ChatMessage::system(&self.instructions));
+        if !effective_instructions.is_empty() {
+            full_messages.push(ChatMessage::system(effective_instructions));
         }
         {
             let history = self.history.read().await;
@@ -104,7 +110,8 @@ impl IAgent for ChatClientAgent {
         full_messages.extend(processed_messages);
 
         // Stream from chat client, mapping ChatStreamChunk -> AgentStreamChunk
-        let chat_stream = self.chat_client.run(&full_messages).await?;
+        let client_run_options = options.to_chat_client_run_options();
+        let chat_stream = self.chat_client.run(&full_messages, client_run_options).await?;
         let agent_id = self.id.clone();
 
         let mapped = chat_stream.map(move |chunk_result| {

@@ -1,0 +1,101 @@
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
+use crate::ChatClientRunOptions;
+
+/// Options passed to `IAgent::run()`, following MAF's RunOptions pattern.
+///
+/// Allows callers to override per-call behaviour without mutating
+/// the agent's persistent configuration. Fields are `Option`-al —
+/// `None` means "use the agent's default".
+///
+/// MAF reference: `AgentRunOptions` in Microsoft Agent Framework.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChatAgentRunOptions {
+    /// Override the system instructions for this run only.
+    pub instructions: Option<String>,
+    /// Override max_tokens for this run only.
+    pub max_tokens: Option<u32>,
+    /// Override temperature for this run only.
+    pub temperature: Option<f32>,
+    /// Override top_p for this run only.
+    pub top_p: Option<f32>,
+    /// Override stop sequences for this run only.
+    pub stop: Option<Vec<String>>,
+    /// Extra JSON fields merged into the chat completion request body
+    /// for this run only (e.g. DeepSeek thinking config).
+    pub extra_body: HashMap<String, serde_json::Value>,
+}
+
+impl ChatAgentRunOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_instructions(mut self, instructions: impl Into<String>) -> Self {
+        self.instructions = Some(instructions.into());
+        self
+    }
+
+    pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
+        self.max_tokens = Some(max_tokens);
+        self
+    }
+
+    pub fn with_temperature(mut self, temperature: f32) -> Self {
+        self.temperature = Some(temperature);
+        self
+    }
+
+    pub fn with_extra_body(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.extra_body.insert(key.into(), value);
+        self
+    }
+
+    /// Enable or disable DeepSeek thinking (reasoning) mode for this run.
+    ///
+    /// When enabled, the model outputs `reasoning_content` in stream deltas
+    /// before the final `content`.
+    pub fn with_thinking(mut self, enabled: bool) -> Self {
+        let thinking_type = if enabled { "enabled" } else { "disabled" };
+        self.extra_body.insert(
+            "thinking".to_string(),
+            serde_json::json!({ "type": thinking_type }),
+        );
+        self
+    }
+
+    /// Set the reasoning effort level for this run.
+    ///
+    /// Maps to `reasoning_effort: "high"/"max"` in the request body.
+    pub fn with_reasoning_effort(mut self, effort: ReasoningEffort) -> Self {
+        self.extra_body.insert(
+            "reasoning_effort".to_string(),
+            serde_json::to_value(effort).unwrap(),
+        );
+        self
+    }
+
+    /// Convert to `ChatClientRunOptions` for passing to `IChatClient::run()`.
+    ///
+    /// Agent-level fields (like `instructions`) are handled by the agent
+    /// and not forwarded to the chat client.
+    pub fn to_chat_client_run_options(&self) -> ChatClientRunOptions {
+        ChatClientRunOptions {
+            max_tokens: self.max_tokens,
+            temperature: self.temperature,
+            top_p: self.top_p,
+            stop: self.stop.clone(),
+            extra_body: self.extra_body.clone(),
+        }
+    }
+}
+
+/// Reasoning effort level for models that support it (e.g. DeepSeek).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningEffort {
+    High,
+    Max,
+}

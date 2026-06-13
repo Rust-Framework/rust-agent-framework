@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use rust_agent_core::{AgentId, AgentStreamChunk, BoxStream, ChatMessage, IAgent, Result};
+use rust_agent_core::{AgentId, AgentStreamChunk, BoxStream, ChatAgentRunOptions, ChatMessage, IAgent, Result};
 
 /// AgentRuntime — the execution host for agents following MAF.
 ///
@@ -26,11 +26,12 @@ impl AgentRuntime {
         &self,
         agent_id: &AgentId,
         messages: Vec<ChatMessage>,
+        options: ChatAgentRunOptions,
     ) -> Result<BoxStream<Result<AgentStreamChunk>>> {
         let agent = self.agents.get(agent_id).ok_or_else(|| {
             rust_agent_core::AgentError::AgentNotFound(agent_id.to_string())
         })?;
-        agent.run(messages).await
+        agent.run(messages, options).await
     }
 
     pub fn agent_ids(&self) -> Vec<&AgentId> {
