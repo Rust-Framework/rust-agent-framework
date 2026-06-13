@@ -88,6 +88,7 @@ impl ChatAgentRunOptions {
             top_p: self.top_p,
             stop: self.stop.clone(),
             extra_body: self.extra_body.clone(),
+            tools: Vec::new(), // tools are injected by the agent, not from options
         }
     }
 }

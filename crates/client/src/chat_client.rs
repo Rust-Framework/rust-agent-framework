@@ -137,6 +137,11 @@ impl ChatClient {
             }
         }
 
+        // Include tool definitions if provided
+        if !run_options.tools.is_empty() {
+            body["tools"] = serde_json::json!(run_options.tools);
+        }
+
         body
     }
 }

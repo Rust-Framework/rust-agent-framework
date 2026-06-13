@@ -67,6 +67,16 @@ impl ChatClientAgent {
     pub async fn tools_mut(&self) -> tokio::sync::RwLockWriteGuard<'_, ToolRegistry> {
         self.tools.write().await
     }
+
+    /// Append a message to the agent's internal conversation history.
+    pub async fn add_message(&self, message: ChatMessage) {
+        self.history.write().await.push(message);
+    }
+
+    /// Clear the agent's internal conversation history.
+    pub async fn clear_history(&self) {
+        self.history.write().await.clear();
+    }
 }
 
 #[async_trait]
@@ -97,7 +107,7 @@ impl IAgent for ChatClientAgent {
             full_messages.extend(history.iter().cloned());
         }
 
-        // Store new user messages in history (before moving processed_messages)
+        // Store new user messages in history
         {
             let mut history = self.history.write().await;
             for msg in &processed_messages {
@@ -110,12 +120,50 @@ impl IAgent for ChatClientAgent {
         full_messages.extend(processed_messages);
 
         // Stream from chat client, mapping ChatStreamChunk -> AgentStreamChunk
-        let client_run_options = options.to_chat_client_run_options();
+        let mut client_run_options = options.to_chat_client_run_options();
+
+        // Serialize registered tools into OpenAI function-calling format
+        {
+            let registry = self.tools.read().await;
+            if !registry.is_empty() {
+                let tool_defs: Vec<serde_json::Value> = registry
+                    .list()
+                    .iter()
+                    .map(|tool| {
+                        serde_json::json!({
+                            "type": "function",
+                            "function": {
+                                "name": tool.name(),
+                                "description": tool.description(),
+                                "parameters": tool.parameters_schema(),
+                            }
+                        })
+                    })
+                    .collect();
+                client_run_options.tools = tool_defs;
+            }
+        }
+
         let chat_stream = self.chat_client.run(&full_messages, client_run_options).await?;
         let agent_id = self.id.clone();
 
+        // Shared buffer to accumulate assistant text across stream chunks
+        let assistant_buf = Arc::new(tokio::sync::RwLock::new(String::new()));
+        let buf_clone = assistant_buf.clone();
+
         let mapped = chat_stream.map(move |chunk_result| {
-            chunk_result.map(|chunk| AgentStreamChunk {
+            let chunk = match chunk_result {
+                Ok(c) => c,
+                Err(e) => return Err(e),
+            };
+            // Accumulate assistant text for history (non-blocking best-effort)
+            if let Some(ref delta) = chunk.text_delta {
+                // We can't await inside map, so store via try_write
+                if let Ok(mut buf) = buf_clone.try_write() {
+                    buf.push_str(delta);
+                }
+            }
+            Ok(AgentStreamChunk {
                 text_delta: chunk.text_delta,
                 tool_call_delta: chunk.tool_call_delta,
                 reasoning_delta: chunk.reasoning_delta,
@@ -123,7 +171,22 @@ impl IAgent for ChatClientAgent {
             })
         });
 
-        Ok(Box::pin(mapped))
+        // After stream ends, store assistant message in history
+        let history = self.history.clone();
+        let final_stream = mapped.chain(futures_util::stream::once(async move {
+            let text = assistant_buf.read().await.clone();
+            if !text.is_empty() {
+                history.write().await.push(ChatMessage::assistant(&text));
+            }
+            Ok(AgentStreamChunk {
+                text_delta: None,
+                tool_call_delta: None,
+                reasoning_delta: None,
+                source_agent_id: None,
+            })
+        }));
+
+        Ok(Box::pin(final_stream))
     }
 
     async fn reset(&self) -> Result<()> {

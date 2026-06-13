@@ -6,8 +6,7 @@ use rustyline::DefaultEditor;
 
 use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
 use rust_agent_core::{
-    ChatAgentRunOptions, ChatMessage, IAgent, ISession, AgentSession,
-    ReasoningEffort, ToolRegistry,
+    ChatAgentRunOptions, ChatMessage, IAgent, ReasoningEffort, ToolRegistry,
 };
 use rust_agent_framework::tool;
 use rust_agent_framework::ChatClientAgent;
@@ -60,7 +59,6 @@ async fn main() -> anyhow::Result<()> {
         .with_tools(tools)
         .with_description("Interactive chat agent");
 
-    let session = Arc::new(AgentSession::new());
     let mut thinking_enabled = true;
 
     // ── REPL ───────────────────────────────────────────────────
@@ -92,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
                     continue;
                 }
                 if trimmed == "/clear" {
-                    session.clear().await?;
+                    agent.clear_history().await;
                     println!("[History cleared]\n");
                     continue;
                 }
@@ -115,24 +113,14 @@ async fn main() -> anyhow::Result<()> {
                     if model.is_empty() {
                         println!("Usage: /model <name>\n");
                     } else {
-                        // Rebuild client with new model
-                        let new_options = ChatClientOptions::deepseek(model, DEEPSEEK_API_KEY);
-                        match DeepSeekChatClient::new(new_options) {
-                            Ok(_new_client) => {
-                                // We need to rebuild the agent — for simplicity,
-                                // just inform the user this needs a restart
-                                println!("[Model switch requires restart. Set model at launch.]\n");
-                            }
-                            Err(e) => println!("[Error creating client: {}]\n", e),
-                        }
+                        println!("[Model switch requires restart. Set model at launch.]\n");
                     }
                     continue;
                 }
 
                 // ── Chat ──────────────────────────────────────
-                session.add_message(ChatMessage::user(trimmed)).await?;
-
-                let messages = session.get_messages().await?;
+                // Agent manages history internally — just send the new user message
+                let messages = vec![ChatMessage::user(trimmed)];
                 let mut run_opts = ChatAgentRunOptions::new();
                 if thinking_enabled {
                     run_opts = run_opts
@@ -143,8 +131,6 @@ async fn main() -> anyhow::Result<()> {
                 let stream = agent.run(messages, run_opts).await?;
 
                 // Stream output token by token
-                let mut full_text = String::new();
-                let mut reasoning_buf = String::new();
                 let mut in_reasoning = false;
 
                 tokio::pin!(stream);
@@ -163,7 +149,6 @@ async fn main() -> anyhow::Result<()> {
                             print!("\x1b[90m[Thinking] ");
                             in_reasoning = true;
                         }
-                        reasoning_buf.push_str(reasoning);
                         print!("{}", reasoning);
                     }
 
@@ -173,7 +158,6 @@ async fn main() -> anyhow::Result<()> {
                             println!("\x1b[0m");
                             in_reasoning = false;
                         }
-                        full_text.push_str(delta);
                         print!("{}", delta);
                     }
                 }
@@ -181,11 +165,6 @@ async fn main() -> anyhow::Result<()> {
                     println!("\x1b[0m");
                 }
                 println!("\n");
-
-                // Store assistant response in session
-                if !full_text.is_empty() {
-                    session.add_message(ChatMessage::assistant(&full_text)).await?;
-                }
             }
             Err(ReadlineError::Interrupted) => {
                 println!("(Ctrl+C — type /quit to exit)\n");

@@ -21,6 +21,12 @@ pub struct ChatClientRunOptions {
     /// Extra JSON fields merged into the request body top-level
     /// for this call only (e.g. `{"thinking": {"type": "enabled"}}`).
     pub extra_body: HashMap<String, serde_json::Value>,
+    /// Tool definitions in OpenAI function-calling format.
+    /// Each entry is a JSON object like:
+    /// ```json
+    /// { "type": "function", "function": { "name": "...", "description": "...", "parameters": {...} } }
+    /// ```
+    pub tools: Vec<serde_json::Value>,
 }
 
 impl ChatClientRunOptions {
@@ -40,6 +46,11 @@ impl ChatClientRunOptions {
 
     pub fn with_extra_body(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.extra_body.insert(key.into(), value);
+        self
+    }
+
+    pub fn with_tools(mut self, tools: Vec<serde_json::Value>) -> Self {
+        self.tools = tools;
         self
     }
 }
