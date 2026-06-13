@@ -1,0 +1,16 @@
+[package]
+name = "rust-agent-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+futures-core = "0.3"
+futures-util = "0.3"
+tokio = { workspace = true, features = ["sync"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+rust-agent-macros = { workspace = true }
