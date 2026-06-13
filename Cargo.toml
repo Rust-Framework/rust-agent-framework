@@ -43,3 +43,9 @@ async-trait = "0.1"
 # Async streams
 futures-core = "0.3"
 futures-util = "0.3"
+
+# HTTP client
+reqwest = { version = "0.12", default-features = false, features = ["stream", "json", "rustls-tls"] }
+
+# Bytes buffer (used by SSE transport)
+bytes = "1"

@@ -42,6 +42,8 @@ impl ChatMessage {
 pub struct ChatStreamChunk {
     pub text_delta: Option<String>,
     pub tool_call_delta: Option<crate::types::ToolCallDelta>,
+    /// DeepSeek thinking mode: reasoning chain delta before final answer.
+    pub reasoning_delta: Option<String>,
 }
 
 /// Streaming chunk from an agent, extending ChatStreamChunk with agent context.
@@ -49,6 +51,7 @@ pub struct ChatStreamChunk {
 pub struct AgentStreamChunk {
     pub text_delta: Option<String>,
     pub tool_call_delta: Option<crate::types::ToolCallDelta>,
+    pub reasoning_delta: Option<String>,
     pub source_agent_id: Option<crate::AgentId>,
 }
 

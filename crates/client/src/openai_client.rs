@@ -2,49 +2,82 @@ use async_trait::async_trait;
 
 use rust_agent_core::{BoxStream, ChatMessage, ChatStreamChunk, IChatClient, Result};
 
+use crate::chat_client::ChatClient;
 use crate::config::ChatClientConfig;
+use crate::types::{ModelListEntry, UsageStats};
 
 /// OpenAI chat client implementing IChatClient.
 ///
-/// Provider-leading naming convention following MAF's ADR-0021.
-pub struct OpenAIChatClient {
-    config: ChatClientConfig,
+/// Composes the generic `ChatClient` for HTTP/SSE transport and
+/// adds OpenAI-specific API capabilities.
+pub struct OpenAiChatClient {
+    inner: ChatClient,
 }
 
-impl OpenAIChatClient {
-    pub fn new(config: ChatClientConfig) -> Self {
-        Self { config }
+impl OpenAiChatClient {
+    pub fn new(config: ChatClientConfig) -> Result<Self> {
+        Ok(Self { inner: ChatClient::new(config)? })
     }
 
-    pub fn config(&self) -> &ChatClientConfig {
-        &self.config
+    pub fn inner(&self) -> &ChatClient {
+        &self.inner
+    }
+
+    pub fn inner_mut(&mut self) -> &mut ChatClient {
+        &mut self.inner
+    }
+
+    /// List available models.
+    /// GET `{api_base}/models` → `{ "object": "list", "data": [...] }`
+    pub async fn list_models(&self) -> Result<Vec<ModelListEntry>> {
+        let url = format!(
+            "{}/models",
+            self.inner.config().api_base.trim_end_matches('/')
+        );
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(&url)
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.inner.config().api_key),
+            )
+            .send()
+            .await
+            .map_err(|e| rust_agent_core::AgentError::ChatClientError(format!("list_models failed: {}", e)))?;
+
+        let json: serde_json::Value = resp.json().await.map_err(|e| {
+            rust_agent_core::AgentError::ChatClientError(format!("list_models parse error: {}", e))
+        })?;
+
+        let entries: Vec<ModelListEntry> = json["data"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| serde_json::from_value(item.clone()).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(entries)
+    }
+
+    /// Get usage statistics (placeholder — OpenAI billing API).
+    /// In production this would call the OpenAI billing/usage endpoint.
+    pub async fn get_usage(&self) -> Result<UsageStats> {
+        Ok(UsageStats::default())
     }
 }
 
 #[async_trait]
-impl IChatClient for OpenAIChatClient {
-    async fn run(&self, messages: &[ChatMessage]) -> Result<BoxStream<Result<ChatStreamChunk>>> {
-        tracing::info!(
-            "OpenAIChatClient: streaming from {} with model {}",
-            self.config.api_base,
-            self.config.model
-        );
-
-        // TODO: Actual HTTP streaming call to OpenAI API
-        let last_msg = messages.last().map(|m| m.content.clone()).unwrap_or_default();
-        let model = self.config.model.clone();
-
-        let stream = futures_util::stream::once(async move {
-            Ok(ChatStreamChunk {
-                text_delta: Some(format!("[Echo from {}] {}", model, last_msg)),
-                tool_call_delta: None,
-            })
-        });
-
-        Ok(Box::pin(stream))
+impl IChatClient for OpenAiChatClient {
+    async fn run(
+        &self,
+        messages: &[ChatMessage],
+    ) -> Result<BoxStream<Result<ChatStreamChunk>>> {
+        self.inner.run(messages).await
     }
 
     fn model_id(&self) -> &str {
-        &self.config.model
+        self.inner.model_id()
     }
 }

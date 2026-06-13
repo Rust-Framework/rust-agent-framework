@@ -111,6 +111,7 @@ impl IAgent for ChatClientAgent {
             chunk_result.map(|chunk| AgentStreamChunk {
                 text_delta: chunk.text_delta,
                 tool_call_delta: chunk.tool_call_delta,
+                reasoning_delta: chunk.reasoning_delta,
                 source_agent_id: Some(agent_id.clone()),
             })
         });
