@@ -155,6 +155,7 @@ fn expand_tool_fn(description: &str, func: syn::ItemFn) -> TokenStream {
         /// Auto-generated args struct by #[tool] macro.
         #[derive(::serde::Deserialize)]
         #[allow(non_snake_case)]
+        #[doc(hidden)]
         struct #args_struct_name {
             #(#arg_fields),*
         }

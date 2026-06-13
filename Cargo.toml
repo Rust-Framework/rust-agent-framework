@@ -2,7 +2,6 @@
 members = [
     "crates/core",
     "crates/client",
-    "crates/llm",
     "crates/framework",
     "crates/workflow",
     "crates/cli",
@@ -19,7 +18,6 @@ license = "MIT"
 # Internal crate dependencies
 rust-agent-core = { path = "crates/core" }
 rust-agent-client = { path = "crates/client" }
-rust-agent-llm = { path = "crates/llm" }
 rust-agent-framework = { path = "crates/framework" }
 rust-agent-workflow = { path = "crates/workflow" }
 rust-agent-macros = { path = "crates/macros" }
@@ -41,3 +39,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Async trait
 async-trait = "0.1"
+
+# Async streams
+futures-core = "0.3"
+futures-util = "0.3"

@@ -13,10 +13,12 @@ pub trait ITool: Send + Sync {
     async fn execute(&self, arguments: serde_json::Value) -> Result<String>;
 }
 
-/// AIFunction — concrete ITool implementation following MAF's `@ai_function` pattern.
+/// AIFunction — internal ITool implementation for dynamic tool registration.
 ///
-/// Wraps an async function with metadata to make it callable by agents.
-pub struct AIFunction {
+/// Users should prefer the `#[tool]` macro for defining tools.
+/// This type is pub(crate) to avoid exposing the complex handler signature.
+#[allow(dead_code)]
+pub(crate) struct AIFunction {
     name: String,
     description: String,
     parameters_schema: serde_json::Value,
@@ -29,6 +31,7 @@ pub struct AIFunction {
     >,
 }
 
+#[allow(dead_code)]
 impl AIFunction {
     pub fn new<F, Fut>(
         name: impl Into<String>,

@@ -4,10 +4,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatClientConfig {
     pub api_base: String,
+    /// API key — skipped during serialization to prevent accidental leakage.
+    #[serde(skip)]
     pub api_key: String,
     pub model: String,
     pub max_tokens: Option<u32>,
     pub temperature: Option<f32>,
+}
+
+impl std::fmt::Display for ChatClientConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ChatClientConfig {{ api_base: {}, model: {}, api_key: *** }}",
+            self.api_base, self.model
+        )
+    }
 }
 
 impl Default for ChatClientConfig {

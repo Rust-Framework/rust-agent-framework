@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use futures_util::StreamExt;
 use rust_agent_client::{ChatClientConfig, OpenAIChatClient};
 use rust_agent_core::{
-    tool, AgentId, AgentSession, ChatMessage, IAgent, ISession, IWorkflow,
-    ToolRegistry,
+    AgentId, AgentSession, ChatMessage, IAgent, ISession, IWorkflow,
+    ToolRegistry, collect_agent_response,
 };
+use rust_agent_framework::tool;
 use rust_agent_framework::ChatClientAgent;
 use rust_agent_workflow::GraphFlow;
 use tracing_subscriber::EnvFilter;
@@ -43,34 +43,29 @@ async fn main() -> anyhow::Result<()> {
         .with_description("A general-purpose assistant agent");
 
     // 4. Create session (ISession)
-    let session = AgentSession::new();
+    let session = Arc::new(AgentSession::new());
     session.add_message(ChatMessage::user("Hello, world!")).await?;
 
-    // 5. Run agent
-    let mut stream = agent.run(session.get_messages().await?).await?;
-    print!("Agent [{}]: ", agent.id());
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        if let Some(delta) = chunk.text_delta {
-            print!("{}", delta);
-        }
-    }
-    println!();
+    // 5. Run agent — streaming output
+    let messages = session.get_messages().await?;
+    let stream = agent.run(messages).await?;
 
-    // 6. Workflow example (IWorkflow)
+    print!("Agent [{}]: ", agent.id());
+    let response = collect_agent_response(stream).await?;
+    println!("{}", response.text);
+
+    // 6. Store assistant response in session for conversation continuity
+    session.add_message(ChatMessage::assistant(&response.text)).await?;
+
+    // 7. Workflow example (IWorkflow)
     let mut workflow = GraphFlow::new();
     workflow.add_agent(Arc::new(agent));
     workflow.set_entry(AgentId::new("assistant"));
 
-    let mut wf_stream = workflow.run(vec![ChatMessage::user("Hello from workflow!")]).await?;
+    let wf_stream = workflow.run(vec![ChatMessage::user("Hello from workflow!")]).await?;
     print!("Workflow: ");
-    while let Some(chunk) = wf_stream.next().await {
-        let chunk = chunk?;
-        if let Some(delta) = chunk.text_delta {
-            print!("{}", delta);
-        }
-    }
-    println!();
+    let wf_response = collect_agent_response(wf_stream).await?;
+    println!("{}", wf_response.text);
 
     Ok(())
 }

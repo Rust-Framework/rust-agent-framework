@@ -50,6 +50,15 @@ pub async fn collect_agent_response(
         }
     }
 
+    // After accumulating all deltas, try to parse string arguments into proper JSON
+    for tc in &mut tool_calls {
+        if let Some(s) = tc.arguments.as_str() {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s) {
+                tc.arguments = parsed;
+            }
+        }
+    }
+
     Ok(AgentResponse {
         text,
         tool_calls,

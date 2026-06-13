@@ -2,17 +2,27 @@ use serde::{Deserialize, Serialize};
 
 /// Unique identifier for an agent instance.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct AgentId(pub String);
+pub struct AgentId(String);
 
 impl AgentId {
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
 impl std::fmt::Display for AgentId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<str> for AgentId {
+    fn as_ref(&self) -> &str {
+        &self.0
     }
 }
 

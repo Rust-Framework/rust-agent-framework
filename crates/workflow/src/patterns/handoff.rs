@@ -6,6 +6,10 @@ use rust_agent_core::{
 
 /// Handoff orchestration pattern — one agent decides which agent runs next.
 /// Corresponds to MAF's handoff pattern from OpenAI Swarm.
+///
+/// **Note:** Current implementation is a placeholder. The triage agent's
+/// response is not yet parsed to determine routing. Only the triage agent
+/// is invoked directly.
 pub struct HandoffPattern {
     agents: Vec<Arc<dyn IAgent>>,
     triage_index: usize,

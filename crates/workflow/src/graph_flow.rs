@@ -1,20 +1,28 @@
 use async_trait::async_trait;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use rust_agent_core::{AgentId, AgentStreamChunk, BoxStream, ChatMessage, IAgent, IWorkflow, Result};
+use rust_agent_framework::AgentRuntime;
 
 /// GraphFlow — graph-based workflow engine following MAF's Workflow layer.
+///
+/// **Note:** Current implementation is an MVP. It supports agent registration
+/// and entry-point execution, but does not yet support edges, conditions,
+/// or multi-step graph traversal.
+///
+/// Internally delegates agent management to `AgentRuntime`.
 pub struct GraphFlow {
-    agents: HashMap<AgentId, Arc<dyn IAgent>>,
+    runtime: AgentRuntime,
     entry_agent: Option<AgentId>,
 }
 
 impl GraphFlow {
-    pub fn new() -> Self { Self { agents: HashMap::new(), entry_agent: None } }
+    pub fn new() -> Self {
+        Self { runtime: AgentRuntime::new(), entry_agent: None }
+    }
 
     pub fn add_agent(&mut self, agent: Arc<dyn IAgent>) {
-        self.agents.insert(agent.id().clone(), agent);
+        self.runtime.register_agent(agent);
     }
 
     pub fn set_entry(&mut self, agent_id: AgentId) {
@@ -22,7 +30,7 @@ impl GraphFlow {
     }
 
     pub fn get_agent(&self, agent_id: &AgentId) -> Option<&Arc<dyn IAgent>> {
-        self.agents.get(agent_id)
+        self.runtime.get_agent(agent_id)
     }
 }
 
@@ -44,9 +52,6 @@ impl IWorkflow for GraphFlow {
         agent_id: &AgentId,
         input: Vec<ChatMessage>,
     ) -> Result<BoxStream<Result<AgentStreamChunk>>> {
-        let agent = self.agents.get(agent_id).ok_or_else(|| {
-            rust_agent_core::AgentError::AgentNotFound(agent_id.to_string())
-        })?;
-        agent.run(input).await
+        self.runtime.run(agent_id, input).await
     }
 }

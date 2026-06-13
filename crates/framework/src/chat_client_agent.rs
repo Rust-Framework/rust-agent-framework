@@ -90,17 +90,18 @@ impl IAgent for ChatClientAgent {
             let history = self.history.read().await;
             full_messages.extend(history.iter().cloned());
         }
-        full_messages.extend(processed_messages);
 
-        // Store user messages in history
+        // Store new user messages in history (before moving processed_messages)
         {
             let mut history = self.history.write().await;
-            for msg in &full_messages {
+            for msg in &processed_messages {
                 if matches!(msg.role, MessageRole::User | MessageRole::Tool) {
                     history.push(msg.clone());
                 }
             }
         }
+
+        full_messages.extend(processed_messages);
 
         // Stream from chat client, mapping ChatStreamChunk -> AgentStreamChunk
         let chat_stream = self.chat_client.run(&full_messages).await?;

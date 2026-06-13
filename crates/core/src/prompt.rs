@@ -1,4 +1,6 @@
-use rust_agent_core::ChatMessage;
+use std::collections::HashMap;
+
+use crate::ChatMessage;
 
 /// Prompt template for constructing structured prompts.
 ///
@@ -25,7 +27,7 @@ impl PromptTemplate {
     /// Render the template with variable substitution.
     ///
     /// Variables use `{{key}}` syntax.
-    pub fn render(&self, vars: &std::collections::HashMap<&str, &str>) -> Vec<ChatMessage> {
+    pub fn render(&self, vars: &HashMap<&str, &str>) -> Vec<ChatMessage> {
         let mut messages = Vec::new();
 
         if let Some(sys) = &self.system_template {
@@ -36,7 +38,7 @@ impl PromptTemplate {
         messages
     }
 
-    fn substitute(template: &str, vars: &std::collections::HashMap<&str, &str>) -> String {
+    fn substitute(template: &str, vars: &HashMap<&str, &str>) -> String {
         let mut result = template.to_string();
         for (key, value) in vars {
             result = result.replace(&format!("{{{{{}}}}}", key), value);
