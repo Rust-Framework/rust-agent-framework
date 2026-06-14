@@ -1,10 +1,12 @@
 use async_trait::async_trait;
 
-use rust_agent_core::{BoxStream, ChatClientRunOptions, ChatMessage, ChatStreamChunk, IChatClient, Result};
+use rust_agent_core::{
+    AgentResponseUpdate, BoxStream, ChatClientRunOptions, ChatMessage, IChatClient, Result,
+};
 
 use crate::chat_client::ChatClient;
 use crate::options::ChatClientOptions;
-use crate::types::{CacheHitInfo, ModelListEntry};
+use crate::types::ModelListEntry;
 
 /// DeepSeek chat client implementing IChatClient.
 ///
@@ -25,7 +27,9 @@ pub struct DeepSeekChatClient {
 
 impl DeepSeekChatClient {
     pub fn new(options: ChatClientOptions) -> Result<Self> {
-        Ok(Self { inner: ChatClient::new(options)? })
+        Ok(Self {
+            inner: ChatClient::new(options)?,
+        })
     }
 
     pub fn inner(&self) -> &ChatClient {
@@ -48,10 +52,12 @@ impl DeepSeekChatClient {
             )
             .send()
             .await
-            .map_err(|e| rust_agent_core::AgentError::ChatClientError(format!(
-                "deepseek list_models failed: {}",
-                e
-            )))?;
+            .map_err(|e| {
+                rust_agent_core::AgentError::ChatClientError(format!(
+                    "deepseek list_models failed: {}",
+                    e
+                ))
+            })?;
 
         let json: serde_json::Value = resp.json().await.map_err(|e| {
             rust_agent_core::AgentError::ChatClientError(format!(
@@ -71,13 +77,6 @@ impl DeepSeekChatClient {
 
         Ok(entries)
     }
-
-    /// Extract cache hit information from usage stats.
-    /// The usage stats are typically obtained from the final stream chunk
-    /// when `stream_options: { include_usage: true }` is set.
-    pub async fn get_cache_info(&self) -> Result<CacheHitInfo> {
-        Ok(CacheHitInfo::default())
-    }
 }
 
 #[async_trait]
@@ -86,7 +85,7 @@ impl IChatClient for DeepSeekChatClient {
         &self,
         messages: &[ChatMessage],
         options: ChatClientRunOptions,
-    ) -> Result<BoxStream<Result<ChatStreamChunk>>> {
+    ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>> {
         self.inner.run(messages, options).await
     }
 

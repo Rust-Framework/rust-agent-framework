@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use std::time::Duration;
 
 use rust_agent_core::{
-    AgentError, BoxStream, ChatClientRunOptions, ChatMessage, ChatStreamChunk,
+    AgentError, AgentResponseUpdate, BoxStream, ChatClientRunOptions, ChatMessage,
     IChatClient, MessageRole, Result,
 };
 
@@ -39,11 +39,18 @@ impl ChatClient {
         &self,
         messages: &[ChatMessage],
         run_options: &ChatClientRunOptions,
-    ) -> Result<BoxStream<Result<ChatStreamChunk>>> {
-        let url = format!("{}/chat/completions", self.options.api_base.trim_end_matches('/'));
+    ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>> {
+        let url = format!(
+            "{}/chat/completions",
+            self.options.api_base.trim_end_matches('/')
+        );
         let body = self.build_request_body(messages, run_options);
 
-        tracing::debug!("ChatClient request to {} with model {}", url, self.options.model);
+        tracing::debug!(
+            "ChatClient request to {} with model {}",
+            url,
+            self.options.model
+        );
 
         let mut req = self
             .http
@@ -97,6 +104,28 @@ impl ChatClient {
                 });
                 if let Some(name) = &m.name {
                     obj["name"] = serde_json::Value::String(name.clone());
+                }
+                // Serialize tool_calls for assistant messages
+                if let Some(ref tool_calls) = m.tool_calls {
+                    let tc_json: Vec<serde_json::Value> = tool_calls
+                        .iter()
+                        .map(|tc| {
+                            serde_json::json!({
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tc.name,
+                                    "arguments": tc.arguments.to_string(),
+                                }
+                            })
+                        })
+                        .collect();
+                    obj["tool_calls"] = serde_json::Value::Array(tc_json);
+                }
+                // Include tool_call_id for tool messages
+                if let Some(ref tool_call_id) = m.tool_call_id {
+                    obj["tool_call_id"] =
+                        serde_json::Value::String(tool_call_id.clone());
                 }
                 obj
             })
@@ -152,7 +181,7 @@ impl IChatClient for ChatClient {
         &self,
         messages: &[ChatMessage],
         options: ChatClientRunOptions,
-    ) -> Result<BoxStream<Result<ChatStreamChunk>>> {
+    ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>> {
         self.chat_stream(messages, &options).await
     }
 

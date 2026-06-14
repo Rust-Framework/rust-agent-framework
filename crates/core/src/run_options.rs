@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ChatClientRunOptions;
+use crate::chat_client::ChatClientRunOptions;
 
 /// Options passed to `IAgent::run()`, following MAF's RunOptions pattern.
 ///
@@ -12,7 +12,7 @@ use crate::ChatClientRunOptions;
 ///
 /// MAF reference: `AgentRunOptions` in Microsoft Agent Framework.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ChatAgentRunOptions {
+pub struct AgentRunOptions {
     /// Override the system instructions for this run only.
     pub instructions: Option<String>,
     /// Override max_tokens for this run only.
@@ -26,9 +26,11 @@ pub struct ChatAgentRunOptions {
     /// Extra JSON fields merged into the chat completion request body
     /// for this run only (e.g. DeepSeek thinking config).
     pub extra_body: HashMap<String, serde_json::Value>,
+    /// Arbitrary properties passed through to the agent run context.
+    pub properties: HashMap<String, serde_json::Value>,
 }
 
-impl ChatAgentRunOptions {
+impl AgentRunOptions {
     pub fn new() -> Self {
         Self::default()
     }
@@ -50,6 +52,14 @@ impl ChatAgentRunOptions {
 
     pub fn with_extra_body(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.extra_body.insert(key.into(), value);
+        self
+    }
+
+    pub fn with_properties(
+        mut self,
+        iter: impl IntoIterator<Item = (String, serde_json::Value)>,
+    ) -> Self {
+        self.properties.extend(iter);
         self
     }
 

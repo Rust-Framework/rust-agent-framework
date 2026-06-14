@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::{BoxStream, ChatMessage, ChatStreamChunk, Result};
+use crate::{AgentResponseUpdate, BoxStream, ChatMessage, Result};
 
 /// Per-call run options for `IChatClient::run()`, following MAF's pattern.
 ///
@@ -61,7 +61,7 @@ impl ChatClientRunOptions {
 /// Only streaming output is supported.
 #[async_trait]
 pub trait IChatClient: Send + Sync {
-    /// Run chat completion and produce a stream of chunks.
+    /// Run chat completion and produce a stream of update deltas.
     ///
     /// `options` allows per-call overrides (temperature, extra_body, etc.)
     /// without mutating the client's persistent configuration.
@@ -70,7 +70,7 @@ pub trait IChatClient: Send + Sync {
         &self,
         messages: &[ChatMessage],
         options: ChatClientRunOptions,
-    ) -> Result<BoxStream<Result<ChatStreamChunk>>>;
+    ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>>;
 
     /// The model identifier used by this client.
     fn model_id(&self) -> &str;

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use rust_agent_core::{AgentId, AgentStreamChunk, BoxStream, ChatAgentRunOptions, ChatMessage, IAgent, Result};
+use rust_agent_core::{AgentId, AgentResponseResult, AgentRunOptions, BoxStream, ChatMessage, IAgent, ISession, Result};
 
 /// AgentRuntime — the execution host for agents following MAF.
 ///
@@ -11,7 +11,11 @@ pub struct AgentRuntime {
 }
 
 impl AgentRuntime {
-    pub fn new() -> Self { Self { agents: HashMap::new() } }
+    pub fn new() -> Self {
+        Self {
+            agents: HashMap::new(),
+        }
+    }
 
     pub fn register_agent(&mut self, agent: Arc<dyn IAgent>) {
         self.agents.insert(agent.id().clone(), agent);
@@ -26,12 +30,13 @@ impl AgentRuntime {
         &self,
         agent_id: &AgentId,
         messages: Vec<ChatMessage>,
-        options: ChatAgentRunOptions,
-    ) -> Result<BoxStream<Result<AgentStreamChunk>>> {
+        session: Option<Arc<dyn ISession>>,
+        options: Option<AgentRunOptions>,
+    ) -> Result<BoxStream<'static, Result<AgentResponseResult>>> {
         let agent = self.agents.get(agent_id).ok_or_else(|| {
             rust_agent_core::AgentError::AgentNotFound(agent_id.to_string())
         })?;
-        agent.run(messages, options).await
+        agent.run(messages, session, options).await
     }
 
     pub fn agent_ids(&self) -> Vec<&AgentId> {
@@ -40,5 +45,7 @@ impl AgentRuntime {
 }
 
 impl Default for AgentRuntime {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

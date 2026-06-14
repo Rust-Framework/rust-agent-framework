@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Unique identifier for an agent instance.
@@ -50,10 +53,44 @@ pub struct ToolResult {
 }
 
 /// Partial tool call information in a streaming response.
+#[deprecated(note = "use AgentResponseUpdate::ToolCallDelta instead")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallDelta {
     pub index: usize,
     pub id: Option<String>,
     pub name: Option<String>,
     pub arguments_delta: Option<String>,
+}
+
+/// 每个 content / event 变体自带的统一元数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseMetadata {
+    pub agent_id: Option<AgentId>,
+    pub model_id: Option<String>,
+    pub executor_id: Option<String>,
+    pub timestamp: DateTime<Utc>,
+    pub properties: HashMap<String, serde_json::Value>,
+}
+
+/// Finish reason from LLM
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum FinishReason {
+    Stop,
+    Length,
+    ToolCalls,
+    ContentFilter,
+    #[serde(untagged)]
+    Other(String),
+}
+
+/// Usage statistics including KV cache hit/miss
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Usage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+    pub prompt_cache_hit_tokens: Option<u32>,
+    pub prompt_cache_miss_tokens: Option<u32>,
+    pub reasoning_tokens: Option<u32>,
 }

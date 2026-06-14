@@ -75,6 +75,10 @@ impl ToolRegistry {
         self.tools.insert(tool.name().to_string(), Arc::new(tool));
     }
 
+    pub fn register_arc(&mut self, tool: Arc<dyn ITool>) {
+        self.tools.insert(tool.name().to_string(), tool);
+    }
+
     pub fn get(&self, name: &str) -> Option<&Arc<dyn ITool>> {
         self.tools.get(name)
     }

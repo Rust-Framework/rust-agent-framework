@@ -2,66 +2,78 @@ use std::pin::Pin;
 
 use futures_core::Stream;
 
-use crate::{AgentId, AgentResponse, AgentStreamChunk, Result, ToolCall};
+use crate::{AgentId, AgentResponse, AgentResponseResult, Content, Result, ToolCall};
 
 /// Type alias for a boxed, sendable stream.
-pub type BoxStream<T> = Pin<Box<dyn Stream<Item = T> + Send>>;
+pub type BoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + Send + 'a>>;
 
 /// Collect an agent stream into a single aggregated AgentResponse.
 pub async fn collect_agent_response(
-    mut stream: BoxStream<Result<AgentStreamChunk>>,
+    mut stream: BoxStream<'static, Result<AgentResponseResult>>,
 ) -> Result<AgentResponse> {
+    use futures_util::StreamExt;
+
     let mut text = String::new();
+    let mut reasoning_text = String::new();
     let mut tool_calls: Vec<ToolCall> = Vec::new();
     let mut source_agent_id: Option<AgentId> = None;
+    let mut finish_reason = None;
+    let mut usage = None;
+    let mut id = None;
+    let mut model = None;
 
-    use futures_util::StreamExt;
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        if let Some(delta) = chunk.text_delta {
-            text.push_str(&delta);
+    while let Some(result) = stream.next().await {
+        let chunk = result?;
+
+        if chunk.id.is_some() {
+            id = chunk.id;
         }
-        if let Some(tc_delta) = chunk.tool_call_delta {
-            // Accumulate tool call deltas into complete tool calls
-            let idx = tc_delta.index;
-            while tool_calls.len() <= idx {
-                tool_calls.push(ToolCall {
-                    id: String::new(),
-                    name: String::new(),
-                    arguments: serde_json::Value::Null,
-                });
-            }
-            if let Some(id) = tc_delta.id {
-                tool_calls[idx].id = id;
-            }
-            if let Some(name) = tc_delta.name {
-                tool_calls[idx].name = name;
-            }
-            if let Some(args) = tc_delta.arguments_delta {
-                if tool_calls[idx].arguments.is_null() {
-                    tool_calls[idx].arguments = serde_json::Value::String(args);
-                } else if let Some(existing) = tool_calls[idx].arguments.as_str() {
-                    tool_calls[idx].arguments = serde_json::Value::String(format!("{}{}", existing, args));
+        if chunk.model.is_some() {
+            model = chunk.model;
+        }
+        if chunk.finish_reason.is_some() {
+            finish_reason = chunk.finish_reason;
+        }
+
+        for content in chunk.contents {
+            match content {
+                Content::Text(c) => {
+                    text.push_str(&c.delta);
                 }
-            }
-        }
-        if chunk.source_agent_id.is_some() {
-            source_agent_id = chunk.source_agent_id;
-        }
-    }
-
-    // After accumulating all deltas, try to parse string arguments into proper JSON
-    for tc in &mut tool_calls {
-        if let Some(s) = tc.arguments.as_str() {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s) {
-                tc.arguments = parsed;
+                Content::Reasoning(c) => {
+                    reasoning_text.push_str(&c.delta);
+                }
+                Content::ToolCalling(c) => {
+                    tool_calls.push(ToolCall {
+                        id: c.call_id,
+                        name: c.name,
+                        arguments: c.arguments,
+                    });
+                    // Track source_agent_id from meta
+                    if let Some(aid) = c.meta.agent_id {
+                        source_agent_id = Some(aid);
+                    }
+                }
+                Content::Usage(c) => {
+                    usage = Some(c.usage);
+                }
+                _ => {}
             }
         }
     }
 
     Ok(AgentResponse {
+        id,
+        model,
         text,
+        reasoning_text: if reasoning_text.is_empty() {
+            None
+        } else {
+            Some(reasoning_text)
+        },
         tool_calls,
+        finish_reason,
+        usage,
         source_agent_id,
     })
 }

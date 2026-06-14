@@ -19,7 +19,7 @@ pub use chat_client::ChatClientRunOptions;
 pub use middleware::IMiddleware;
 pub use model::ModelInfo;
 pub use prompt::PromptTemplate;
-pub use run_options::ChatAgentRunOptions;
+pub use run_options::AgentRunOptions;
 pub use run_options::ReasoningEffort;
 pub use session::{AgentSession, ISession};
 pub use stream::{BoxStream, collect_agent_response};
@@ -28,5 +28,11 @@ pub use workflow::IWorkflow;
 
 // Re-export core types
 pub use error::{AgentError, Result};
-pub use message::{AgentResponse, AgentStreamChunk, ChatMessage, ChatStreamChunk, MessageRole};
-pub use types::{AgentId, AgentMetadata, ToolCall, ToolCallDelta, ToolResult};
+pub use message::{
+    AgentResponse, AgentResponseResult, AgentResponseUpdate, ChatMessage, Content, CustomEvent,
+    ErrorContent, Event, ExecutorInvokedEvent, ExecutorInvokingEvent, HasMeta, MessageRole,
+    ReasoningContent, TextContent, ToolCalledContent, ToolCallingContent, UriContent, UsageContent,
+};
+pub use types::{
+    AgentId, AgentMetadata, FinishReason, ResponseMetadata, ToolCall, ToolResult, Usage,
+};

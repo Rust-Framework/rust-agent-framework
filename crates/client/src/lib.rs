@@ -9,4 +9,4 @@ pub use chat_client::ChatClient;
 pub use deepseek_client::DeepSeekChatClient;
 pub use openai_client::OpenAiChatClient;
 pub use options::ChatClientOptions;
-pub use types::*;
+pub use types::ModelListEntry;

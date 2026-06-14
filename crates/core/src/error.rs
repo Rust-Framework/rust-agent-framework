@@ -23,6 +23,9 @@ pub enum AgentError {
     #[error("Stream error: {0}")]
     StreamError(String),
 
+    #[error("Serialization error: {0}")]
+    Serialize(String),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

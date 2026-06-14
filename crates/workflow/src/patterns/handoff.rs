@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use rust_agent_core::{
-    AgentId, AgentStreamChunk, BoxStream, ChatAgentRunOptions, ChatMessage, IAgent, Result,
-};
+use rust_agent_core::{AgentId, AgentResponseResult, AgentRunOptions, BoxStream, ChatMessage, IAgent, Result};
 
 /// Handoff orchestration pattern — one agent decides which agent runs next.
 /// Corresponds to MAF's handoff pattern from OpenAI Swarm.
@@ -21,13 +19,17 @@ impl HandoffPattern {
     }
 
     /// Execute the handoff pattern: triage agent routes to the target agent.
-    pub async fn run(&self, input: Vec<ChatMessage>, options: ChatAgentRunOptions) -> Result<BoxStream<Result<AgentStreamChunk>>> {
+    pub async fn run(
+        &self,
+        input: Vec<ChatMessage>,
+        options: Option<AgentRunOptions>,
+    ) -> Result<BoxStream<'static, Result<AgentResponseResult>>> {
         let triage = self.agents.get(self.triage_index).ok_or_else(|| {
             rust_agent_core::AgentError::WorkflowError("Invalid triage agent index".to_string())
         })?;
 
         // Triage agent decides which agent to hand off to
-        triage.run(input, options).await
+        triage.run(input, None, options).await
     }
 
     pub fn find_agent(&self, id: &AgentId) -> Option<&Arc<dyn IAgent>> {

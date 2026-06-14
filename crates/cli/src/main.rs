@@ -6,10 +6,10 @@ use rustyline::DefaultEditor;
 
 use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
 use rust_agent_core::{
-    ChatAgentRunOptions, ChatMessage, IAgent, ReasoningEffort, ToolRegistry,
+    AgentRunOptions, AgentSession, ChatMessage, Content, ISession,
 };
 use rust_agent_framework::tool;
-use rust_agent_framework::ChatClientAgent;
+use rust_agent_framework::AgentBuilder;
 
 // ── Hardcoded API key for development ──────────────────────────
 const DEEPSEEK_API_KEY: &str = "sk-6e2ab5986594445abab4dfd0bd2957ee";
@@ -50,14 +50,14 @@ async fn main() -> anyhow::Result<()> {
     let options = ChatClientOptions::deepseek("deepseek-v4-flash", DEEPSEEK_API_KEY);
     let client = DeepSeekChatClient::new(options)?;
 
-    let mut tools = ToolRegistry::new();
-    tools.register(Echo);
-    tools.register(Add);
+    let agent = AgentBuilder::new("cli-agent")
+        .chat_client(client)
+        .instructions("You are a helpful AI assistant. Respond concisely.")
+        .with_tool(Echo)
+        .with_tool(Add)
+        .build()?;
 
-    let agent = ChatClientAgent::new("assistant", Arc::new(client))
-        .with_instructions("You are a helpful AI assistant. Respond concisely.")
-        .with_tools(tools)
-        .with_description("Interactive chat agent");
+    let session = Arc::new(AgentSession::new());
 
     let mut thinking_enabled = true;
 
@@ -90,7 +90,8 @@ async fn main() -> anyhow::Result<()> {
                     continue;
                 }
                 if trimmed == "/clear" {
-                    agent.clear_history().await;
+                    session.clear().await?;
+                    agent.reset().await?;
                     println!("[History cleared]\n");
                     continue;
                 }
@@ -119,52 +120,117 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 // ── Chat ──────────────────────────────────────
-                // Agent manages history internally — just send the new user message
                 let messages = vec![ChatMessage::user(trimmed)];
-                let mut run_opts = ChatAgentRunOptions::new();
+                let mut run_opts = AgentRunOptions::new();
                 if thinking_enabled {
                     run_opts = run_opts
                         .with_thinking(true)
-                        .with_reasoning_effort(ReasoningEffort::High);
+                        .with_reasoning_effort(rust_agent_core::ReasoningEffort::High);
                 }
 
-                let stream = agent.run(messages, run_opts).await?;
+                let result = agent.run(messages, Some(session.clone()), Some(run_opts)).await;
+                match result {
+                    Ok(mut stream) => {
+                        let mut in_reasoning = false;
 
-                // Stream output token by token
-                let mut in_reasoning = false;
+                        while let Some(item) = stream.next().await {
+                            match item {
+                                Ok(chunk) => {
+                                    for content in &chunk.contents {
+                                        match content {
+                                            Content::Text(c) => {
+                                                if in_reasoning {
+                                                    print!("\x1b[0m");
+                                                    in_reasoning = false;
+                                                }
+                                                print!("{}", c.delta);
+                                            }
+                                            Content::Reasoning(c) => {
+                                                if !in_reasoning {
+                                                    print!("\x1b[90m[思考] ");
+                                                    in_reasoning = true;
+                                                }
+                                                print!("{}", c.delta);
+                                            }
+                                            Content::ToolCalling(c) => {
+                                                if in_reasoning {
+                                                    print!("\x1b[0m");
+                                                    in_reasoning = false;
+                                                }
+                                                eprintln!("\n[工具调用] {} args={}", c.name, c.arguments);
+                                            }
+                                            Content::ToolCalled(c) => {
+                                                if let Some(err) = &c.error {
+                                                    eprintln!("[工具错误] {}", err);
+                                                } else {
+                                                    eprintln!("[工具结果] {}", c.result.as_deref().unwrap_or(""));
+                                                }
+                                            }
+                                            Content::Usage(c) => {
+                                                let hit = c.usage.prompt_cache_hit_tokens.unwrap_or(0);
+                                                let miss = c.usage.prompt_cache_miss_tokens.unwrap_or(0);
+                                                if hit > 0 || miss > 0 {
+                                                    eprintln!("\n[缓存] 命中{}/{} tokens", hit, hit + miss);
+                                                }
+                                                eprintln!(
+                                                    "[用量] prompt={} completion={} total={}",
+                                                    c.usage.prompt_tokens,
+                                                    c.usage.completion_tokens,
+                                                    c.usage.total_tokens
+                                                );
+                                            }
+                                            Content::Error(c) => {
+                                                if in_reasoning {
+                                                    print!("\x1b[0m");
+                                                    in_reasoning = false;
+                                                }
+                                                eprintln!("\n[错误] {}: {}", c.error_code, c.message);
+                                            }
+                                            _ => {}
+                                        }
+                                    }
 
-                tokio::pin!(stream);
-                while let Some(chunk_result) = stream.next().await {
-                    let chunk = match chunk_result {
-                        Ok(c) => c,
-                        Err(e) => {
-                            eprintln!("\n[Stream error: {}]", e);
-                            break;
+                                    if let Some(reason) = &chunk.finish_reason {
+                                        if in_reasoning {
+                                            print!("\x1b[0m");
+                                            in_reasoning = false;
+                                        }
+                                        eprintln!("\n[结束] {:?}", reason);
+                                    }
+
+                                    for event in &chunk.events {
+                                        match event {
+                                            rust_agent_core::Event::ExecutorInvoking(e) => {
+                                                eprintln!("[调度] {} 开始", e.executor_id);
+                                            }
+                                            rust_agent_core::Event::ExecutorInvoked(e) => {
+                                                eprintln!(
+                                                    "[调度] {} 完成 {}ms",
+                                                    e.executor_id, e.duration_ms
+                                                );
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    if in_reasoning {
+                                        print!("\x1b[0m");
+                                        in_reasoning = false;
+                                    }
+                                    eprintln!("\n[错误] {}", e);
+                                }
+                            }
                         }
-                    };
-
-                    // Print reasoning (thinking) content in dim style
-                    if let Some(reasoning) = &chunk.reasoning_delta {
-                        if !in_reasoning {
-                            print!("\x1b[90m[Thinking] ");
-                            in_reasoning = true;
-                        }
-                        print!("{}", reasoning);
-                    }
-
-                    // Print main content
-                    if let Some(delta) = &chunk.text_delta {
                         if in_reasoning {
-                            println!("\x1b[0m");
-                            in_reasoning = false;
+                            print!("\x1b[0m");
                         }
-                        print!("{}", delta);
+                        println!("\n");
+                    }
+                    Err(e) => {
+                        eprintln!("[错误] {}", e);
                     }
                 }
-                if in_reasoning {
-                    println!("\x1b[0m");
-                }
-                println!("\n");
             }
             Err(ReadlineError::Interrupted) => {
                 println!("(Ctrl+C — type /quit to exit)\n");
