@@ -9,6 +9,7 @@ use rust_agent_core::{
     ToolCalledContent, ToolCallingContent, ToolCall, ITool,
 };
 use chrono::Utc;
+use tokio::sync::mpsc;
 
 /// ToolLoopAgent — implements the auto tool-calling loop.
 ///
@@ -48,18 +49,23 @@ impl ToolLoopAgent {
     }
 }
 
-/// State for the tool-loop unfold stream.
+/// State machine for the tool-loop unfold stream.
+///
+/// - **Looping**: call inner agent with messages. Text deltas are forwarded
+///   in real time through an mpsc channel; tool-call chunks are buffered
+///   for post-processing after the stream ends.
+/// - **Streaming**: drain remaining items from the mpsc receiver (text was
+///   already forwarded by the spawned task during Looping phase).
+/// - **Done**: stream ended.
 enum LoopState {
-    /// Calling the inner agent and collecting its response.
     Looping {
         messages: Vec<ChatMessage>,
         round: usize,
     },
-    /// Emitting the final (non-tool-calling) chunks from the last round.
-    EmittingFinal {
-        chunks: std::vec::IntoIter<AgentResponseResult>,
+    Streaming {
+        rx: mpsc::Receiver<Result<AgentResponseResult>>,
+        on_done: Box<LoopState>,
     },
-    /// Stream has ended.
     Done,
 }
 
@@ -100,16 +106,25 @@ impl IAgent for ToolLoopAgent {
                     match state {
                         LoopState::Done => None,
 
-                        LoopState::EmittingFinal { mut chunks } => {
-                            match chunks.next() {
-                                Some(chunk) => Some((Ok(chunk), LoopState::EmittingFinal { chunks })),
+                        LoopState::Streaming { mut rx, on_done } => {
+                            match rx.recv().await {
+                                Some(Ok(chunk)) => {
+                                    // Check for loop-continuation signal
+                                    if chunk.finish_reason == Some(FinishReason::ToolCalls)
+                                        && chunk.contents.is_empty()
+                                    {
+                                        Some((Ok(chunk), *on_done))
+                                    } else {
+                                        Some((Ok(chunk), LoopState::Streaming { rx, on_done }))
+                                    }
+                                }
+                                Some(Err(e)) => Some((Err(e), LoopState::Done)),
                                 None => None,
                             }
                         }
 
                         LoopState::Looping { messages, round } => {
                             if round >= max_rounds {
-                                // Max rounds reached – build an error chunk and stop.
                                 let err_result = AgentResponseResult {
                                     id: None,
                                     model: None,
@@ -161,81 +176,73 @@ impl IAgent for ToolLoopAgent {
                                 }
                             };
 
-                            // Collect all chunks from the inner agent in this round.
-                            let mut all_chunks: Vec<AgentResponseResult> = Vec::new();
-                            {
+                            // Forward stream immediately for typing effect.
+                            // Text chunks pass through in real time; tool-call chunks
+                            // are buffered for post-processing after the stream ends.
+                            let (tx, mut rx) =
+                                mpsc::channel::<Result<AgentResponseResult>>(256);
+
+                            let tools_clone = Arc::clone(&tools);
+                            let session_clone = session.clone();
+                            tokio::spawn(async move {
                                 let mut s = stream;
+                                let mut round_text = String::new();
+                                let mut tool_callings: Vec<ToolCallingContent> = Vec::new();
+                                let mut buffered: Vec<AgentResponseResult> = Vec::new();
+                                let mut stream_err: Option<rust_agent_core::AgentError> = None;
+
                                 while let Some(item) = s.next().await {
                                     match item {
-                                        Ok(chunk) => all_chunks.push(chunk),
+                                        Ok(chunk) => {
+                                            for c in &chunk.contents {
+                                                match c {
+                                                    Content::Text(t) => {
+                                                        round_text.push_str(&t.delta);
+                                                    }
+                                                    Content::ToolCalling(tc) => {
+                                                        tool_callings.push(tc.clone());
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                            let has_tool = chunk
+                                                .contents
+                                                .iter()
+                                                .any(|c| matches!(c, Content::ToolCalling(_)));
+                                            if has_tool {
+                                                buffered.push(chunk);
+                                            } else {
+                                                if tx.send(Ok(chunk)).await.is_err() {
+                                                    return;
+                                                }
+                                            }
+                                        }
                                         Err(e) => {
-                                            let err_result = AgentResponseResult {
-                                                id: None,
-                                                model: None,
-                                                finish_reason: None,
-                                                contents: vec![Content::Error(ErrorContent {
-                                                    meta: ResponseMetadata {
-                                                        agent_id: None,
-                                                        model_id: None,
-                                                        executor_id: None,
-                                                        timestamp: Utc::now(),
-                                                        properties: Default::default(),
-                                                    },
-                                                    error_code: "stream_error".to_string(),
-                                                    message: e.to_string(),
-                                                })],
-                                                events: vec![],
-                                            };
-                                            return Some((Ok(err_result), LoopState::Done));
+                                            stream_err = Some(e);
+                                            break;
                                         }
                                     }
                                 }
-                            }
 
-                            // Extract tool callings from all chunks.
-                            let tool_callings: Vec<ToolCallingContent> = all_chunks
-                                .iter()
-                                .flat_map(|c| c.contents.iter())
-                                .filter_map(|c| match c {
-                                    Content::ToolCalling(tc) => Some(tc.clone()),
-                                    _ => None,
-                                })
-                                .collect();
-
-                            // Extract any text content from this round (may coexist with tool calls).
-                            let round_text: String = all_chunks
-                                .iter()
-                                .flat_map(|c| &c.contents)
-                                .filter_map(|c| match c {
-                                    Content::Text(t) => Some(t.delta.as_str()),
-                                    _ => None,
-                                })
-                                .collect::<Vec<_>>()
-                                .join("");
-
-                            // Write text to session (if any)
-                            if !round_text.is_empty() {
-                                if let Some(ref sess) = session {
-                                    let _ = sess
-                                        .add_message(ChatMessage::assistant(round_text.clone()))
-                                        .await;
+                                if let Some(e) = stream_err {
+                                    let _ = tx.send(Err(e)).await;
+                                    return;
                                 }
-                            }
 
-                            if tool_callings.is_empty() {
-                                // No tool calls – text already persisted above, emit all chunks as final.
-
-                                let mut chunks_iter = all_chunks.into_iter();
-                                match chunks_iter.next() {
-                                    Some(first) => {
-                                        Some((Ok(first), LoopState::EmittingFinal {
-                                            chunks: chunks_iter,
-                                        }))
+                                // Persist text to session
+                                if !round_text.is_empty() {
+                                    if let Some(ref sess) = session_clone {
+                                        let _ = sess
+                                            .add_message(ChatMessage::assistant(round_text.clone()))
+                                            .await;
                                     }
-                                    None => None,
                                 }
-                            } else {
-                                // Execute tools in parallel (like MAF / lraf).
+
+                                if tool_callings.is_empty() {
+                                    return;
+                                }
+
+                                // Execute tools in parallel
                                 let meta = ResponseMetadata {
                                     agent_id: None,
                                     model_id: None,
@@ -244,15 +251,15 @@ impl IAgent for ToolLoopAgent {
                                     properties: Default::default(),
                                 };
 
-                                // Launch all tool calls concurrently.
-                                let tool_futures: Vec<_> = tool_callings.iter().map(|tc| {
-                                    let tc = tc.clone();
-                                    let tools = Arc::clone(&tools);
-                                    let meta = meta.clone();
-                                    async move {
-                                        match tools.iter().find(|t| t.name() == tc.name) {
-                                            Some(tool) => {
-                                                match tool.execute(tc.arguments.clone()).await {
+                                let tool_futures: Vec<_> = tool_callings
+                                    .iter()
+                                    .map(|tc| {
+                                        let tc = tc.clone();
+                                        let tools = Arc::clone(&tools_clone);
+                                        let meta = meta.clone();
+                                        async move {
+                                            match tools.iter().find(|t| t.name() == tc.name) {
+                                                Some(tool) => match tool.execute(tc.arguments.clone()).await {
                                                     Ok(output) => ToolCalledContent {
                                                         meta,
                                                         call_id: tc.call_id.clone(),
@@ -265,57 +272,63 @@ impl IAgent for ToolLoopAgent {
                                                         result: None,
                                                         error: Some(e.to_string()),
                                                     },
-                                                }
+                                                },
+                                                None => ToolCalledContent {
+                                                    meta,
+                                                    call_id: tc.call_id.clone(),
+                                                    result: None,
+                                                    error: Some(format!("Tool '{}' not found", tc.name)),
+                                                },
                                             }
-                                            None => ToolCalledContent {
-                                                meta,
-                                                call_id: tc.call_id.clone(),
-                                                result: None,
-                                                error: Some(format!(
-                                                    "Tool '{}' not found",
-                                                    tc.name
-                                                )),
-                                            },
                                         }
-                                    }
-                                }).collect::<Vec<_>>();
+                                    })
+                                    .collect::<Vec<_>>();
 
                                 let results = futures_util::future::join_all(tool_futures).await;
-                                let tool_results: Vec<Content> = results
-                                    .into_iter()
-                                    .map(Content::ToolCalled)
-                                    .collect();
+                                let tool_results: Vec<Content> =
+                                    results.into_iter().map(Content::ToolCalled).collect();
 
-                                // Write assistant (tool_calls) + tool result messages back to session
-                                // so the next turn's history includes the full tool interaction.
-                                if let Some(ref sess) = session {
-                                    // Assistant message with tool_calls
-                                    let _ = sess.add_message(ChatMessage {
-                                        role: MessageRole::Assistant,
-                                        content: String::new(),
-                                        name: None,
-                                        tool_calls: Some(
-                                            tool_callings.iter().map(|tc| ToolCall {
-                                                id: tc.call_id.clone(),
-                                                name: tc.name.clone(),
-                                                arguments: tc.arguments.clone(),
-                                            }).collect()
-                                        ),
-                                        tool_call_id: None,
-                                    }).await;
-                                    // Tool result messages
+                                // Persist tool interactions to session
+                                if let Some(ref sess) = session_clone {
+                                    let _ = sess
+                                        .add_message(ChatMessage {
+                                            role: MessageRole::Assistant,
+                                            content: String::new(),
+                                            name: None,
+                                            tool_calls: Some(
+                                                tool_callings.iter().map(|tc| ToolCall {
+                                                    id: tc.call_id.clone(),
+                                                    name: tc.name.clone(),
+                                                    arguments: tc.arguments.clone(),
+                                                }).collect(),
+                                            ),
+                                            tool_call_id: None,
+                                        })
+                                        .await;
                                     for tc in &tool_callings {
-                                        let content = tool_results.iter()
+                                        let content = tool_results
+                                            .iter()
                                             .find_map(|c| match c {
-                                                Content::ToolCalled(tcd) if tcd.call_id == tc.call_id => tcd.result.clone(),
+                                                Content::ToolCalled(tcd)
+                                                    if tcd.call_id == tc.call_id =>
+                                                    tcd.result.clone(),
                                                 _ => None,
                                             })
                                             .unwrap_or_default();
-                                        let _ = sess.add_message(ChatMessage::tool(content, &tc.call_id)).await;
+                                        let _ = sess
+                                            .add_message(ChatMessage::tool(content, &tc.call_id))
+                                            .await;
                                     }
                                 }
 
-                                // Build a chunk containing text + tool calling + tool called content.
+                                // Forward buffered tool-call chunks to the stream
+                                for buffered_chunk in buffered {
+                                    if tx.send(Ok(buffered_chunk)).await.is_err() {
+                                        return;
+                                    }
+                                }
+
+                                // Emit combined tool-call + result chunk
                                 let mut all_contents: Vec<Content> = Vec::new();
                                 if !round_text.is_empty() {
                                     all_contents.push(Content::Text(
@@ -330,25 +343,39 @@ impl IAgent for ToolLoopAgent {
                                 );
                                 all_contents.extend(tool_results);
 
-                                let result = AgentResponseResult {
+                                let _ = tx.send(Ok(AgentResponseResult {
                                     id: None,
                                     model: None,
                                     finish_reason: None,
                                     contents: all_contents,
                                     events: vec![],
-                                };
+                                })).await;
 
-                                // All new messages have been persisted to session above.
-                                // Inner agent reads session as source of truth,
-                                // so pass empty messages on the next loop iteration
-                                // to avoid re-sending already-persisted data.
-                                Some((
-                                    Ok(result),
-                                    LoopState::Looping {
-                                        messages: Vec::new(),
-                                        round: round + 1,
-                                    },
-                                ))
+                                // Signal loop continuation via empty chunk with ToolCalls reason
+                                let _ = tx.send(Ok(AgentResponseResult {
+                                    id: None,
+                                    model: None,
+                                    finish_reason: Some(FinishReason::ToolCalls),
+                                    contents: vec![],
+                                    events: vec![],
+                                })).await;
+                            });
+
+                            // Return first streaming item → caller transparently
+                            // drains the rest via LoopState::Streaming.
+                            match rx.recv().await {
+                                Some(Ok(chunk)) => {
+                                    let next = LoopState::Streaming {
+                                        rx,
+                                        on_done: Box::new(LoopState::Looping {
+                                            messages: Vec::new(),
+                                            round: round + 1,
+                                        }),
+                                    };
+                                    Some((Ok(chunk), next))
+                                }
+                                Some(Err(e)) => Some((Err(e), LoopState::Done)),
+                                None => None,
                             }
                         }
                     }
