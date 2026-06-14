@@ -1,25 +1,44 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use rust_agent_core::{IAgent, IChatClient, ITool, Result, ToolRegistry};
+use rust_agent_core::{IAgent, IChatClient, IContextProvider, ITool, Result, ToolRegistry};
 
 use crate::ChatClientAgent;
 use crate::agents::tool_loop_agent::ToolLoopAgent;
+use crate::context_providers::history_provider::InMemoryHistoryProvider;
 
 /// Fluently construct an agent with reasonable defaults.
 ///
-/// The `build()` method assembles the following stack:
-///   1. `ChatClientAgent` — terminal node that calls the LLM
-///   2. `ToolLoopAgent` (if tools are present) — intercepts tool calls
-///      and executes them in a loop
+/// ## Built-in context providers
 ///
-/// Future layers (HistoryAgent, TracingAgent) will be inserted in later
-/// releases as optional decorators.
+/// `AgentBuilder` starts with `[InMemoryHistoryProvider]` as the default
+/// context provider chain, providing session history management out of the box.
+///
+/// ## Replacing the default history management
+///
+/// ```ignore
+/// let agent = AgentBuilder::new("agent")
+///     .chat_client(client)
+///     .with_history_provider(RedisHistory::new(redis))
+///     .build()?;
+/// ```
+///
+/// ## Adding providers alongside the default
+///
+/// ```ignore
+/// let agent = AgentBuilder::new("agent")
+///     .chat_client(client)
+///     .add_context_provider(SkillsProvider::new())
+///     .add_context_provider(RagProvider::new())
+///     .build()?;
+/// // Chain: [InMemoryHistoryProvider, SkillsProvider, RagProvider]
+/// ```
 pub struct AgentBuilder<C> {
     agent_id: String,
     chat_client: Option<C>,
     instructions: String,
     tools: Vec<Arc<dyn ITool>>,
+    context_providers: Vec<Arc<dyn IContextProvider>>,
     properties: HashMap<String, serde_json::Value>,
     description: String,
     max_tool_rounds: usize,
@@ -32,6 +51,9 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
             chat_client: None,
             instructions: String::new(),
             tools: Vec::new(),
+            context_providers: vec![
+                Arc::new(InMemoryHistoryProvider::new()) as Arc<dyn IContextProvider>
+            ],
             properties: HashMap::new(),
             description: String::new(),
             max_tool_rounds: 10,
@@ -73,15 +95,48 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         self
     }
 
+    /// 追加一个上下文提供器到链中。
+    ///
+    /// 提供器按注册顺序执行。不影响内置的 `InMemoryHistoryProvider`。
+    /// 压缩策略（截断/窗口等）也是 ContextProvider —— 注册在最后，
+    /// 设置 `replace_messages = true` 即可。
+    pub fn add_context_provider(
+        mut self,
+        provider: impl IContextProvider + 'static,
+    ) -> Self {
+        self.context_providers.push(Arc::new(provider));
+        self
+    }
+
+    /// 替换内置的 `InMemoryHistoryProvider`。
+    ///
+    /// 在链中定位 `InMemoryHistoryProvider` 并替换为指定实现。
+    /// 其他 provider 保持位置不变。
+    pub fn with_history_provider(
+        mut self,
+        provider: impl IContextProvider + 'static,
+    ) -> Self {
+        let pos = self
+            .context_providers
+            .iter()
+            .position(|p| p.name() == "InMemoryHistoryProvider");
+        let arc: Arc<dyn IContextProvider> = Arc::new(provider);
+        match pos {
+            Some(i) => self.context_providers[i] = arc,
+            None => self.context_providers.push(arc),
+        }
+        self
+    }
+
     /// Build the agent stack: ToolLoopAgent wraps ChatClientAgent.
     pub fn build(self) -> Result<Arc<dyn IAgent>> {
         let chat_client = self.chat_client.ok_or_else(|| {
             rust_agent_core::AgentError::ConfigError("chat_client is required".into())
         })?;
 
-        // 1. ChatClientAgent — terminal node
         let mut agent = ChatClientAgent::new(&self.agent_id, Arc::new(chat_client))
-            .with_instructions(&self.instructions);
+            .with_instructions(&self.instructions)
+            .with_context_providers(self.context_providers);
 
         if !self.description.is_empty() {
             agent = agent.with_description(&self.description);
@@ -97,7 +152,6 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
 
         let agent: Arc<dyn IAgent> = Arc::new(agent);
 
-        // 2. ToolLoopAgent — wrap if tools are present
         let agent: Arc<dyn IAgent> = if !self.tools.is_empty() {
             Arc::new(
                 ToolLoopAgent::new(
@@ -110,9 +164,6 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         } else {
             agent
         };
-
-        // 3. HistoryAgent — TODO in future (auto session management)
-        // 4. TracingAgent — TODO in future
 
         Ok(agent)
     }

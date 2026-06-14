@@ -257,18 +257,26 @@ async fn main() -> anyhow::Result<()> {
                                                 }
                                             }
                                             Content::Usage(c) => {
-                                                let cache = if c.usage.prompt_cache_hit_tokens.unwrap_or(0) > 0 {
-                                                    let ratio = c.usage.cache_hit_ratio();
-                                                    format!(" 缓存命中{:.0}%", ratio * 100.0)
+                                                let cache = if let Some(hit) = c.usage.prompt_cache_hit_tokens {
+                                                    let miss = c.usage.prompt_cache_miss_tokens.unwrap_or(0);
+                                                    let total_cache = hit + miss;
+                                                    if total_cache > 0 {
+                                                        let ratio = c.usage.cache_hit_ratio();
+                                                        format!(" cache:{}/{}({:.0}%)", hit, total_cache, ratio * 100.0)
+                                                    } else {
+                                                        format!(" cache:{}h", hit)
+                                                    }
                                                 } else {
                                                     String::new()
                                                 };
+                                                let reasoning = if let Some(rt) = c.usage.reasoning_tokens {
+                                                    if rt > 0 { format!(" reasoning:{}", rt) } else { String::new() }
+                                                } else { String::new() };
                                                 eprintln!(
-                                                    "\n\x1b[90m[用量] prompt={} completion={} total={}{}\x1b[0m",
-                                                    c.usage.prompt_tokens,
-                                                    c.usage.completion_tokens,
+                                                    "\n\x1b[90m[用量] prompt={}{} completion={}{} total={}\x1b[0m",
+                                                    c.usage.prompt_tokens, cache,
+                                                    c.usage.completion_tokens, reasoning,
                                                     c.usage.total_tokens,
-                                                    cache,
                                                 );
                                             }
                                             Content::Error(c) => {

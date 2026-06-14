@@ -1,0 +1,96 @@
+use async_trait::async_trait;
+use rust_agent_core::{
+    ChatMessage, ContextInjection, IAgent, IContextProvider, ISession, MessageRole, Result,
+    AgentRunOptions, AgentResponse,
+};
+
+/// 内存对话历史上下文提供器
+///
+/// 对标 MAF 的 `InMemoryHistoryProvider`，职责：
+/// - on_invoking: 从 Session 加载历史消息，注入到消息列表中
+/// - on_invoked: 将本轮新消息原子批量持久化到 Session
+///
+/// 使用 `session.get_message_count()` 实时获取消息计数，不再在
+/// `provider_state` 中维护 `last_message_count`，消除计数不同步风险。
+pub struct InMemoryHistoryProvider {
+    /// 是否在 on_invoking 阶段加载历史消息（默认 true）
+    load_messages: bool,
+}
+
+impl InMemoryHistoryProvider {
+    pub fn new() -> Self {
+        Self {
+            load_messages: true,
+        }
+    }
+
+    pub fn with_load_messages(mut self, load: bool) -> Self {
+        self.load_messages = load;
+        self
+    }
+}
+
+impl Default for InMemoryHistoryProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl IContextProvider for InMemoryHistoryProvider {
+    fn name(&self) -> &str {
+        "InMemoryHistoryProvider"
+    }
+
+    async fn on_invoking(
+        &self,
+        _agent: &dyn IAgent,
+        session: &dyn ISession,
+        _messages: &[ChatMessage],
+        _options: &AgentRunOptions,
+    ) -> Result<ContextInjection> {
+        let mut injection = ContextInjection::default();
+
+        if self.load_messages {
+            let history = session.get_messages().await.unwrap_or_default();
+            injection.messages = history;
+        }
+
+        Ok(injection)
+    }
+
+    async fn on_invoked(
+        &self,
+        _agent: &dyn IAgent,
+        session: &dyn ISession,
+        request_messages: &[ChatMessage],
+        _response: Option<&AgentResponse>,
+        _error: Option<&rust_agent_core::AgentError>,
+    ) -> Result<()> {
+        // 使用 session.get_message_count() 实时获取计数（O(1)），
+        // 不再在 provider_state 中维护 last_message_count
+        let existing_count = session.get_message_count();
+        let system_count = request_messages
+            .iter()
+            .filter(|m| m.role == MessageRole::System)
+            .count();
+
+        // 新增 user/tool 消息（assistant 文本由 ChatClientAgent Phase 3 统一写入）
+        let mut new_messages = Vec::new();
+        let new_start = system_count.saturating_add(existing_count);
+        if new_start < request_messages.len() {
+            for msg in &request_messages[new_start..] {
+                if msg.role != MessageRole::System {
+                    new_messages.push(msg.clone());
+                }
+            }
+        }
+
+        // 原子批量写入
+        if !new_messages.is_empty() {
+            let _ = session.add_messages_batch(&new_messages).await;
+        }
+
+        Ok(())
+    }
+}

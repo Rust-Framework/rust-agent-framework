@@ -229,14 +229,10 @@ impl IAgent for ToolLoopAgent {
                                     return;
                                 }
 
-                                // Persist text to session
-                                if !round_text.is_empty() {
-                                    if let Some(ref sess) = session_clone {
-                                        let _ = sess
-                                            .add_message(ChatMessage::assistant(round_text.clone()))
-                                            .await;
-                                    }
-                                }
+                                // Note: assistant text persistence is now handled by
+                                // ChatClientAgent Phase 3 (via on_invoked), not here.
+                                // Tool interactions (tool_calls + results) are still
+                                // persisted below for context in subsequent loop iterations.
 
                                 if tool_callings.is_empty() {
                                     return;
