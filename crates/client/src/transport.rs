@@ -3,8 +3,10 @@ use std::task::{Context, Poll};
 
 use bytes::Bytes;
 use futures_core::Stream;
-use rust_agent_core::{AgentError, AgentResponseUpdate, Usage, FinishReason};
+use rust_agent_core::{AgentError, AgentResponseUpdate, FinishReason};
 use serde::Deserialize;
+
+use crate::usage::UsageFormat;
 
 /// Extended SseChunk covering full OpenAI/DeepSeek response fields
 #[derive(Debug, Deserialize)]
@@ -21,7 +23,7 @@ struct SseChunk {
     #[serde(default)]
     choices: Vec<SseChoice>,
     #[serde(default)]
-    usage: Option<SseUsage>,
+    usage: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,25 +61,12 @@ struct SseToolCallFunction {
     arguments: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct SseUsage {
-    #[serde(default)]
-    prompt_tokens: u32,
-    #[serde(default)]
-    completion_tokens: u32,
-    #[serde(default)]
-    total_tokens: u32,
-    #[serde(default)]
-    prompt_cache_hit_tokens: Option<u32>,
-    #[serde(default)]
-    prompt_cache_miss_tokens: Option<u32>,
-    #[serde(default)]
-    reasoning_tokens: Option<u32>,
-}
-
 /// Map a raw SSE chunk into one or more AgentResponseUpdate events.
 /// A single chunk may produce multiple events (e.g., delta + usage + finish).
-fn map_chunk(sse: SseChunk) -> Vec<AgentResponseUpdate> {
+///
+/// `usage_format` determines how the provider's usage JSON is parsed
+/// (OpenAI nested vs DeepSeek top-level cache fields).
+fn map_chunk(sse: SseChunk, usage_format: UsageFormat) -> Vec<AgentResponseUpdate> {
     let mut events = Vec::new();
 
     // Response metadata (from first chunk with id/model)
@@ -136,14 +125,10 @@ fn map_chunk(sse: SseChunk) -> Vec<AgentResponseUpdate> {
                     other => FinishReason::Other(other.to_string()),
                 };
 
-                let usage = sse.usage.as_ref().map(|u| Usage {
-                    prompt_tokens: u.prompt_tokens,
-                    completion_tokens: u.completion_tokens,
-                    total_tokens: u.total_tokens,
-                    prompt_cache_hit_tokens: u.prompt_cache_hit_tokens,
-                    prompt_cache_miss_tokens: u.prompt_cache_miss_tokens,
-                    reasoning_tokens: u.reasoning_tokens,
-                });
+                let usage = sse
+                    .usage
+                    .as_ref()
+                    .and_then(|v| usage_format.parse(v));
 
                 events.push(AgentResponseUpdate::Finish {
                     finish_reason,
@@ -158,17 +143,9 @@ fn map_chunk(sse: SseChunk) -> Vec<AgentResponseUpdate> {
     if sse.usage.is_some() {
         let has_finish = sse.choices.iter().any(|c| c.finish_reason.is_some());
         if !has_finish {
-            let u = sse.usage.as_ref().unwrap();
-            events.push(AgentResponseUpdate::Usage {
-                usage: Usage {
-                    prompt_tokens: u.prompt_tokens,
-                    completion_tokens: u.completion_tokens,
-                    total_tokens: u.total_tokens,
-                    prompt_cache_hit_tokens: u.prompt_cache_hit_tokens,
-                    prompt_cache_miss_tokens: u.prompt_cache_miss_tokens,
-                    reasoning_tokens: u.reasoning_tokens,
-                },
-            });
+            if let Some(u) = sse.usage.as_ref().and_then(|v| usage_format.parse(v)) {
+                events.push(AgentResponseUpdate::Usage { usage: u });
+            }
         }
     }
 
@@ -184,18 +161,20 @@ pub struct SseStream<S> {
     buffer: Vec<u8>,
     pending: std::vec::IntoIter<AgentResponseUpdate>,
     done: bool,
+    usage_format: UsageFormat,
 }
 
 impl<S> SseStream<S>
 where
     S: Stream<Item = reqwest::Result<Bytes>> + Send + Unpin + 'static,
 {
-    pub fn new(inner: S) -> Self {
+    pub fn new(inner: S, usage_format: UsageFormat) -> Self {
         Self {
             inner,
             buffer: Vec::new(),
             pending: Vec::new().into_iter(),
             done: false,
+            usage_format,
         }
     }
 }
@@ -231,7 +210,7 @@ where
 
                     match serde_json::from_str::<SseChunk>(data) {
                         Ok(chunk) => {
-                            let mut events = map_chunk(chunk);
+                            let mut events = map_chunk(chunk, self.usage_format);
                             if !events.is_empty() {
                                 // Return first event, store rest
                                 let first = events.remove(0);

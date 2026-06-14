@@ -8,6 +8,7 @@ use rust_agent_core::{
 
 use crate::options::ChatClientOptions;
 use crate::transport::SseStream;
+use crate::usage::UsageFormat;
 
 /// Generic chat client that handles the HTTP transport and SSE streaming layer.
 ///
@@ -39,6 +40,7 @@ impl ChatClient {
         &self,
         messages: &[ChatMessage],
         run_options: &ChatClientRunOptions,
+        usage_format: UsageFormat,
     ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>> {
         let url = format!(
             "{}/chat/completions",
@@ -78,7 +80,7 @@ impl ChatClient {
         }
 
         let byte_stream = response.bytes_stream();
-        let sse = SseStream::new(byte_stream);
+        let sse = SseStream::new(byte_stream, usage_format);
         Ok(Box::pin(sse))
     }
 
@@ -171,6 +173,11 @@ impl ChatClient {
             body["tools"] = serde_json::json!(run_options.tools);
         }
 
+        // Include parallel_tool_calls setting if explicitly specified
+        if let Some(parallel) = run_options.parallel_tool_calls {
+            body["parallel_tool_calls"] = serde_json::json!(parallel);
+        }
+
         body
     }
 }
@@ -182,7 +189,7 @@ impl IChatClient for ChatClient {
         messages: &[ChatMessage],
         options: ChatClientRunOptions,
     ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>> {
-        self.chat_stream(messages, &options).await
+        self.chat_stream(messages, &options, UsageFormat::OpenAI).await
     }
 
     fn model_id(&self) -> &str {

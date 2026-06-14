@@ -7,6 +7,7 @@ use rust_agent_core::{
 use crate::chat_client::ChatClient;
 use crate::options::ChatClientOptions;
 use crate::types::ModelListEntry;
+use crate::usage::UsageFormat;
 
 /// OpenAI chat client implementing IChatClient.
 ///
@@ -74,7 +75,8 @@ impl IChatClient for OpenAiChatClient {
         messages: &[ChatMessage],
         options: ChatClientRunOptions,
     ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>> {
-        self.inner.run(messages, options).await
+        // OpenAI-specific: parses usage with nested `prompt_tokens_details.cached_tokens`
+        self.inner.chat_stream(messages, &options, UsageFormat::OpenAI).await
     }
 
     fn model_id(&self) -> &str {

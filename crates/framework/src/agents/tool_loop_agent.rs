@@ -219,7 +219,7 @@ impl IAgent for ToolLoopAgent {
                                     None => None,
                                 }
                             } else {
-                                // Execute tools and build results.
+                                // Execute tools in parallel (like MAF / lraf).
                                 let meta = ResponseMetadata {
                                     agent_id: None,
                                     model_id: None,
@@ -228,37 +228,47 @@ impl IAgent for ToolLoopAgent {
                                     properties: Default::default(),
                                 };
 
-                                let mut tool_results: Vec<Content> = Vec::new();
-                                for tc in &tool_callings {
-                                    let result = match tools.iter().find(|t| t.name() == tc.name) {
-                                        Some(tool) => {
-                                            match tool.execute(tc.arguments.clone()).await {
-                                                Ok(output) => ToolCalledContent {
-                                                    meta: meta.clone(),
-                                                    call_id: tc.call_id.clone(),
-                                                    result: Some(output),
-                                                    error: None,
-                                                },
-                                                Err(e) => ToolCalledContent {
-                                                    meta: meta.clone(),
-                                                    call_id: tc.call_id.clone(),
-                                                    result: None,
-                                                    error: Some(e.to_string()),
-                                                },
+                                // Launch all tool calls concurrently.
+                                let tool_futures: Vec<_> = tool_callings.iter().map(|tc| {
+                                    let tc = tc.clone();
+                                    let tools = Arc::clone(&tools);
+                                    let meta = meta.clone();
+                                    async move {
+                                        match tools.iter().find(|t| t.name() == tc.name) {
+                                            Some(tool) => {
+                                                match tool.execute(tc.arguments.clone()).await {
+                                                    Ok(output) => ToolCalledContent {
+                                                        meta,
+                                                        call_id: tc.call_id.clone(),
+                                                        result: Some(output),
+                                                        error: None,
+                                                    },
+                                                    Err(e) => ToolCalledContent {
+                                                        meta,
+                                                        call_id: tc.call_id.clone(),
+                                                        result: None,
+                                                        error: Some(e.to_string()),
+                                                    },
+                                                }
                                             }
+                                            None => ToolCalledContent {
+                                                meta,
+                                                call_id: tc.call_id.clone(),
+                                                result: None,
+                                                error: Some(format!(
+                                                    "Tool '{}' not found",
+                                                    tc.name
+                                                )),
+                                            },
                                         }
-                                        None => ToolCalledContent {
-                                            meta: meta.clone(),
-                                            call_id: tc.call_id.clone(),
-                                            result: None,
-                                            error: Some(format!(
-                                                "Tool '{}' not found",
-                                                tc.name
-                                            )),
-                                        },
-                                    };
-                                    tool_results.push(Content::ToolCalled(result));
-                                }
+                                    }
+                                }).collect::<Vec<_>>();
+
+                                let results = futures_util::future::join_all(tool_futures).await;
+                                let tool_results: Vec<Content> = results
+                                    .into_iter()
+                                    .map(Content::ToolCalled)
+                                    .collect();
 
                                 // Build assistant message with tool_calls.
                                 let tool_calls_for_msg: Vec<ToolCall> = tool_callings
@@ -296,6 +306,35 @@ impl IAgent for ToolLoopAgent {
                                         tool_calls: None,
                                         tool_call_id: Some(tc.call_id.clone()),
                                     });
+                                }
+
+                                // Write assistant (tool_calls) + tool result messages back to session
+                                // so the next turn's history includes the full tool interaction.
+                                if let Some(ref sess) = session {
+                                    // Assistant message with tool_calls
+                                    let _ = sess.add_message(ChatMessage {
+                                        role: MessageRole::Assistant,
+                                        content: String::new(),
+                                        name: None,
+                                        tool_calls: Some(
+                                            tool_callings.iter().map(|tc| ToolCall {
+                                                id: tc.call_id.clone(),
+                                                name: tc.name.clone(),
+                                                arguments: tc.arguments.clone(),
+                                            }).collect()
+                                        ),
+                                        tool_call_id: None,
+                                    }).await;
+                                    // Tool result messages
+                                    for tc in &tool_callings {
+                                        let content = tool_results.iter()
+                                            .find_map(|c| match c {
+                                                Content::ToolCalled(tcd) if tcd.call_id == tc.call_id => tcd.result.clone(),
+                                                _ => None,
+                                            })
+                                            .unwrap_or_default();
+                                        let _ = sess.add_message(ChatMessage::tool(content, &tc.call_id)).await;
+                                    }
                                 }
 
                                 // Build a chunk containing all tool calling + tool called content.

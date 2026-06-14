@@ -132,6 +132,29 @@ async fn main() -> anyhow::Result<()> {
 
                 // ── Chat ──────────────────────────────────────
                 let messages = vec![ChatMessage::user(trimmed)];
+
+                #[cfg(debug_assertions)]
+                {
+                    // Dump session state before the call to validate message history
+                    let history = session.get_messages().await.unwrap_or_default();
+                    eprintln!("\x1b[90m[调试] session中已有{}条消息\x1b[0m", history.len());
+                    for (i, m) in history.iter().enumerate() {
+                        let role = match m.role {
+                            rust_agent_core::MessageRole::System => "system",
+                            rust_agent_core::MessageRole::User => "user",
+                            rust_agent_core::MessageRole::Assistant => {
+                                if m.tool_calls.is_some() { "assistant+tool_calls" } else { "assistant" }
+                            }
+                            rust_agent_core::MessageRole::Tool => "tool",
+                        };
+                        let content_preview = if m.content.len() > 60 {
+                            format!("{}...", &m.content[..57])
+                        } else {
+                            m.content.clone()
+                        };
+                        eprintln!("\x1b[90m  [{i}] {role}: {content_preview}\x1b[0m");
+                    }
+                }
                 let mut run_opts = AgentRunOptions::new();
                 if thinking_enabled {
                     run_opts = run_opts
@@ -143,6 +166,9 @@ async fn main() -> anyhow::Result<()> {
                 match result {
                     Ok(mut stream) => {
                         let mut in_reasoning = false;
+                        // Track active parallel tool calls for friendly progress display
+                        let mut active_tools: std::collections::HashMap<String, String> =
+                            std::collections::HashMap::new();
 
                         while let Some(item) = stream.next().await {
                             match item {
@@ -151,7 +177,7 @@ async fn main() -> anyhow::Result<()> {
                                         match content {
                                             Content::Text(c) => {
                                                 if in_reasoning {
-                                                    print!("\x1b[0m");
+                                                    println!("\x1b[0m");
                                                     in_reasoning = false;
                                                 }
                                                 print!("{}", c.delta);
@@ -165,39 +191,84 @@ async fn main() -> anyhow::Result<()> {
                                                 print!("{}", c.delta);
                                                 std::io::stdout().flush().unwrap();
                                             }
-                                            Content::ToolCalling(c) => {
+                                            // ── Streaming tool call lifecycle ──
+                                            Content::ToolCallStart(c) => {
                                                 if in_reasoning {
-                                                    print!("\x1b[0m");
+                                                    println!("\x1b[0m");
                                                     in_reasoning = false;
                                                 }
-                                                eprintln!("\n[工具调用] {} args={}", c.name, c.arguments);
+                                                let label = format!(
+                                                    "\x1b[36m[调用] {}\x1b[0m",
+                                                    c.name
+                                                );
+                                                eprint!("\n{} 接收参数中", label);
+                                                active_tools.insert(c.call_id.clone(), label);
+                                            }
+                                            Content::ToolCallArgs(_c) => {
+                                                // Args deltas arrive during streaming — show
+                                                // progress dots. Skip if no active tool (should
+                                                // not happen, but guard).
+                                                if !active_tools.is_empty() {
+                                                    eprint!(".");
+                                                    std::io::stderr().flush().unwrap();
+                                                }
+                                            }
+                                            Content::ToolCallEnd(_c) => {
+                                                // Args complete — shown by ToolCalling below
+                                                let _ = active_tools.remove(&_c.call_id);
+                                            }
+                                            // ── Complete tool calls ──
+                                            Content::ToolCalling(c) => {
+                                                if in_reasoning {
+                                                    println!("\x1b[0m");
+                                                    in_reasoning = false;
+                                                }
+                                                // Show compact one-line summary
+                                                let args_str = c.arguments.to_string();
+                                                let args_preview = if args_str.len() > 80 {
+                                                    format!("{}...", &args_str[..77])
+                                                } else {
+                                                    args_str
+                                                };
+                                                eprintln!(
+                                                    "\n\x1b[33m[参数] {}\x1b[0m {}",
+                                                    c.name, args_preview
+                                                );
                                             }
                                             Content::ToolCalled(c) => {
                                                 if let Some(err) = &c.error {
-                                                    eprintln!("[工具错误] {}", err);
+                                                    eprintln!("\x1b[31m[结果] 失败\x1b[0m {}", err);
                                                 } else {
-                                                    eprintln!("[工具结果] {}", c.result.as_deref().unwrap_or(""));
+                                                    let r = c.result.as_deref().unwrap_or("");
+                                                    let preview = if r.len() > 100 {
+                                                        format!("{}...", &r[..97])
+                                                    } else {
+                                                        r.to_string()
+                                                    };
+                                                    eprintln!("\x1b[32m[结果]\x1b[0m {}", preview);
                                                 }
                                             }
                                             Content::Usage(c) => {
-                                                let hit = c.usage.prompt_cache_hit_tokens.unwrap_or(0);
-                                                let miss = c.usage.prompt_cache_miss_tokens.unwrap_or(0);
-                                                if hit > 0 || miss > 0 {
-                                                    eprintln!("\n[缓存] 命中{}/{} tokens", hit, hit + miss);
-                                                }
+                                                let cache = if c.usage.prompt_cache_hit_tokens.unwrap_or(0) > 0 {
+                                                    let ratio = c.usage.cache_hit_ratio();
+                                                    format!(" 缓存命中{:.0}%", ratio * 100.0)
+                                                } else {
+                                                    String::new()
+                                                };
                                                 eprintln!(
-                                                    "[用量] prompt={} completion={} total={}",
+                                                    "\n\x1b[90m[用量] prompt={} completion={} total={}{}\x1b[0m",
                                                     c.usage.prompt_tokens,
                                                     c.usage.completion_tokens,
-                                                    c.usage.total_tokens
+                                                    c.usage.total_tokens,
+                                                    cache,
                                                 );
                                             }
                                             Content::Error(c) => {
                                                 if in_reasoning {
-                                                    print!("\x1b[0m");
+                                                    println!("\x1b[0m");
                                                     in_reasoning = false;
                                                 }
-                                                eprintln!("\n[错误] {}: {}", c.error_code, c.message);
+                                                eprintln!("\n\x1b[31m[错误]\x1b[0m {}: {}", c.error_code, c.message);
                                             }
                                             _ => {}
                                         }
@@ -205,20 +276,30 @@ async fn main() -> anyhow::Result<()> {
 
                                     if let Some(reason) = &chunk.finish_reason {
                                         if in_reasoning {
-                                            print!("\x1b[0m");
+                                            println!("\x1b[0m");
                                             in_reasoning = false;
                                         }
-                                        eprintln!("\n[结束] {:?}", reason);
+                                        match reason {
+                                            rust_agent_core::FinishReason::Stop => {
+                                                // Normal end — no extra output
+                                            }
+                                            rust_agent_core::FinishReason::ToolCalls => {
+                                                // Tool calls follow — shown above
+                                            }
+                                            _ => {
+                                                eprintln!("\n\x1b[90m[结束] {:?}\x1b[0m", reason);
+                                            }
+                                        }
                                     }
 
                                     for event in &chunk.events {
                                         match event {
                                             rust_agent_core::Event::ExecutorInvoking(e) => {
-                                                eprintln!("[调度] {} 开始", e.executor_id);
+                                                eprintln!("\x1b[90m[调度] {} 开始\x1b[0m", e.executor_id);
                                             }
                                             rust_agent_core::Event::ExecutorInvoked(e) => {
                                                 eprintln!(
-                                                    "[调度] {} 完成 {}ms",
+                                                    "\x1b[90m[调度] {} 完成 {}ms\x1b[0m",
                                                     e.executor_id, e.duration_ms
                                                 );
                                             }
@@ -228,15 +309,15 @@ async fn main() -> anyhow::Result<()> {
                                 }
                                 Err(e) => {
                                     if in_reasoning {
-                                        print!("\x1b[0m");
+                                        println!("\x1b[0m");
                                         in_reasoning = false;
                                     }
-                                    eprintln!("\n[错误] {}", e);
+                                    eprintln!("\n\x1b[31m[错误]\x1b[0m {}", e);
                                 }
                             }
                         }
                         if in_reasoning {
-                            print!("\x1b[0m");
+                            println!("\x1b[0m");
                         }
                         println!("\n");
                     }

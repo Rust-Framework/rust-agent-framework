@@ -128,6 +128,26 @@ impl HasMeta for UriContent {
     }
 }
 
+/// ── 工具调用生命周期（5 阶段）────────────────────────────────────
+///
+/// 工具调用从 LLM 到执行完成经过完整的生命周期，每个阶段对应一个 Content 类型：
+///
+/// ```text
+/// ToolCallStart → ToolCallArgs(×N) → ToolCallEnd → ToolCalling → ToolCalled
+///     ①开始         ②参数流式到达       ③参数完毕     ④完整调用     ⑤执行结果
+/// ```
+///
+/// - ①~③ 是**流式阶段**，在 SSE 数据到达时实时发出，消费方可据此展示进度
+/// - ④ 是**汇总阶段**，在流结束时一次性发出，携带完整解析后的参数结构体
+/// - ⑤ 是**执行阶段**，由 ToolLoopAgent/ToolMiddleware 执行后发出
+
+/// ④ 完整工具调用 — 流式参数已收集完毕，arguments 被解析为 `serde_json::Value`。
+///
+/// 在流结束时（`FinishReason::ToolCalls`）由 `AgentResponseConverter::flush_tool_calls()`
+/// 生成，是 ①~③ 三个阶段收集到的参数的汇总体，**可直接传给工具执行**。
+///
+/// 生命周期位置：`ToolCallEnd → ToolCalling → ToolCalled`
+/// 对应 MAF .NET 的 `FunctionCallContent`。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallingContent {
     pub meta: ResponseMetadata,
@@ -141,6 +161,75 @@ impl HasMeta for ToolCallingContent {
     }
 }
 
+/// ① 工具调用开始 — LLM 开始生成一个新的工具调用。
+///
+/// 在参数流到达之前发出，消费方可据此展示"正在准备调用 XX 工具"。
+/// 每个工具调用只产生**一次**此事件。
+///
+/// 生命周期位置：`ToolCallStart → ToolCallArgs → ToolCallEnd → ToolCalling → ToolCalled`
+/// 对应 MAF .NET AGUI 的 `ToolCallStartEvent`。
+///
+/// 与 [ToolCallingContent] 的区别：`ToolCallStartContent` 在流式接收阶段实时发出、
+/// 不携带参数；`ToolCallingContent` 在流结束后发出、携带完整的已解析参数。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallStartContent {
+    pub meta: ResponseMetadata,
+    pub call_id: String,
+    pub name: String,
+}
+impl HasMeta for ToolCallStartContent {
+    fn meta(&self) -> &ResponseMetadata {
+        &self.meta
+    }
+}
+
+/// ② 工具调用参数增量 — LLM 正在流式输出工具调用的 JSON 参数。
+///
+/// 每次携带一个 `args_delta` 片段，需由消费方拼接。在 `ToolCallStart` 之后、
+/// `ToolCallEnd` 之前可能产生**多次**。
+///
+/// 生命周期位置：`ToolCallStart → ToolCallArgs(×N) → ToolCallEnd → ToolCalling → ToolCalled`
+/// 对应 MAF .NET AGUI 的 `ToolCallArgsEvent`。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallArgsContent {
+    pub meta: ResponseMetadata,
+    pub call_id: String,
+    pub args_delta: String,
+}
+impl HasMeta for ToolCallArgsContent {
+    fn meta(&self) -> &ResponseMetadata {
+        &self.meta
+    }
+}
+
+/// ③ 工具调用参数完毕 — LLM 已完成该工具调用的所有参数输出。
+///
+/// 此时参数尚未被解析为结构化 JSON（④ 阶段才做），但消费方可据此标记
+/// "参数接收完成，准备执行"。
+///
+/// 生命周期位置：`ToolCallStart → ToolCallArgs → ToolCallEnd → ToolCalling → ToolCalled`
+/// 对应 MAF .NET AGUI 的 `ToolCallEndEvent`。
+///
+/// 与 [ToolCalledContent] 的区别：`ToolCallEndContent` 在**执行前**发出，仅表示参数
+/// 流式传输完毕；`ToolCalledContent` 在**执行后**发出，携带 `result` 或 `error`。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallEndContent {
+    pub meta: ResponseMetadata,
+    pub call_id: String,
+}
+impl HasMeta for ToolCallEndContent {
+    fn meta(&self) -> &ResponseMetadata {
+        &self.meta
+    }
+}
+
+/// ⑤ 工具调用执行结果 — 工具已执行完毕，携带返回值或错误信息。
+///
+/// 由 TokenLoopAgent / ToolMiddleware 在执行工具后发出。
+/// `result` 和 `error` 互斥：成功时 `result` 有值、`error` 为 `None`；失败时反之。
+///
+/// 生命周期位置：`... → ToolCalling → ToolCalled`
+/// 对应 MAF .NET 的 `FunctionResultContent`。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCalledContent {
     pub meta: ResponseMetadata,
@@ -177,12 +266,15 @@ impl HasMeta for ErrorContent {
     }
 }
 
-/// Content enum — 7 variants
+/// Content enum — 10 variants
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Content {
     Text(TextContent),
     Reasoning(ReasoningContent),
     Uri(UriContent),
+    ToolCallStart(ToolCallStartContent),
+    ToolCallArgs(ToolCallArgsContent),
+    ToolCallEnd(ToolCallEndContent),
     ToolCalling(ToolCallingContent),
     ToolCalled(ToolCalledContent),
     Usage(UsageContent),
@@ -255,12 +347,21 @@ pub struct AgentResponseResult {
 pub enum AgentResponseUpdate {
     TextDelta { delta: String },
     ReasoningDelta { delta: String },
+    /// Legacy flat tool call delta — used by the transport layer when the SSE
+    /// format doesn't separate start/args/end events. The converter will
+    /// decompose this into ToolCallStart / ToolCallArgs / ToolCallEnd.
     ToolCallDelta {
         index: usize,
         id: Option<String>,
         name: Option<String>,
         arguments_delta: String,
     },
+    /// A new tool call has started. Includes the unique call ID and tool name.
+    ToolCallStart { id: String, name: String },
+    /// Streaming arguments delta for an in-progress tool call.
+    ToolCallArgs { id: String, args_delta: String },
+    /// A tool call's arguments are complete.
+    ToolCallEnd { id: String },
     Usage { usage: Usage },
     Finish {
         finish_reason: FinishReason,

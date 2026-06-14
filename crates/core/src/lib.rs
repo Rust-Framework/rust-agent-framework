@@ -23,7 +23,8 @@ pub use error::{AgentError, Result};
 pub use message::{
     AgentResponse, AgentResponseResult, AgentResponseUpdate, ChatMessage, Content, CustomEvent,
     ErrorContent, Event, ExecutorInvokedEvent, ExecutorInvokingEvent, HasMeta, MessageRole,
-    ReasoningContent, TextContent, ToolCalledContent, ToolCallingContent, UriContent, UsageContent,
+    ReasoningContent, TextContent, ToolCallArgsContent, ToolCallEndContent,
+    ToolCallStartContent, ToolCalledContent, ToolCallingContent, UriContent, UsageContent,
 };
 pub use types::{
     AgentId, AgentMetadata, FinishReason, ResponseMetadata, ToolCall, ToolResult, Usage,

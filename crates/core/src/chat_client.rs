@@ -27,6 +27,11 @@ pub struct ChatClientRunOptions {
     /// { "type": "function", "function": { "name": "...", "description": "...", "parameters": {...} } }
     /// ```
     pub tools: Vec<serde_json::Value>,
+    /// Allow parallel tool calls. When `Some(true)`, the LLM may emit multiple
+    /// tool calls in a single response. When `Some(false)`, tool calls are
+    /// serialized. `None` means use the provider default (typically enabled).
+    /// Maps to OpenAI's `parallel_tool_calls` parameter.
+    pub parallel_tool_calls: Option<bool>,
 }
 
 impl ChatClientRunOptions {

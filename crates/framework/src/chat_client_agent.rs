@@ -85,7 +85,7 @@ impl IAgent for ChatClientAgent {
             .clone()
             .unwrap_or_else(|| self.instructions.clone());
 
-        // 2. Build full messages: [system] + [session_history] + [user/tool messages]
+        // 2. Build full messages: [system] + [session_history] + [all non-system messages]
         let mut full_messages = Vec::new();
 
         if !effective_instructions.is_empty() {
@@ -99,9 +99,11 @@ impl IAgent for ChatClientAgent {
         }
 
         for msg in &messages {
-            if msg.role == MessageRole::User || msg.role == MessageRole::Tool {
-                full_messages.push(msg.clone());
+            if msg.role == MessageRole::System {
+                // Skip — dispatched above
+                continue;
             }
+            full_messages.push(msg.clone());
         }
 
         // 3. Build ChatClientRunOptions from AgentRunOptions
@@ -141,7 +143,7 @@ impl IAgent for ChatClientAgent {
         let session_clone = session.clone();
         let user_msgs: Vec<ChatMessage> = messages
             .iter()
-            .filter(|m| m.role == MessageRole::User || m.role == MessageRole::Tool)
+            .filter(|m| m.role != MessageRole::System)
             .cloned()
             .collect();
 

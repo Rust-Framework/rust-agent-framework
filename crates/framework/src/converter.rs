@@ -1,45 +1,43 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use chrono::Utc;
 use rust_agent_core::{
     AgentId, AgentResponseResult, AgentResponseUpdate, AgentRunOptions, Content, ErrorContent,
-    Event, FinishReason, ReasoningContent, ResponseMetadata, TextContent, ToolCallingContent,
-    Usage, UsageContent,
+    Event, FinishReason, ReasoningContent, ResponseMetadata, TextContent, ToolCallArgsContent,
+    ToolCallEndContent, ToolCallStartContent, ToolCallingContent, Usage, UsageContent,
 };
 
-/// Accumulator for streaming tool call deltas
+/// Accumulator for streaming tool call deltas, keyed by call_id for parallel tool call support.
 #[derive(Debug, Default)]
 struct ToolCallAccumulator {
-    id: Option<String>,
     name: Option<String>,
     args: String,
+    /// Whether a ToolCallStart content has already been emitted for this call.
+    /// Prevents duplicate start events when the transport layer provides both
+    /// explicit ToolCallStart events and legacy ToolCallDelta decomposition.
+    start_emitted: bool,
 }
 
-impl ToolCallAccumulator {
-    fn is_complete(&self) -> bool {
-        self.id.is_some() && self.name.is_some() && !self.args.is_empty()
-    }
-
-    fn to_tool_calling(&self, meta: &ResponseMetadata) -> ToolCallingContent {
-        let arguments = serde_json::from_str(&self.args)
-            .unwrap_or(serde_json::Value::String(self.args.clone()));
-        ToolCallingContent {
-            meta: meta.clone(),
-            call_id: self.id.clone().unwrap(),
-            name: self.name.clone().unwrap(),
-            arguments,
-        }
-    }
-}
-
-/// Converts AgentResponseUpdate (internal SSE-level) to AgentResponseResult (public API)
+/// Converts AgentResponseUpdate (internal SSE-level) to AgentResponseResult (public API).
+///
+/// Supports parallel tool calls by keying accumulators by call_id (String) rather than
+/// position index. For legacy ToolCallDelta events, the accumulator decomposes them into
+/// ToolCallStart / ToolCallArgs / ToolCallEnd lifecycle content variants.
 pub struct AgentResponseConverter {
     agent_id: AgentId,
     model_id: Option<String>,
     executor_id: String,
     properties: HashMap<String, serde_json::Value>,
     // Internal state
-    tool_accumulators: HashMap<usize, ToolCallAccumulator>,
+    /// Active tool call accumulators keyed by call_id (supports parallel calls).
+    tool_accumulators: HashMap<String, ToolCallAccumulator>,
+    /// Maps tool call index → real call_id. Resolves id=None in subsequent
+    /// ToolCallDelta events: after the first delta establishes the call ID,
+    /// later deltas with id=None are routed to the correct accumulator.
+    index_to_call_id: HashMap<usize, String>,
+    /// Set of call_ids that have received ToolCallEnd — prevents duplicate End emission.
+    ended_calls: HashSet<String>,
     response_id: Option<String>,
     response_model: Option<String>,
 }
@@ -52,6 +50,8 @@ impl AgentResponseConverter {
             executor_id,
             properties: options.properties.clone(),
             tool_accumulators: HashMap::new(),
+            index_to_call_id: HashMap::new(),
+            ended_calls: HashSet::new(),
             response_id: None,
             response_model: None,
         }
@@ -68,7 +68,14 @@ impl AgentResponseConverter {
         }
     }
 
-    /// Consume a single AgentResponseUpdate, producing content and event vectors
+    /// Consume a single AgentResponseUpdate, producing content and event vectors.
+    ///
+    /// For the streaming tool call lifecycle (ToolCallStart → ToolCallArgs … → ToolCallEnd),
+    /// the corresponding content variants are emitted immediately during streaming,
+    /// enabling downstream consumers to react to each lifecycle event in real time.
+    ///
+    /// For legacy `ToolCallDelta`, the converter decomposes it into the three lifecycle
+    /// content variants (start/args/end) so consumers get a consistent streaming API.
     pub fn consume(&mut self, update: AgentResponseUpdate) -> ConvertOutput {
         let mut contents = Vec::new();
         let events = Vec::new();
@@ -90,31 +97,130 @@ impl AgentResponseConverter {
                     }));
                 }
             }
+
+            // ── New explicit lifecycle events (preferred transport format) ──
+            AgentResponseUpdate::ToolCallStart { id, name } => {
+                let acc = self.tool_accumulators.entry(id.clone()).or_default();
+                acc.name = Some(name.clone());
+                acc.start_emitted = true;
+
+                contents.push(Content::ToolCallStart(ToolCallStartContent {
+                    meta: self.build_meta(),
+                    call_id: id,
+                    name,
+                }));
+            }
+            AgentResponseUpdate::ToolCallArgs { id, args_delta } => {
+                if args_delta.is_empty() {
+                    return ConvertOutput {
+                        contents,
+                        events,
+                    };
+                }
+
+                let acc = self.tool_accumulators.entry(id.clone()).or_default();
+                // If we haven't seen a ToolCallStart for this call_id yet,
+                // we can't emit args (tool name unknown). Accumulate silently.
+                if acc.name.is_some() {
+                    acc.args.push_str(&args_delta);
+                    contents.push(Content::ToolCallArgs(ToolCallArgsContent {
+                        meta: self.build_meta(),
+                        call_id: id,
+                        args_delta,
+                    }));
+                } else {
+                    // Accumulate args even without a name (may get name later via legacy delta).
+                    acc.args.push_str(&args_delta);
+                }
+            }
+            AgentResponseUpdate::ToolCallEnd { id } => {
+                if self.ended_calls.contains(&id) {
+                    // Duplicate end — ignore
+                    return ConvertOutput {
+                        contents,
+                        events,
+                    };
+                }
+                self.ended_calls.insert(id.clone());
+
+                let emit_end = {
+                    let acc = self.tool_accumulators.get(&id);
+                    // Only emit End if we previously emitted a Start
+                    acc.map(|a| a.start_emitted).unwrap_or(false)
+                };
+
+                if emit_end {
+                    contents.push(Content::ToolCallEnd(ToolCallEndContent {
+                        meta: self.build_meta(),
+                        call_id: id,
+                    }));
+                }
+                // If no Start was emitted (e.g., only End arrived), we skip emitting
+                // End now. The complete ToolCallingContent will be emitted in flush_tool_calls().
+            }
+
+            // ── Legacy ToolCallDelta — decompose into lifecycle content variants ──
             AgentResponseUpdate::ToolCallDelta {
                 index,
                 id,
                 name,
                 arguments_delta,
             } => {
-                let is_complete = {
-                    let acc = self.tool_accumulators.entry(index).or_default();
-                    if let Some(id) = id {
-                        acc.id = Some(id);
-                    }
-                    if let Some(name) = name {
-                        acc.name = Some(name);
-                    }
-                    acc.args.push_str(&arguments_delta);
-                    acc.is_complete()
-                };
+                // Resolve call_id: prefer explicit id, then fall back to
+                // the index→call_id mapping (subsequent deltas without id),
+                // and finally a placeholder for very first unnamed delta.
+                let call_id = id.as_ref().or_else(|| {
+                    self.index_to_call_id.get(&index)
+                }).cloned().unwrap_or_else(|| format!("__tc_{}", index));
 
-                // When the tool call delta is complete, emit ToolCallingContent
-                if is_complete {
-                    let acc = self.tool_accumulators.remove(&index).unwrap();
-                    let meta = self.build_meta();
-                    contents.push(Content::ToolCalling(acc.to_tool_calling(&meta)));
+                // Remember the mapping for future deltas without id
+                if let Some(ref real_id) = id {
+                    self.index_to_call_id.insert(index, real_id.clone());
+                }
+
+                // Pre-compute meta to avoid borrow conflict with tool_accumulators entry
+                let meta = self.build_meta();
+
+                let acc = self.tool_accumulators.entry(call_id.clone()).or_default();
+
+                // Emit ToolCallStart if this is the first time we see this call and
+                // we have a name (or this is the first delta with a name).
+                if let Some(ref new_name) = name {
+                    if !acc.start_emitted {
+                        acc.name = Some(new_name.clone());
+                        acc.start_emitted = true;
+
+                        contents.push(Content::ToolCallStart(ToolCallStartContent {
+                            meta: meta.clone(),
+                            call_id: call_id.clone(),
+                            name: new_name.clone(),
+                        }));
+                    }
+                } else if !acc.start_emitted && acc.name.is_some() {
+                    // We already know the name from a previous delta — emit Start now
+                    acc.start_emitted = true;
+                    let acc_name = acc.name.clone().unwrap();
+                    contents.push(Content::ToolCallStart(ToolCallStartContent {
+                        meta: meta.clone(),
+                        call_id: call_id.clone(),
+                        name: acc_name,
+                    }));
+                }
+
+                // Emit args delta if the tool name is known
+                if !arguments_delta.is_empty() && acc.name.is_some() {
+                    acc.args.push_str(&arguments_delta);
+                    contents.push(Content::ToolCallArgs(ToolCallArgsContent {
+                        meta,
+                        call_id: call_id.clone(),
+                        args_delta: arguments_delta.clone(),
+                    }));
+                } else {
+                    // Accumulate silently until we know the name
+                    acc.args.push_str(&arguments_delta);
                 }
             }
+
             AgentResponseUpdate::Usage { usage } => {
                 contents.push(Content::Usage(UsageContent {
                     meta: self.build_meta(),
@@ -125,15 +231,15 @@ impl AgentResponseConverter {
                 finish_reason: _,
                 usage,
             } => {
-                // Finish is handled via finalize(), but we may also emit
-                // usage if it was bundled with finish
+                // Usage bundled with finish
                 if let Some(u) = usage {
                     contents.push(Content::Usage(UsageContent {
                         meta: self.build_meta(),
                         usage: u,
                     }));
                 }
-                // The finish_reason will be captured by the caller as pending
+                // The finish_reason is captured by the caller as pending.
+                // Tool call flushing happens in finalize() based on finish_reason.
             }
             AgentResponseUpdate::Error { message } => {
                 contents.push(Content::Error(ErrorContent {
@@ -163,13 +269,62 @@ impl AgentResponseConverter {
         finish_reason: Option<FinishReason>,
         _usage: Option<Usage>,
     ) -> AgentResponseResult {
+        let mut contents = Vec::new();
+
+        // Emit ToolCallEnd for any tool calls that were started but not yet ended
+        // (covers cases where the stream ends without explicit End events).
+        let call_ids: Vec<String> = self.tool_accumulators.keys().cloned().collect();
+        let meta = self.build_meta();
+        for call_id in &call_ids {
+            if self.ended_calls.contains(call_id) {
+                continue;
+            }
+            if let Some(acc) = self.tool_accumulators.get(call_id) {
+                if acc.start_emitted && acc.name.is_some() {
+                    contents.push(Content::ToolCallEnd(ToolCallEndContent {
+                        meta: meta.clone(),
+                        call_id: call_id.clone(),
+                    }));
+                }
+            }
+        }
+
+        // Flush accumulated tool calls as complete ToolCallingContent when stream
+        // ended with ToolCalls finish_reason.
+        if finish_reason == Some(FinishReason::ToolCalls) {
+            contents.extend(self.flush_tool_calls());
+        }
+
         AgentResponseResult {
             id: self.response_id.take(),
             model: self.response_model.take(),
             finish_reason,
-            contents: Vec::new(),
+            contents,
             events: Vec::new(),
         }
+    }
+
+    /// Flush all accumulated tool call deltas as complete ToolCallingContent.
+    /// This is the final emission when the stream ends with a ToolCalls finish_reason.
+    fn flush_tool_calls(&mut self) -> Vec<Content> {
+        let call_ids: Vec<String> = self.tool_accumulators.keys().cloned().collect();
+        let mut result = Vec::new();
+        let meta = self.build_meta();
+        for call_id in call_ids {
+            if let Some(acc) = self.tool_accumulators.remove(&call_id) {
+                if acc.name.is_some() && !acc.args.is_empty() {
+                    let arguments = serde_json::from_str(&acc.args)
+                        .unwrap_or_else(|_| serde_json::Value::String(acc.args.clone()));
+                    result.push(Content::ToolCalling(ToolCallingContent {
+                        meta: meta.clone(),
+                        call_id,
+                        name: acc.name.unwrap(),
+                        arguments,
+                    }));
+                }
+            }
+        }
+        result
     }
 }
 

@@ -7,6 +7,7 @@ use rust_agent_core::{
 use crate::chat_client::ChatClient;
 use crate::options::ChatClientOptions;
 use crate::types::ModelListEntry;
+use crate::usage::UsageFormat;
 
 /// DeepSeek chat client implementing IChatClient.
 ///
@@ -86,7 +87,8 @@ impl IChatClient for DeepSeekChatClient {
         messages: &[ChatMessage],
         options: ChatClientRunOptions,
     ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>> {
-        self.inner.run(messages, options).await
+        // DeepSeek-specific: parses usage with top-level `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`
+        self.inner.chat_stream(messages, &options, UsageFormat::DeepSeek).await
     }
 
     fn model_id(&self) -> &str {

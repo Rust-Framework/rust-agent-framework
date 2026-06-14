@@ -84,3 +84,30 @@ pub struct Usage {
     pub prompt_cache_miss_tokens: Option<u32>,
     pub reasoning_tokens: Option<u32>,
 }
+
+impl Usage {
+    /// Compute cache hit ratio, choosing the formula appropriate for the provider.
+    ///
+    /// - If `prompt_cache_miss_tokens` is present (DeepSeek): `hit / (hit + miss)`
+    /// - Otherwise (OpenAI): `hit / prompt_tokens`
+    /// - Returns `0.0` when no cache data is available.
+    pub fn cache_hit_ratio(&self) -> f64 {
+        let hit = self.prompt_cache_hit_tokens.unwrap_or(0) as f64;
+        if hit == 0.0 {
+            return 0.0;
+        }
+        if let Some(miss) = self.prompt_cache_miss_tokens {
+            let miss = miss as f64;
+            let total = hit + miss;
+            if total > 0.0 {
+                return hit / total;
+            }
+        }
+        let prompt = self.prompt_tokens as f64;
+        if prompt > 0.0 {
+            hit / prompt
+        } else {
+            0.0
+        }
+    }
+}

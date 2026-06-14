@@ -28,6 +28,9 @@ pub struct AgentRunOptions {
     pub extra_body: HashMap<String, serde_json::Value>,
     /// Arbitrary properties passed through to the agent run context.
     pub properties: HashMap<String, serde_json::Value>,
+    /// Allow parallel tool calls. When `Some(true)`, the LLM may emit multiple
+    /// tool calls in a single response. Maps to OpenAI's `parallel_tool_calls` parameter.
+    pub parallel_tool_calls: Option<bool>,
 }
 
 impl AgentRunOptions {
@@ -99,6 +102,7 @@ impl AgentRunOptions {
             stop: self.stop.clone(),
             extra_body: self.extra_body.clone(),
             tools: Vec::new(), // tools are injected by the agent, not from options
+            parallel_tool_calls: self.parallel_tool_calls,
         }
     }
 }
