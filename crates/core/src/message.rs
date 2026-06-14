@@ -243,6 +243,50 @@ impl HasMeta for ToolCalledContent {
     }
 }
 
+/// ②b 工具调用参数已解析 — 流式 JSON 解析器检测到一个参数键值对已完整。
+///
+/// 在 `ToolCallArgs` 流中，由 `StreamingArgsParser` 实时解析 JSON 后发出。
+/// 例如参数 `{"text": "hello"}` 在引号闭合时立即发出 `ToolCallArgsParsed{name:"text", value:"hello"}`，
+/// 无需等待整个 JSON 对象完成。
+///
+/// 用途：UI 可据此展示已完成的参数，如文件写工具已探测到文件路径后再展示写入内容进度。
+///
+/// 生命周期位置：`ToolCallStart → ToolCallArgs(xN, 同时ToolCallArgsParsed) → ToolCallEnd → ...`
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallArgsParsedContent {
+    pub meta: ResponseMetadata,
+    pub call_id: String,
+    pub name: String,
+    pub value: serde_json::Value,
+}
+impl HasMeta for ToolCallArgsParsedContent {
+    fn meta(&self) -> &ResponseMetadata {
+        &self.meta
+    }
+}
+
+/// ②c 工具调用参数接收中 — LLM 正在流式输出该参数的字符串值。
+///
+/// 由 `StreamingArgsParser` 在字符串值未闭合时持续发出，携带已接收的部分内容。
+/// `received` 是累积字节数（从开引号计），`value` 是当前已收到的内容片段。
+///
+/// 用途：用户写入长文本/代码/报告时，可实时展示写入进度和部分内容预览。
+///
+/// 生命周期位置：在 `ToolCallArgsParsed` 之前，字符串值接收过程中持续发出。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallArgsProgressContent {
+    pub meta: ResponseMetadata,
+    pub call_id: String,
+    pub name: String,
+    pub received: usize,
+    pub value: serde_json::Value,
+}
+impl HasMeta for ToolCallArgsProgressContent {
+    fn meta(&self) -> &ResponseMetadata {
+        &self.meta
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageContent {
     pub meta: ResponseMetadata,
@@ -266,7 +310,7 @@ impl HasMeta for ErrorContent {
     }
 }
 
-/// Content enum — 10 variants
+/// Content enum — 12 variants
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Content {
     Text(TextContent),
@@ -274,6 +318,8 @@ pub enum Content {
     Uri(UriContent),
     ToolCallStart(ToolCallStartContent),
     ToolCallArgs(ToolCallArgsContent),
+    ToolCallArgsParsed(ToolCallArgsParsedContent),
+    ToolCallArgsProgress(ToolCallArgsProgressContent),
     ToolCallEnd(ToolCallEndContent),
     ToolCalling(ToolCallingContent),
     ToolCalled(ToolCalledContent),

@@ -133,28 +133,6 @@ async fn main() -> anyhow::Result<()> {
                 // ── Chat ──────────────────────────────────────
                 let messages = vec![ChatMessage::user(trimmed)];
 
-                #[cfg(debug_assertions)]
-                {
-                    // Dump session state before the call to validate message history
-                    let history = session.get_messages().await.unwrap_or_default();
-                    eprintln!("\x1b[90m[调试] session中已有{}条消息\x1b[0m", history.len());
-                    for (i, m) in history.iter().enumerate() {
-                        let role = match m.role {
-                            rust_agent_core::MessageRole::System => "system",
-                            rust_agent_core::MessageRole::User => "user",
-                            rust_agent_core::MessageRole::Assistant => {
-                                if m.tool_calls.is_some() { "assistant+tool_calls" } else { "assistant" }
-                            }
-                            rust_agent_core::MessageRole::Tool => "tool",
-                        };
-                        let content_preview = if m.content.len() > 60 {
-                            format!("{}...", &m.content[..57])
-                        } else {
-                            m.content.clone()
-                        };
-                        eprintln!("\x1b[90m  [{i}] {role}: {content_preview}\x1b[0m");
-                    }
-                }
                 let mut run_opts = AgentRunOptions::new();
                 if thinking_enabled {
                     run_opts = run_opts
@@ -201,17 +179,44 @@ async fn main() -> anyhow::Result<()> {
                                                     "\x1b[36m[调用] {}\x1b[0m",
                                                     c.name
                                                 );
-                                                eprint!("\n{} 接收参数中", label);
+                                                eprintln!("\n{} 参数:", label);
                                                 active_tools.insert(c.call_id.clone(), label);
                                             }
                                             Content::ToolCallArgs(_c) => {
-                                                // Args deltas arrive during streaming — show
-                                                // progress dots. Skip if no active tool (should
-                                                // not happen, but guard).
-                                                if !active_tools.is_empty() {
-                                                    eprint!(".");
-                                                    std::io::stderr().flush().unwrap();
-                                                }
+                                                // Raw deltas — progress shown via
+                                                // ToolCallArgsProgress below.
+                                            }
+                                            Content::ToolCallArgsParsed(c) => {
+                                                // A parameter value is complete — show key=value
+                                                let val_str = if c.value.is_string() {
+                                                    let s = c.value.as_str().unwrap_or("");
+                                                    if s.len() > 60 {
+                                                        format!("\"{}\" ({:.1}KB)", s, s.len() as f64 / 1024.0)
+                                                    } else {
+                                                        format!("\"{}\"", s)
+                                                    }
+                                                } else {
+                                                    c.value.to_string()
+                                                };
+                                                eprintln!(
+                                                    "  \x1b[32m{}\x1b[0m = {}",
+                                                    c.name, val_str
+                                                );
+                                            }
+                                            Content::ToolCallArgsProgress(c) => {
+                                                // Live progress for a long string parameter
+                                                let preview = c.value.as_str().unwrap_or("");
+                                                let preview = if preview.len() > 50 {
+                                                    format!("{}...", &preview[preview.len().saturating_sub(50)..])
+                                                } else {
+                                                    preview.to_string()
+                                                };
+                                                eprintln!(
+                                                    "  \x1b[90m{} ({:.1}KB) \x1b[0m{}",
+                                                    c.name,
+                                                    c.received as f64 / 1024.0,
+                                                    preview,
+                                                );
                                             }
                                             Content::ToolCallEnd(_c) => {
                                                 // Args complete — shown by ToolCalling below

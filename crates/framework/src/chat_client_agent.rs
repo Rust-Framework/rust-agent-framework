@@ -85,25 +85,44 @@ impl IAgent for ChatClientAgent {
             .clone()
             .unwrap_or_else(|| self.instructions.clone());
 
-        // 2. Build full messages: [system] + [session_history] + [all non-system messages]
+        // 2. Build full messages: [system] + [session_history] + [caller messages]
+        //
+        // Session is the single source of truth for conversation history.
+        // The `messages` param contains ONLY new messages not yet in session.
+        // No dedup is needed because:
+        //   - CLI passes user messages directly (not pre-written to session)
+        //   - ToolLoopAgent passes empty messages on loop (already in session)
         let mut full_messages = Vec::new();
 
         if !effective_instructions.is_empty() {
             full_messages.push(ChatMessage::system(&effective_instructions));
         }
 
-        if let Some(ref sess) = session {
-            if let Ok(history) = sess.get_messages().await {
-                full_messages.extend(history);
-            }
-        }
+        // Read existing history from session
+        let session_history = if let Some(ref sess) = session {
+            sess.get_messages().await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        full_messages.extend(session_history);
 
+        // Append caller messages (new, not in session)
         for msg in &messages {
             if msg.role == MessageRole::System {
-                // Skip — dispatched above
                 continue;
             }
             full_messages.push(msg.clone());
+        }
+
+        // 3. Persist caller messages to session (write-back)
+        //    ToolLoopAgent handles its own writes (tool interactions, text).
+        //    ChatClientAgent only persists the input messages it receives.
+        if let Some(ref sess) = session {
+            for msg in &messages {
+                if msg.role != MessageRole::System {
+                    let _ = sess.add_message(msg.clone()).await;
+                }
+            }
         }
 
         // 3. Build ChatClientRunOptions from AgentRunOptions
@@ -139,18 +158,10 @@ impl IAgent for ChatClientAgent {
         let executor_id = self.id.to_string();
         let converter = AgentResponseConverter::new(agent_id, executor_id, &run_options);
 
-        // Clone session and user/tool messages for write-back in the unfold stream
-        let session_clone = session.clone();
-        let user_msgs: Vec<ChatMessage> = messages
-            .iter()
-            .filter(|m| m.role != MessageRole::System)
-            .cloned()
-            .collect();
-
         let converted = futures_util::stream::unfold(
-            // State: (stream, converter, pending_finish, pending_usage, session, user_msgs, stream_done)
-            (stream, converter, None::<FinishReason>, None::<Usage>, session_clone, user_msgs, false),
-            |(mut stream, mut converter, mut pending_finish, mut pending_usage, session, user_msgs, stream_done)| async move {
+            // State: (stream, converter, pending_finish, pending_usage, stream_done)
+            (stream, converter, None::<FinishReason>, None::<Usage>, false),
+            |(mut stream, mut converter, mut pending_finish, mut pending_usage, stream_done)| async move {
                 if stream_done {
                     return None;
                 }
@@ -179,7 +190,7 @@ impl IAgent for ChatClientAgent {
                                         contents: output.contents,
                                         events: output.events,
                                     }),
-                                    (stream, converter, pending_finish, pending_usage, session, user_msgs, false),
+                                    (stream, converter, pending_finish, pending_usage, false),
                                 ));
                             }
                             // Empty output — continue polling
@@ -187,22 +198,16 @@ impl IAgent for ChatClientAgent {
                         Some(Err(e)) => {
                             return Some((
                                 Err(e),
-                                (stream, converter, pending_finish, pending_usage, session, user_msgs, false),
+                                (stream, converter, pending_finish, pending_usage, false),
                             ));
                         }
                         None => {
-                            // Write user/tool messages to session before finalizing
-                            if let Some(ref sess) = session {
-                                for msg in &user_msgs {
-                                    let _ = sess.add_message(msg.clone()).await;
-                                }
-                            }
                             // Stream ended — emit finalize result, mark as done
                             let final_result =
                                 converter.finalize(pending_finish.clone(), pending_usage.clone());
                             return Some((
                                 Ok(final_result),
-                                (stream, converter, pending_finish, pending_usage, session, user_msgs, true),
+                                (stream, converter, pending_finish, pending_usage, true),
                             ));
                         }
                     }

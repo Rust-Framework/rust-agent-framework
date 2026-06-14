@@ -207,8 +207,29 @@ impl IAgent for ToolLoopAgent {
                                 })
                                 .collect();
 
+                            // Extract any text content from this round (may coexist with tool calls).
+                            let round_text: String = all_chunks
+                                .iter()
+                                .flat_map(|c| &c.contents)
+                                .filter_map(|c| match c {
+                                    Content::Text(t) => Some(t.delta.as_str()),
+                                    _ => None,
+                                })
+                                .collect::<Vec<_>>()
+                                .join("");
+
+                            // Write text to session (if any)
+                            if !round_text.is_empty() {
+                                if let Some(ref sess) = session {
+                                    let _ = sess
+                                        .add_message(ChatMessage::assistant(round_text.clone()))
+                                        .await;
+                                }
+                            }
+
                             if tool_callings.is_empty() {
-                                // No tool calls – emit all collected chunks as final.
+                                // No tool calls – text already persisted above, emit all chunks as final.
+
                                 let mut chunks_iter = all_chunks.into_iter();
                                 match chunks_iter.next() {
                                     Some(first) => {
@@ -270,44 +291,6 @@ impl IAgent for ToolLoopAgent {
                                     .map(Content::ToolCalled)
                                     .collect();
 
-                                // Build assistant message with tool_calls.
-                                let tool_calls_for_msg: Vec<ToolCall> = tool_callings
-                                    .iter()
-                                    .map(|tc| ToolCall {
-                                        id: tc.call_id.clone(),
-                                        name: tc.name.clone(),
-                                        arguments: tc.arguments.clone(),
-                                    })
-                                    .collect();
-
-                                let mut new_messages = messages;
-                                new_messages.push(ChatMessage {
-                                    role: MessageRole::Assistant,
-                                    content: String::new(),
-                                    name: None,
-                                    tool_calls: Some(tool_calls_for_msg),
-                                    tool_call_id: None,
-                                });
-
-                                // Push tool result messages.
-                                for tc in &tool_callings {
-                                    let tool_result_content = tool_results.iter().find_map(|c| match c {
-                                        Content::ToolCalled(tcd) if tcd.call_id == tc.call_id => {
-                                            Some(tcd)
-                                        }
-                                        _ => None,
-                                    });
-                                    new_messages.push(ChatMessage {
-                                        role: MessageRole::Tool,
-                                        content: tool_result_content
-                                            .and_then(|t| t.result.clone())
-                                            .unwrap_or_default(),
-                                        name: None,
-                                        tool_calls: None,
-                                        tool_call_id: Some(tc.call_id.clone()),
-                                    });
-                                }
-
                                 // Write assistant (tool_calls) + tool result messages back to session
                                 // so the next turn's history includes the full tool interaction.
                                 if let Some(ref sess) = session {
@@ -337,10 +320,18 @@ impl IAgent for ToolLoopAgent {
                                     }
                                 }
 
-                                // Build a chunk containing all tool calling + tool called content.
+                                // Build a chunk containing text + tool calling + tool called content.
                                 let mut all_contents: Vec<Content> = Vec::new();
+                                if !round_text.is_empty() {
+                                    all_contents.push(Content::Text(
+                                        rust_agent_core::TextContent {
+                                            meta: meta.clone(),
+                                            delta: round_text,
+                                        },
+                                    ));
+                                }
                                 all_contents.extend(
-                                    tool_callings.into_iter().map(Content::ToolCalling),
+                                    tool_callings.iter().map(|tc| Content::ToolCalling(tc.clone())),
                                 );
                                 all_contents.extend(tool_results);
 
@@ -352,10 +343,14 @@ impl IAgent for ToolLoopAgent {
                                     events: vec![],
                                 };
 
+                                // All new messages have been persisted to session above.
+                                // Inner agent reads session as source of truth,
+                                // so pass empty messages on the next loop iteration
+                                // to avoid re-sending already-persisted data.
                                 Some((
                                     Ok(result),
                                     LoopState::Looping {
-                                        messages: new_messages,
+                                        messages: Vec::new(),
                                         round: round + 1,
                                     },
                                 ))

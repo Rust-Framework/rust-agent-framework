@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod chat_client;
 pub mod error;
+pub mod incremental_json;
 pub mod message;
 pub mod run_options;
 pub mod session;
@@ -20,11 +21,13 @@ pub use tool::{ITool, ToolRegistry};
 
 // Re-export core types
 pub use error::{AgentError, Result};
+pub use incremental_json::{ArgsEvent, StreamingArgsParser};
 pub use message::{
     AgentResponse, AgentResponseResult, AgentResponseUpdate, ChatMessage, Content, CustomEvent,
     ErrorContent, Event, ExecutorInvokedEvent, ExecutorInvokingEvent, HasMeta, MessageRole,
-    ReasoningContent, TextContent, ToolCallArgsContent, ToolCallEndContent,
-    ToolCallStartContent, ToolCalledContent, ToolCallingContent, UriContent, UsageContent,
+    ReasoningContent, TextContent, ToolCallArgsContent, ToolCallArgsParsedContent,
+    ToolCallArgsProgressContent, ToolCallEndContent, ToolCallStartContent,
+    ToolCalledContent, ToolCallingContent, UriContent, UsageContent,
 };
 pub use types::{
     AgentId, AgentMetadata, FinishReason, ResponseMetadata, ToolCall, ToolResult, Usage,

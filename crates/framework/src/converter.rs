@@ -3,9 +3,11 @@ use std::collections::HashSet;
 
 use chrono::Utc;
 use rust_agent_core::{
-    AgentId, AgentResponseResult, AgentResponseUpdate, AgentRunOptions, Content, ErrorContent,
-    Event, FinishReason, ReasoningContent, ResponseMetadata, TextContent, ToolCallArgsContent,
-    ToolCallEndContent, ToolCallStartContent, ToolCallingContent, Usage, UsageContent,
+    AgentId, AgentResponseResult, AgentResponseUpdate, AgentRunOptions, ArgsEvent, Content,
+    ErrorContent, Event, FinishReason, ReasoningContent, ResponseMetadata,
+    StreamingArgsParser, TextContent, ToolCallArgsContent, ToolCallArgsParsedContent,
+    ToolCallArgsProgressContent, ToolCallEndContent, ToolCallStartContent,
+    ToolCallingContent, Usage, UsageContent,
 };
 
 /// Accumulator for streaming tool call deltas, keyed by call_id for parallel tool call support.
@@ -38,6 +40,10 @@ pub struct AgentResponseConverter {
     index_to_call_id: HashMap<usize, String>,
     /// Set of call_ids that have received ToolCallEnd — prevents duplicate End emission.
     ended_calls: HashSet<String>,
+    /// Per-call streaming JSON parsers for incremental argument parsing.
+    /// When ToolCallArgs deltas arrive, they are fed into the parser which
+    /// emits ToolCallArgsParsed / ToolCallArgsProgress content in real time.
+    args_parsers: HashMap<String, StreamingArgsParser>,
     response_id: Option<String>,
     response_model: Option<String>,
 }
@@ -52,6 +58,7 @@ impl AgentResponseConverter {
             tool_accumulators: HashMap::new(),
             index_to_call_id: HashMap::new(),
             ended_calls: HashSet::new(),
+            args_parsers: HashMap::new(),
             response_id: None,
             response_model: None,
         }
@@ -125,9 +132,48 @@ impl AgentResponseConverter {
                     acc.args.push_str(&args_delta);
                     contents.push(Content::ToolCallArgs(ToolCallArgsContent {
                         meta: self.build_meta(),
-                        call_id: id,
-                        args_delta,
+                        call_id: id.clone(),
+                        args_delta: args_delta.clone(),
                     }));
+
+                    // Feed into streaming JSON parser for incremental arg progress
+                    let parser = self.args_parsers.entry(id.clone()).or_default();
+                    parser.push_bytes(args_delta.as_bytes());
+                    let parse_events = parser.poll(&id);
+                    for ev in parse_events {
+                        match ev {
+                            ArgsEvent::Parsed {
+                                id: call_id,
+                                name,
+                                value,
+                            } => {
+                                contents.push(Content::ToolCallArgsParsed(
+                                    ToolCallArgsParsedContent {
+                                        meta: self.build_meta(),
+                                        call_id,
+                                        name,
+                                        value,
+                                    },
+                                ));
+                            }
+                            ArgsEvent::Progress {
+                                id: call_id,
+                                name,
+                                received,
+                                value,
+                            } => {
+                                contents.push(Content::ToolCallArgsProgress(
+                                    ToolCallArgsProgressContent {
+                                        meta: self.build_meta(),
+                                        call_id,
+                                        name,
+                                        received,
+                                        value,
+                                    },
+                                ));
+                            }
+                        }
+                    }
                 } else {
                     // Accumulate args even without a name (may get name later via legacy delta).
                     acc.args.push_str(&args_delta);
@@ -211,10 +257,49 @@ impl AgentResponseConverter {
                 if !arguments_delta.is_empty() && acc.name.is_some() {
                     acc.args.push_str(&arguments_delta);
                     contents.push(Content::ToolCallArgs(ToolCallArgsContent {
-                        meta,
+                        meta: meta.clone(),
                         call_id: call_id.clone(),
                         args_delta: arguments_delta.clone(),
                     }));
+
+                    // Feed into streaming JSON parser for incremental arg progress
+                    let parser = self.args_parsers.entry(call_id.clone()).or_default();
+                    parser.push_bytes(arguments_delta.as_bytes());
+                    let parse_events = parser.poll(&call_id);
+                    for ev in parse_events {
+                        match ev {
+                            ArgsEvent::Parsed {
+                                id: cid,
+                                name: pname,
+                                value,
+                            } => {
+                                contents.push(Content::ToolCallArgsParsed(
+                                    ToolCallArgsParsedContent {
+                                        meta: meta.clone(),
+                                        call_id: cid,
+                                        name: pname,
+                                        value,
+                                    },
+                                ));
+                            }
+                            ArgsEvent::Progress {
+                                id: cid,
+                                name: pname,
+                                received,
+                                value,
+                            } => {
+                                contents.push(Content::ToolCallArgsProgress(
+                                    ToolCallArgsProgressContent {
+                                        meta: meta.clone(),
+                                        call_id: cid,
+                                        name: pname,
+                                        received,
+                                        value,
+                                    },
+                                ));
+                            }
+                        }
+                    }
                 } else {
                     // Accumulate silently until we know the name
                     acc.args.push_str(&arguments_delta);
