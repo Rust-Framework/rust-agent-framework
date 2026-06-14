@@ -3,6 +3,7 @@ pub mod agents;
 pub mod builder;
 pub mod chat_client_agent;
 pub mod converter;
+pub mod tools;
 
 pub use agent_runtime::AgentRuntime;
 pub use agents::tool_loop_agent::ToolLoopAgent;

@@ -3,6 +3,9 @@ name = "rust-agent-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "CLI application for rust-agent-framework"
 default-run = "rust-agent-cli"
 
 [[bin]]

@@ -3,6 +3,9 @@ name = "rust-agent-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Core abstractions (Agent trait, Message, Session, Tool) for the rust-agent-framework ecosystem"
 
 [dependencies]
 futures-core = { workspace = true }

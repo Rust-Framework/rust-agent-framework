@@ -3,6 +3,9 @@ name = "rust-agent-workflow"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Workflow orchestration patterns (sequential, concurrent, handoff, graph) for rust-agent-framework"
 
 [dependencies]
 rust-agent-core = { workspace = true }

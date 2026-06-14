@@ -13,14 +13,16 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+repository = "https://gitcode.com/rf2026/rust-agent-framework"
+homepage = "https://gitcode.com/rf2026/rust-agent-framework"
 
 [workspace.dependencies]
 # Internal crate dependencies
-rust-agent-core = { path = "crates/core" }
-rust-agent-client = { path = "crates/client" }
-rust-agent-framework = { path = "crates/framework" }
-rust-agent-workflow = { path = "crates/workflow" }
-rust-agent-macros = { path = "crates/macros" }
+rust-agent-core = { path = "crates/core", version = "0.1.0" }
+rust-agent-client = { path = "crates/client", version = "0.1.0" }
+rust-agent-framework = { path = "crates/framework", version = "0.1.0" }
+rust-agent-workflow = { path = "crates/workflow", version = "0.1.0" }
+rust-agent-macros = { path = "crates/macros", version = "0.1.0" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

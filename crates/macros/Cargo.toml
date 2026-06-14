@@ -3,6 +3,9 @@ name = "rust-agent-macros"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Proc-macro helpers for the rust-agent-framework ecosystem"
 
 [lib]
 proc-macro = true
