@@ -137,10 +137,18 @@ impl IAgent for ChatClientAgent {
         let executor_id = self.id.to_string();
         let converter = AgentResponseConverter::new(agent_id, executor_id, &run_options);
 
+        // Clone session and user/tool messages for write-back in the unfold stream
+        let session_clone = session.clone();
+        let user_msgs: Vec<ChatMessage> = messages
+            .iter()
+            .filter(|m| m.role == MessageRole::User || m.role == MessageRole::Tool)
+            .cloned()
+            .collect();
+
         let converted = futures_util::stream::unfold(
-            // State: (stream, converter, pending_finish, pending_usage)
-            (stream, converter, None::<FinishReason>, None::<Usage>),
-            |(mut stream, mut converter, mut pending_finish, mut pending_usage)| async move {
+            // State: (stream, converter, pending_finish, pending_usage, session, user_msgs)
+            (stream, converter, None::<FinishReason>, None::<Usage>, session_clone, user_msgs),
+            |(mut stream, mut converter, mut pending_finish, mut pending_usage, session, user_msgs)| async move {
                 loop {
                     match stream.next().await {
                         Some(Ok(update)) => {
@@ -166,7 +174,7 @@ impl IAgent for ChatClientAgent {
                                         contents: output.contents,
                                         events: output.events,
                                     }),
-                                    (stream, converter, pending_finish, pending_usage),
+                                    (stream, converter, pending_finish, pending_usage, session, user_msgs),
                                 ));
                             }
                             // Empty output — continue polling
@@ -174,10 +182,16 @@ impl IAgent for ChatClientAgent {
                         Some(Err(e)) => {
                             return Some((
                                 Err(e),
-                                (stream, converter, pending_finish, pending_usage),
+                                (stream, converter, pending_finish, pending_usage, session, user_msgs),
                             ));
                         }
                         None => {
+                            // Write user/tool messages to session before finalizing
+                            if let Some(ref sess) = session {
+                                for msg in &user_msgs {
+                                    let _ = sess.add_message(msg.clone()).await;
+                                }
+                            }
                             // Stream ended — emit finalize result
                             let final_result =
                                 converter.finalize(pending_finish.clone(), pending_usage.clone());
@@ -187,7 +201,7 @@ impl IAgent for ChatClientAgent {
                             {
                                 return Some((
                                     Ok(final_result),
-                                    (stream, converter, pending_finish, pending_usage),
+                                    (stream, converter, pending_finish, pending_usage, session, user_msgs),
                                 ));
                             }
                             return None;

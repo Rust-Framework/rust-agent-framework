@@ -12,7 +12,7 @@ use rust_agent_framework::tool;
 use rust_agent_framework::AgentBuilder;
 
 // ── Hardcoded API key for development ──────────────────────────
-const DEEPSEEK_API_KEY: &str = "sk-6e2ab5986594445abab4dfd0bd2957ee";
+const DEEPSEEK_API_KEY: &str = "sk-6eab5986594445abab4dfd0bd2957ee";
 
 // ── Tool definitions ───────────────────────────────────────────
 #[tool(description = "Echoes back the input text")]
@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let options = ChatClientOptions::deepseek("deepseek-v4-flash", DEEPSEEK_API_KEY);
     let client = DeepSeekChatClient::new(options)?;
 
-    let agent = AgentBuilder::new("cli-agent")
+    let mut agent = AgentBuilder::new("cli-agent")
         .chat_client(client)
         .instructions("You are a helpful AI assistant. Respond concisely.")
         .with_tool(Echo)
@@ -114,7 +114,17 @@ async fn main() -> anyhow::Result<()> {
                     if model.is_empty() {
                         println!("Usage: /model <name>\n");
                     } else {
-                        println!("[Model switch requires restart. Set model at launch.]\n");
+                        let opts = ChatClientOptions::deepseek(model, DEEPSEEK_API_KEY);
+                        match DeepSeekChatClient::new(opts) {
+                            Ok(new_client) => {
+                                agent = AgentBuilder::new("cli-agent")
+                                    .chat_client(new_client)
+                                    .instructions("You are a helpful AI assistant. Respond concisely.")
+                                    .build()?;
+                                println!("[Model switched to {}]\n", model);
+                            }
+                            Err(e) => println!("[Error creating client: {}]\n", e),
+                        }
                     }
                     continue;
                 }

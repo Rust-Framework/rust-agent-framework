@@ -52,17 +52,7 @@ pub struct ToolResult {
     pub content: String,
 }
 
-/// Partial tool call information in a streaming response.
-#[deprecated(note = "use AgentResponseUpdate::ToolCallDelta instead")]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallDelta {
-    pub index: usize,
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub arguments_delta: Option<String>,
-}
-
-/// 每个 content / event 变体自带的统一元数据
+/// Metadata for each content/event variant
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseMetadata {
     pub agent_id: Option<AgentId>,
