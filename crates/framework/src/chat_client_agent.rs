@@ -273,7 +273,7 @@ impl IAgent for ChatClientAgent {
                             tracing::warn!(provider = %provider.name(), error = %e, "on_invoked failed");
                         }
                     }
-                    if !response.text.is_empty() {
+                    if !response.text.is_empty() && response.tool_calls.is_empty() {
                         let _ = sess.add_message(ChatMessage::assistant(response.text.clone())).await;
                     }
                 }

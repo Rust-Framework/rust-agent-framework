@@ -285,11 +285,13 @@ impl IAgent for ToolLoopAgent {
                                     results.into_iter().map(Content::ToolCalled).collect();
 
                                 // Persist tool interactions to session
+                                // API protocol: assistant with tool_calls MUST be followed
+                                // by tool messages for each tool_call_id.
                                 if let Some(ref sess) = session_clone {
                                     let _ = sess
                                         .add_message(ChatMessage {
                                             role: MessageRole::Assistant,
-                                            content: String::new(),
+                                            content: round_text.clone(),
                                             name: None,
                                             tool_calls: Some(
                                                 tool_callings.iter().map(|tc| ToolCall {
