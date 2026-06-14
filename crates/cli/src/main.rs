@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::sync::Arc;
 
 use futures_util::StreamExt;
@@ -12,7 +13,7 @@ use rust_agent_framework::tool;
 use rust_agent_framework::AgentBuilder;
 
 // ── Hardcoded API key for development ──────────────────────────
-const DEEPSEEK_API_KEY: &str = "sk-6eab5986594445abab4dfd0bd2957ee";
+const DEEPSEEK_API_KEY: &str = "sk-9f8dbaaa822e477faf339e32cdb89e91";
 
 // ── Tool definitions ───────────────────────────────────────────
 #[tool(description = "Echoes back the input text")]
@@ -154,6 +155,7 @@ async fn main() -> anyhow::Result<()> {
                                                     in_reasoning = false;
                                                 }
                                                 print!("{}", c.delta);
+                                                std::io::stdout().flush().unwrap();
                                             }
                                             Content::Reasoning(c) => {
                                                 if !in_reasoning {
@@ -161,6 +163,7 @@ async fn main() -> anyhow::Result<()> {
                                                     in_reasoning = true;
                                                 }
                                                 print!("{}", c.delta);
+                                                std::io::stdout().flush().unwrap();
                                             }
                                             Content::ToolCalling(c) => {
                                                 if in_reasoning {

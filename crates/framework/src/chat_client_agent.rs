@@ -146,9 +146,12 @@ impl IAgent for ChatClientAgent {
             .collect();
 
         let converted = futures_util::stream::unfold(
-            // State: (stream, converter, pending_finish, pending_usage, session, user_msgs)
-            (stream, converter, None::<FinishReason>, None::<Usage>, session_clone, user_msgs),
-            |(mut stream, mut converter, mut pending_finish, mut pending_usage, session, user_msgs)| async move {
+            // State: (stream, converter, pending_finish, pending_usage, session, user_msgs, stream_done)
+            (stream, converter, None::<FinishReason>, None::<Usage>, session_clone, user_msgs, false),
+            |(mut stream, mut converter, mut pending_finish, mut pending_usage, session, user_msgs, stream_done)| async move {
+                if stream_done {
+                    return None;
+                }
                 loop {
                     match stream.next().await {
                         Some(Ok(update)) => {
@@ -174,7 +177,7 @@ impl IAgent for ChatClientAgent {
                                         contents: output.contents,
                                         events: output.events,
                                     }),
-                                    (stream, converter, pending_finish, pending_usage, session, user_msgs),
+                                    (stream, converter, pending_finish, pending_usage, session, user_msgs, false),
                                 ));
                             }
                             // Empty output — continue polling
@@ -182,7 +185,7 @@ impl IAgent for ChatClientAgent {
                         Some(Err(e)) => {
                             return Some((
                                 Err(e),
-                                (stream, converter, pending_finish, pending_usage, session, user_msgs),
+                                (stream, converter, pending_finish, pending_usage, session, user_msgs, false),
                             ));
                         }
                         None => {
@@ -192,19 +195,13 @@ impl IAgent for ChatClientAgent {
                                     let _ = sess.add_message(msg.clone()).await;
                                 }
                             }
-                            // Stream ended — emit finalize result
+                            // Stream ended — emit finalize result, mark as done
                             let final_result =
                                 converter.finalize(pending_finish.clone(), pending_usage.clone());
-                            if !final_result.contents.is_empty()
-                                || final_result.finish_reason.is_some()
-                                || !final_result.events.is_empty()
-                            {
-                                return Some((
-                                    Ok(final_result),
-                                    (stream, converter, pending_finish, pending_usage, session, user_msgs),
-                                ));
-                            }
-                            return None;
+                            return Some((
+                                Ok(final_result),
+                                (stream, converter, pending_finish, pending_usage, session, user_msgs, true),
+                            ));
                         }
                     }
                 }

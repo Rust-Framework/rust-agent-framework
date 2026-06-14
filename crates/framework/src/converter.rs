@@ -156,26 +156,18 @@ impl AgentResponseConverter {
         ConvertOutput { contents, events }
     }
 
-    /// Produce the final AgentResponseResult with finish_reason and accumulated state
+    /// Produce the final AgentResponseResult with finish_reason.
+    /// Usage is NOT emitted here — it is already emitted during streaming via consume().
     pub fn finalize(
         &mut self,
         finish_reason: Option<FinishReason>,
-        usage: Option<Usage>,
+        _usage: Option<Usage>,
     ) -> AgentResponseResult {
-        let mut contents = Vec::new();
-
-        if let Some(u) = usage {
-            contents.push(Content::Usage(UsageContent {
-                meta: self.build_meta(),
-                usage: u,
-            }));
-        }
-
         AgentResponseResult {
             id: self.response_id.take(),
             model: self.response_model.take(),
             finish_reason,
-            contents,
+            contents: Vec::new(),
             events: Vec::new(),
         }
     }
