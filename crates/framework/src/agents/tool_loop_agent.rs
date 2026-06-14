@@ -46,11 +46,6 @@ impl ToolLoopAgent {
         self.max_rounds = max_rounds;
         self
     }
-
-    #[allow(dead_code)]
-    fn find_tool(&self, name: &str) -> Option<&Arc<dyn ITool>> {
-        self.tools.iter().find(|t| t.name() == name)
-    }
 }
 
 /// State for the tool-loop unfold stream.

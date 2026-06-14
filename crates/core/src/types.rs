@@ -45,13 +45,6 @@ pub struct ToolCall {
     pub arguments: serde_json::Value,
 }
 
-/// The result of executing a tool call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolResult {
-    pub tool_call_id: String,
-    pub content: String,
-}
-
 /// Metadata for each content/event variant
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseMetadata {

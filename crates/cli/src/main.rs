@@ -206,13 +206,14 @@ async fn main() -> anyhow::Result<()> {
                                             Content::ToolCallArgsProgress(c) => {
                                                 // Live progress for a long string parameter
                                                 let preview = c.value.as_str().unwrap_or("");
-                                                let preview = if preview.len() > 50 {
-                                                    format!("{}...", &preview[preview.len().saturating_sub(50)..])
+                                                let preview = if preview.chars().count() > 50 {
+                                                    let tail: String = preview.chars().rev().take(50).collect::<Vec<_>>().into_iter().rev().collect();
+                                                    format!("{}...", tail)
                                                 } else {
                                                     preview.to_string()
                                                 };
                                                 eprintln!(
-                                                    "  \x1b[90m{} ({:.1}KB) \x1b[0m{}",
+                                                    "  \x1b[90m{} ({:.1}KB)\x1b[0m {}",
                                                     c.name,
                                                     c.received as f64 / 1024.0,
                                                     preview,
@@ -230,8 +231,9 @@ async fn main() -> anyhow::Result<()> {
                                                 }
                                                 // Show compact one-line summary
                                                 let args_str = c.arguments.to_string();
-                                                let args_preview = if args_str.len() > 80 {
-                                                    format!("{}...", &args_str[..77])
+                                                let args_preview = if args_str.chars().count() > 80 {
+                                                    let head: String = args_str.chars().take(77).collect();
+                                                    format!("{}...", head)
                                                 } else {
                                                     args_str
                                                 };
@@ -245,8 +247,9 @@ async fn main() -> anyhow::Result<()> {
                                                     eprintln!("\x1b[31m[结果] 失败\x1b[0m {}", err);
                                                 } else {
                                                     let r = c.result.as_deref().unwrap_or("");
-                                                    let preview = if r.len() > 100 {
-                                                        format!("{}...", &r[..97])
+                                                    let preview = if r.chars().count() > 100 {
+                                                        let head: String = r.chars().take(97).collect();
+                                                        format!("{}...", head)
                                                     } else {
                                                         r.to_string()
                                                     };

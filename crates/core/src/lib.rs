@@ -30,5 +30,5 @@ pub use message::{
     ToolCalledContent, ToolCallingContent, UriContent, UsageContent,
 };
 pub use types::{
-    AgentId, AgentMetadata, FinishReason, ResponseMetadata, ToolCall, ToolResult, Usage,
+    AgentId, AgentMetadata, FinishReason, ResponseMetadata, ToolCall, Usage,
 };

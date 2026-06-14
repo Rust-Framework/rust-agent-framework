@@ -55,10 +55,6 @@ impl ChatClientAgent {
     pub async fn tools(&self) -> tokio::sync::RwLockReadGuard<'_, ToolRegistry> {
         self.tools.read().await
     }
-
-    pub async fn tools_mut(&self) -> tokio::sync::RwLockWriteGuard<'_, ToolRegistry> {
-        self.tools.write().await
-    }
 }
 
 #[async_trait]
@@ -125,7 +121,7 @@ impl IAgent for ChatClientAgent {
             }
         }
 
-        // 3. Build ChatClientRunOptions from AgentRunOptions
+        // 4. Build ChatClientRunOptions from AgentRunOptions
         let mut client_opts = run_options.to_chat_client_run_options();
 
         // Serialize registered tools into OpenAI function-calling format
@@ -150,10 +146,10 @@ impl IAgent for ChatClientAgent {
             }
         }
 
-        // 4. Call chat client — get raw AgentResponseUpdate stream
+        // 5. Call chat client — get raw AgentResponseUpdate stream
         let stream = self.chat_client.run(&full_messages, client_opts).await?;
 
-        // 5. Convert AgentResponseUpdate stream → AgentResponseResult stream
+        // 6. Convert AgentResponseUpdate stream → AgentResponseResult stream
         let agent_id = self.id.clone();
         let executor_id = self.id.to_string();
         let converter = AgentResponseConverter::new(agent_id, executor_id, &run_options);
