@@ -1,0 +1,44 @@
+[package]
+name = "rust-agent-websearch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Pure Rust web search library for AI agents — DuckDuckGo multi-backend, SearXNG client, with anti-detection support. No API key required."
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+
+# HTTP client
+reqwest = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# HTML parsing (CSS selector based, Servo engine)
+scraper = "0.22"
+
+# Cookie store for session management
+cookie_store = "0.22"
+
+# Random number generation (UA rotation, jitter)
+rand = "0.8"
+
+# URL handling
+url = "2"
+
+[features]
+default = ["rustls-tls"]
+rustls-tls = ["reqwest/rustls-tls"]
+native-tls = ["reqwest/native-tls"]
+# Optional: TLS stealth via BoringSSL (requires cmake, perl, libclang)
+# tls-stealth = ["wreq"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

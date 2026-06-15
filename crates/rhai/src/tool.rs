@@ -41,8 +41,6 @@ pub struct RhaiTool {
     description: String,
     parameters_schema: serde_json::Value,
     runtime: Arc<Mutex<RhaiRuntime>>,
-    #[allow(dead_code)]
-    script_source: String,
 }
 
 impl RhaiTool {
@@ -68,7 +66,6 @@ impl RhaiTool {
             description: description.into(),
             parameters_schema,
             runtime: Arc::new(Mutex::new(runtime)),
-            script_source: script_str,
         }
     }
 
@@ -90,7 +87,6 @@ impl RhaiTool {
             description: description.into(),
             parameters_schema,
             runtime: Arc::new(Mutex::new(runtime)),
-            script_source: script_str,
         }
     }
 

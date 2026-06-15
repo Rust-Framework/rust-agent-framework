@@ -1,6 +1,5 @@
 pub mod agent_host;
 pub mod agent_runtime;
-pub mod agents;
 pub mod builder;
 pub mod chat_client_agent;
 pub mod chat_client_decorators;

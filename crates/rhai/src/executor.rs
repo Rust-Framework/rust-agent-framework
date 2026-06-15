@@ -51,8 +51,6 @@ use crate::runtime::RhaiRuntime;
 /// ```
 pub struct RhaiExecutor {
     id: String,
-    #[allow(dead_code)]
-    script_source: String,
     input_var: String,
     runtime: Arc<Mutex<RhaiRuntime>>,
 }
@@ -72,7 +70,6 @@ impl RhaiExecutor {
         Self {
             id: id.into(),
             runtime: Arc::new(Mutex::new(runtime)),
-            script_source: script_str,
             input_var: input_var.into(),
         }
     }
@@ -90,7 +87,6 @@ impl RhaiExecutor {
         Self {
             id: id.into(),
             runtime: Arc::new(Mutex::new(runtime)),
-            script_source: script_str,
             input_var: input_var.into(),
         }
     }

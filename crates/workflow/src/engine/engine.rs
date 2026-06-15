@@ -433,11 +433,6 @@ impl WorkflowEngine {
 
         Ok(())
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn graph(&self) -> &Arc<WorkflowGraph> {
-        &self.graph
-    }
 }
 
 fn node_progress_to_chunk(progress: NodeProgress) -> NodeChunk {
