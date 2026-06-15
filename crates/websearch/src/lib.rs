@@ -30,10 +30,12 @@
 //! - HTTP / SOCKS5 代理支持
 
 pub mod anti_detection;
+pub mod bing;
 pub mod duckduckgo;
 pub mod error;
 pub mod fetcher;
 pub mod html_utils;
+pub mod probe;
 pub mod searcher;
 pub mod searxng;
 pub mod types;
@@ -41,9 +43,11 @@ pub mod types;
 // ── 重新导出核心公共 API ──
 
 pub use anti_detection::{CookieManager, ProxyManager, RateLimiter};
+pub use bing::search_bing;
 pub use duckduckgo::{search_html, search_instant_answer, search_lite};
 pub use error::SearchError;
 pub use fetcher::fetch_page;
+pub use probe::{clear_cache as clear_probe_cache, BackendKind, Reachability};
 pub use searcher::search;
 pub use searxng::search_searxng;
 pub use types::{FetchConfig, FetchedPage, SearchConfig, SearchResult, SearchResults, SearchSource};

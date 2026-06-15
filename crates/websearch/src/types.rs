@@ -9,6 +9,8 @@ pub enum SearchSource {
     DuckDuckGoHtml,
     /// DuckDuckGo Instant Answer API (`api.duckduckgo.com`)
     DuckDuckGoInstantAnswer,
+    /// Bing CN (`cn.bing.com`) — 国内可访问
+    BingCn,
     /// SearXNG 自建实例
     SearXNG,
 }
@@ -65,6 +67,11 @@ pub struct SearchConfig {
     pub searxng_url: Option<String>,
     /// 搜索语言（如 `zh-CN`、`en-US`）
     pub language: Option<String>,
+    /// 网络探测超时（毫秒，默认 3000）。
+    ///
+    /// 搜索前先用短超时探测各后端可达性，避免长时间等待超时降级。
+    /// 设为 0 可禁用探测，使用传统顺序降级。
+    pub probe_timeout_ms: u64,
 }
 
 impl Default for SearchConfig {
@@ -76,6 +83,7 @@ impl Default for SearchConfig {
             proxy_url: None,
             searxng_url: None,
             language: None,
+            probe_timeout_ms: 3000,
         }
     }
 }

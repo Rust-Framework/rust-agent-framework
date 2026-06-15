@@ -207,16 +207,16 @@ async fn main() -> anyhow::Result<()> {
                                                 );
                                             }
                                             Content::ToolCallArgsProgress(c) => {
-                                                // Live progress for a long string parameter
+                                                // Live progress for a long string parameter — use \r to create typewriter effect
                                                 let preview = c.value.as_str().unwrap_or("");
-                                                let preview = if preview.chars().count() > 50 {
-                                                    let tail: String = preview.chars().rev().take(50).collect::<Vec<_>>().into_iter().rev().collect();
+                                                let preview = if preview.chars().count() > 60 {
+                                                    let tail: String = preview.chars().rev().take(60).collect::<Vec<_>>().into_iter().rev().collect();
                                                     format!("{}...", tail)
                                                 } else {
                                                     preview.to_string()
                                                 };
-                                                eprintln!(
-                                                    "  \x1b[90m{} ({:.1}KB)\x1b[0m {}",
+                                                eprint!(
+                                                    "\r  \x1b[90m{} ({:.1}KB)\x1b[0m {}  ",
                                                     c.name,
                                                     c.received as f64 / 1024.0,
                                                     preview,

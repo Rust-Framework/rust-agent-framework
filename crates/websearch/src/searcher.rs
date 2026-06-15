@@ -1,17 +1,15 @@
-//! 搜索协调器 —— 多后端降级链。
+//! 搜索协调器 —— 智能后端选择 + 降级链。
 //!
-//! `search()` 函数按以下顺序尝试：
-//! 1. DuckDuckGo Lite（首选，最稳定）
-//! 2. DuckDuckGo Instant Answer（JSON API）
-//! 3. DuckDuckGo HTML（通用搜索）
-//! 4. SearXNG（如果配置了实例 URL）
+//! `search()` 先通过网络探测快速识别可达的后端，
+//! 然后仅对可达的后端按优先级尝试搜索，避免无谓的超时等待。
 
 use crate::anti_detection::RateLimiter;
 use crate::duckduckgo;
 use crate::error::SearchError;
+use crate::probe;
 use crate::types::{SearchConfig, SearchResults};
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// 全局速率限制器（跨所有搜索请求共享）。
 fn global_rate_limiter() -> &'static Arc<RateLimiter> {
@@ -19,14 +17,17 @@ fn global_rate_limiter() -> &'static Arc<RateLimiter> {
     LIMITER.get_or_init(|| Arc::new(RateLimiter::new()))
 }
 
-/// 执行搜索，按降级链依次尝试后端。
+/// 执行搜索。
 ///
-/// # 降级策略
+/// # 智能选路策略
 ///
-/// 1. DuckDuckGo Lite — 首选，纯 HTTP，最少反爬
-/// 2. DuckDuckGo Instant Answer — JSON API，适合知识类查询
-/// 3. DuckDuckGo HTML — 通用网页搜索（可能 CAPTCHA）
-/// 4. SearXNG — 需要配置 `config.searxng_url`
+/// 当 `probe_timeout_ms > 0` 时：
+///   1. 快速探测各后端可达性（结果缓存 30 秒）
+///   2. 按优先级仅尝试 **可达** 的后端
+///   3. 若全部不可达，抛出 `NoResults`（避免漫长超时）
+///
+/// 当 `probe_timeout_ms == 0` 时（传统模式）：
+///   按固定顺序逐个尝试所有后端。
 pub async fn search(query: &str, config: &SearchConfig) -> Result<SearchResults, SearchError> {
     if query.trim().is_empty() {
         return Err(SearchError::Config("Search query cannot be empty".into()));
@@ -35,18 +36,64 @@ pub async fn search(query: &str, config: &SearchConfig) -> Result<SearchResults,
     // 速率控制
     global_rate_limiter().wait(config.min_interval_ms).await;
 
-    // 1. 尝试 DuckDuckGo Lite
+    // ── 智能探测：识别可达后端 ──
+    if config.probe_timeout_ms > 0 {
+        let probe_results = probe::probe_all(config).await;
+
+        let ddg_ok = probe::duckduckgo_reachable(&probe_results);
+        let bing_ok = probe::bing_cn_reachable(&probe_results);
+        let searxng_ok = probe::searxng_reachable(&probe_results);
+
+        info!(
+            "Network probe: DuckDuckGo={}, BingCN={}, SearXNG={}",
+            if ddg_ok { "OK" } else { "BLOCKED" },
+            if bing_ok { "OK" } else { "BLOCKED" },
+            if searxng_ok { "OK" } else { "BLOCKED" },
+        );
+
+        // 优先使用 DuckDuckGo（反爬最轻量），其次 Bing CN，最后 SearXNG
+        if ddg_ok {
+            if let Ok(results) = try_duckduckgo(query, config).await {
+                return Ok(results);
+            }
+        }
+
+        if bing_ok {
+            if let Ok(results) = crate::bing::search_bing(query, config).await {
+                debug!("Bing CN succeeded: {} results", results.results.len());
+                return Ok(results);
+            }
+        }
+
+        if searxng_ok {
+            if let Ok(results) = crate::searxng::search_searxng(query, config).await {
+                debug!("SearXNG succeeded: {} results", results.results.len());
+                return Ok(results);
+            }
+        }
+
+        return Err(SearchError::NoResults);
+    }
+
+    // ── 传统模式（probe 禁用） ──
+    fallback_search(query, config).await
+}
+
+/// 依次尝试 DuckDuckGo 的三个后端（Lite → Instant Answer → HTML）。
+async fn try_duckduckgo(
+    query: &str,
+    config: &SearchConfig,
+) -> Result<SearchResults, SearchError> {
+    // Lite
     match duckduckgo::search_lite(query, config).await {
         Ok(results) => {
             debug!("DuckDuckGo Lite succeeded: {} results", results.results.len());
             return Ok(results);
         }
-        Err(e) => {
-            warn!("DuckDuckGo Lite failed: {e}");
-        }
+        Err(e) => warn!("DuckDuckGo Lite failed: {e}"),
     }
 
-    // 2. 尝试 Instant Answer
+    // Instant Answer
     match duckduckgo::search_instant_answer(query, config).await {
         Ok(results) => {
             debug!(
@@ -55,32 +102,49 @@ pub async fn search(query: &str, config: &SearchConfig) -> Result<SearchResults,
             );
             return Ok(results);
         }
-        Err(e) => {
-            warn!("DuckDuckGo Instant Answer failed: {e}");
-        }
+        Err(e) => warn!("DuckDuckGo Instant Answer failed: {e}"),
     }
 
-    // 3. 尝试 HTML
+    // HTML
     match duckduckgo::search_html(query, config).await {
         Ok(results) => {
             debug!("DuckDuckGo HTML succeeded: {} results", results.results.len());
             return Ok(results);
         }
-        Err(e) => {
-            warn!("DuckDuckGo HTML failed: {e}");
-        }
+        Err(e) => warn!("DuckDuckGo HTML failed: {e}"),
     }
 
-    // 4. 尝试 SearXNG（如果配置了）
+    Err(SearchError::NoResults)
+}
+
+/// 传统降级链（固定顺序尝试所有后端）。
+async fn fallback_search(
+    query: &str,
+    config: &SearchConfig,
+) -> Result<SearchResults, SearchError> {
+    // 1. DuckDuckGo
+    match try_duckduckgo(query, config).await {
+        Ok(results) => return Ok(results),
+        Err(_) => {}
+    }
+
+    // 2. Bing CN
+    match crate::bing::search_bing(query, config).await {
+        Ok(results) => {
+            debug!("Bing CN succeeded: {} results", results.results.len());
+            return Ok(results);
+        }
+        Err(e) => warn!("Bing CN failed: {e}"),
+    }
+
+    // 3. SearXNG
     if config.searxng_url.is_some() {
         match crate::searxng::search_searxng(query, config).await {
             Ok(results) => {
                 debug!("SearXNG succeeded: {} results", results.results.len());
                 return Ok(results);
             }
-            Err(e) => {
-                warn!("SearXNG failed: {e}");
-            }
+            Err(e) => warn!("SearXNG failed: {e}"),
         }
     }
 

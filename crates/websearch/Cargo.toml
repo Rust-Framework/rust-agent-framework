@@ -21,6 +21,9 @@ serde_json = { workspace = true }
 # Logging
 tracing = { workspace = true }
 
+# Async concurrency
+futures-util = { workspace = true }
+
 # HTML parsing (CSS selector based, Servo engine)
 scraper = "0.22"
 
