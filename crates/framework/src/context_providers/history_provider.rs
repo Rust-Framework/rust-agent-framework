@@ -88,7 +88,9 @@ impl IContextProvider for InMemoryHistoryProvider {
 
         // 原子批量写入
         if !new_messages.is_empty() {
-            let _ = session.add_messages_batch(&new_messages).await;
+            if let Err(e) = session.add_messages_batch(&new_messages).await {
+                tracing::warn!(error = %e, count = new_messages.len(), "Failed to persist messages to session");
+            }
         }
 
         Ok(())

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rust_agent_core::{
-    collect_agent_response, AgentResponseResult, AgentRunOptions, BoxStream, ChatMessage, IAgent, Result,
+    collect_agent_response, AgentResponseResult, AgentRunOptions, BoxStream, ChatMessage, IAgent, ISession, Result,
 };
 
 /// Sequential orchestration pattern — agents run in order,
@@ -16,9 +16,13 @@ impl SequentialPattern {
     }
 
     /// Execute agents sequentially, piping collected output forward.
+    ///
+    /// `session` is shared across all agents in the sequence,
+    /// ensuring conversation history persists across steps.
     pub async fn run(
         &self,
         input: Vec<ChatMessage>,
+        session: Option<Arc<dyn ISession>>,
         options: Option<AgentRunOptions>,
     ) -> Result<BoxStream<'static, Result<AgentResponseResult>>> {
         let mut messages = input;
@@ -26,7 +30,7 @@ impl SequentialPattern {
         // Run all but the last agent, collecting their output
         for (i, agent) in self.agents.iter().enumerate() {
             let is_last = i == self.agents.len() - 1;
-            let stream = agent.run(messages, None, options.clone()).await?;
+            let stream = agent.run(messages, session.clone(), options.clone()).await?;
 
             if is_last {
                 return Ok(stream);

@@ -51,3 +51,15 @@ reqwest = { version = "0.12", default-features = false, features = ["stream", "j
 
 # Bytes buffer (used by SSE transport)
 bytes = "1"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Concurrency
+parking_lot = "0.12"
+
+# UUID generation
+uuid = { version = "1", features = ["v4"] }
+
+# Stream wrappers
+tokio-stream = { version = "0.1", features = ["sync"] }

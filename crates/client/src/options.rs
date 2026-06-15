@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use rust_agent_core::ModelMetadata;
 use serde::{Deserialize, Serialize};
 
 /// Construction options for a chat client, following MAF's provider-leading naming.
@@ -32,6 +33,10 @@ pub struct ChatClientOptions {
     pub extra_headers: HashMap<String, String>,
     /// Request timeout in seconds.
     pub timeout_secs: Option<u64>,
+    /// Model metadata describing capability boundaries (context window, max output).
+    /// When `None`, the framework cannot enforce token limits automatically.
+    #[serde(skip)]
+    pub model_metadata: Option<ModelMetadata>,
 }
 
 impl std::fmt::Display for ChatClientOptions {
@@ -56,6 +61,7 @@ impl Default for ChatClientOptions {
             stop: None,
             extra_headers: HashMap::new(),
             timeout_secs: Some(60),
+            model_metadata: None,
         }
     }
 }

@@ -6,7 +6,8 @@ use tracing;
 use rust_agent_core::{
     AgentId, AgentMetadata, AgentResponse, AgentResponseResult, AgentResponseUpdate,
     AgentRunOptions, BoxStream, ChatMessage, Content, FinishReason, IAgent, IChatClient,
-    IContextProvider, ISession, MessageRole, Result, ToolCall, ToolRegistry, Usage,
+    ICompressionStrategy, IContextProvider, ISession, ITokenCounter, MessageRole, Result,
+    ToolCall, ToolRegistry, Usage,
 };
 use crate::converter::AgentResponseConverter;
 
@@ -23,6 +24,8 @@ pub struct ChatClientAgent {
     instructions: String,
     tools: Arc<tokio::sync::RwLock<ToolRegistry>>,
     context_providers: Vec<Arc<dyn IContextProvider>>,
+    compression_strategy: Option<Arc<dyn ICompressionStrategy>>,
+    token_counter: Option<Arc<dyn ITokenCounter>>,
 }
 
 struct AgentProxy {
@@ -56,6 +59,8 @@ impl ChatClientAgent {
             instructions: String::new(),
             tools: Arc::new(tokio::sync::RwLock::new(ToolRegistry::new())),
             context_providers: Vec::new(),
+            compression_strategy: None,
+            token_counter: None,
         }
     }
 
@@ -79,6 +84,19 @@ impl ChatClientAgent {
         providers: Vec<Arc<dyn IContextProvider>>,
     ) -> Self {
         self.context_providers = providers;
+        self
+    }
+
+    pub fn with_compression_strategy(
+        mut self,
+        strategy: Arc<dyn ICompressionStrategy>,
+    ) -> Self {
+        self.compression_strategy = Some(strategy);
+        self
+    }
+
+    pub fn with_token_counter(mut self, counter: Arc<dyn ITokenCounter>) -> Self {
+        self.token_counter = Some(counter);
         self
     }
 
@@ -156,6 +174,41 @@ impl IAgent for ChatClientAgent {
         );
 
         let original_request_messages = full_messages.clone();
+
+        // ── Phase 1.5: Compression ────────────────────────────────────
+        if let (Some(ref strategy), Some(ref counter)) = (&self.compression_strategy, &self.token_counter) {
+            if let Some(model_metadata) = self.chat_client.model_metadata() {
+                let budget = model_metadata.input_budget();
+                let current_tokens = counter.count_tokens(&full_messages);
+                if current_tokens > budget {
+                    tracing::info!(
+                        strategy = strategy.name(),
+                        current_tokens = current_tokens,
+                        budget = budget,
+                        "Applying compression — token budget exceeded"
+                    );
+                    match strategy.compress(full_messages.clone(), budget, counter.as_ref()) {
+                        Ok(compressed) => {
+                            let new_tokens = counter.count_tokens(&compressed);
+                            tracing::info!(
+                                strategy = strategy.name(),
+                                before_tokens = current_tokens,
+                                after_tokens = new_tokens,
+                                "Compression completed"
+                            );
+                            full_messages = compressed;
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                strategy = strategy.name(),
+                                error = %e,
+                                "Compression failed, using original messages"
+                            );
+                        }
+                    }
+                }
+            }
+        }
 
         // KV cache 追踪
         if let Some(ref sess) = session {
@@ -274,7 +327,9 @@ impl IAgent for ChatClientAgent {
                         }
                     }
                     if !response.text.is_empty() && response.tool_calls.is_empty() {
-                        let _ = sess.add_message(ChatMessage::assistant(response.text.clone())).await;
+                        if let Err(e) = sess.add_message(ChatMessage::assistant(response.text.clone())).await {
+                            tracing::warn!(error = %e, "Failed to persist assistant message to session");
+                        }
                     }
                 }
             });

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 
-use crate::session::ISession;
+use crate::session::{AgentSession, ISession};
 use crate::{AgentId, AgentMetadata, AgentResponseResult, AgentRunOptions, BoxStream, ChatMessage, Result};
 
 /// Core agent interface following MAF design.
@@ -35,4 +35,21 @@ pub trait IAgent: Send + Sync {
 
     /// Reset the agent's internal state.
     async fn reset(&self) -> Result<()>;
+
+    /// Create a new session for this agent.
+    ///
+    /// Default implementation creates an `AgentSession` with a random UUID.
+    /// Override to create agent-specific session types.
+    fn create_session(&self) -> Arc<dyn ISession> {
+        Arc::new(AgentSession::new())
+    }
+
+    /// Deserialize a session from serialized data.
+    ///
+    /// Default implementation deserializes as `AgentSession`.
+    /// Override to support agent-specific session types.
+    fn deserialize_session(&self, data: &str) -> Result<Arc<dyn ISession>> {
+        let session = AgentSession::deserialize(data)?;
+        Ok(Arc::new(session))
+    }
 }

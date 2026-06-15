@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::{AgentResponseUpdate, BoxStream, ChatMessage, Result};
+use crate::{AgentError, AgentResponseUpdate, BoxStream, ChatMessage, ModelMetadata, Result};
 
 /// Per-call run options for `IChatClient::run()`, following MAF's pattern.
 ///
@@ -79,4 +80,112 @@ pub trait IChatClient: Send + Sync {
 
     /// The model identifier used by this client.
     fn model_id(&self) -> &str;
+
+    /// Model metadata describing capability boundaries (context window, max output).
+    ///
+    /// Used by compression strategies and the framework to enforce token limits.
+    /// Returns `None` when model boundaries are unknown (default).
+    /// Concrete implementations should override this.
+    fn model_metadata(&self) -> Option<&ModelMetadata> {
+        None
+    }
+}
+
+/// ChatClient 装饰器基类，参照 MAF 的 DelegatingChatClient
+///
+/// 所有未重写的方法透传给 inner client。
+/// 自定义装饰器应继承此结构体并重写需要拦截的方法。
+pub struct DelegatingChatClient {
+    inner: Arc<dyn IChatClient>,
+}
+
+impl DelegatingChatClient {
+    pub fn new(inner: Arc<dyn IChatClient>) -> Self {
+        Self { inner }
+    }
+
+    pub fn inner(&self) -> &Arc<dyn IChatClient> {
+        &self.inner
+    }
+}
+
+#[async_trait]
+impl IChatClient for DelegatingChatClient {
+    async fn run(
+        &self,
+        messages: &[ChatMessage],
+        options: ChatClientRunOptions,
+    ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>> {
+        self.inner.run(messages, options).await
+    }
+
+    fn model_id(&self) -> &str {
+        self.inner.model_id()
+    }
+
+    fn model_metadata(&self) -> Option<&ModelMetadata> {
+        self.inner.model_metadata()
+    }
+}
+
+/// ChatClient 管道构建器，参照 MAF 的 ChatClientBuilder
+///
+/// 按注册顺序包装装饰器，最终形成管道链。
+/// 装饰器按注册顺序依次包装 leaf client：
+/// `decorators[0](decorators[1](...(leaf)...))`
+///
+/// ## 使用方式
+///
+/// ```ignore
+/// let pipeline = ChatClientBuilder::new()
+///     .leaf(Arc::new(my_client))
+///     .use_decorator(Box::new(|inner| Arc::new(FunctionInvokingChatClient::new(inner, tools))))
+///     .build()?;
+/// ```
+pub struct ChatClientBuilder {
+    decorators: Vec<Box<dyn Fn(Arc<dyn IChatClient>) -> Arc<dyn IChatClient> + Send + Sync>>,
+    leaf: Option<Arc<dyn IChatClient>>,
+}
+
+impl ChatClientBuilder {
+    pub fn new() -> Self {
+        Self {
+            decorators: Vec::new(),
+            leaf: None,
+        }
+    }
+
+    /// 设置叶子 ChatClient（实际的 LLM 服务客户端）
+    pub fn leaf(mut self, client: Arc<dyn IChatClient>) -> Self {
+        self.leaf = Some(client);
+        self
+    }
+
+    /// 添加装饰器工厂
+    ///
+    /// 装饰器按注册顺序包装：先注册的装饰器在最外层。
+    pub fn use_decorator(
+        mut self,
+        factory: Box<dyn Fn(Arc<dyn IChatClient>) -> Arc<dyn IChatClient> + Send + Sync>,
+    ) -> Self {
+        self.decorators.push(factory);
+        self
+    }
+
+    /// 构建管道：decorators[0] 包装 leaf，decorators[1] 包装上一层，以此类推
+    pub fn build(self) -> Result<Arc<dyn IChatClient>> {
+        let mut client = self.leaf.ok_or_else(|| {
+            AgentError::ConfigError("leaf IChatClient is required".into())
+        })?;
+        for factory in self.decorators {
+            client = factory(client);
+        }
+        Ok(client)
+    }
+}
+
+impl Default for ChatClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }

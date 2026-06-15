@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use rust_agent_core::{IAgent, IChatClient, IContextProvider, ITool, Result, ToolRegistry};
+use rust_agent_core::{
+    ChatClientBuilder, IAgent, IChatClient, ICompressionStrategy, IContextProvider,
+    ITokenCounter, ITool, Result, ToolRegistry,
+};
 
 use crate::ChatClientAgent;
-use crate::agents::tool_loop_agent::ToolLoopAgent;
+use crate::chat_client_decorators::FunctionInvokingChatClient;
 use crate::context_providers::history_provider::InMemoryHistoryProvider;
 
 /// Fluently construct an agent with reasonable defaults.
@@ -33,6 +36,12 @@ use crate::context_providers::history_provider::InMemoryHistoryProvider;
 ///     .build()?;
 /// // Chain: [InMemoryHistoryProvider, SkillsProvider, RagProvider]
 /// ```
+///
+/// ## Tool loop (pipeline mode)
+///
+/// When tools are registered, `AgentBuilder` automatically wraps the
+/// `IChatClient` in a `FunctionInvokingChatClient` decorator (MAF pipeline
+/// pattern) instead of wrapping the Agent in a ToolLoopAgent.
 pub struct AgentBuilder<C> {
     agent_id: String,
     chat_client: Option<C>,
@@ -42,6 +51,8 @@ pub struct AgentBuilder<C> {
     properties: HashMap<String, serde_json::Value>,
     description: String,
     max_tool_rounds: usize,
+    compression_strategy: Option<Arc<dyn ICompressionStrategy>>,
+    token_counter: Option<Arc<dyn ITokenCounter>>,
 }
 
 impl<C: IChatClient + 'static> AgentBuilder<C> {
@@ -57,6 +68,8 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
             properties: HashMap::new(),
             description: String::new(),
             max_tool_rounds: 10,
+            compression_strategy: None,
+            token_counter: None,
         }
     }
 
@@ -95,6 +108,25 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         self
     }
 
+    /// Set the compression strategy for context window management.
+    ///
+    /// When set along with a token counter and model metadata,
+    /// the agent will automatically compress messages that exceed
+    /// the model's context window budget.
+    pub fn with_compression_strategy(mut self, strategy: Arc<dyn ICompressionStrategy>) -> Self {
+        self.compression_strategy = Some(strategy);
+        self
+    }
+
+    /// Set the token counter for estimating token consumption.
+    ///
+    /// Required for compression strategies to make informed decisions.
+    /// If not set, compression will not be applied even if a strategy is configured.
+    pub fn with_token_counter(mut self, counter: Arc<dyn ITokenCounter>) -> Self {
+        self.token_counter = Some(counter);
+        self
+    }
+
     /// 追加一个上下文提供器到链中。
     ///
     /// 提供器按注册顺序执行。不影响内置的 `InMemoryHistoryProvider`。
@@ -128,15 +160,44 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         self
     }
 
-    /// Build the agent stack: ToolLoopAgent wraps ChatClientAgent.
+    /// Build the agent using ChatClient pipeline pattern.
+    ///
+    /// When tools are registered, the IChatClient is wrapped in a
+    /// `FunctionInvokingChatClient` decorator (MAF pipeline pattern)
+    /// instead of wrapping the Agent in a ToolLoopAgent.
     pub fn build(self) -> Result<Arc<dyn IAgent>> {
         let chat_client = self.chat_client.ok_or_else(|| {
             rust_agent_core::AgentError::ConfigError("chat_client is required".into())
         })?;
 
-        let mut agent = ChatClientAgent::new(&self.agent_id, Arc::new(chat_client))
+        // Build the ChatClient pipeline
+        let leaf: Arc<dyn IChatClient> = Arc::new(chat_client);
+        let pipeline_client = if !self.tools.is_empty() {
+            let tools = self.tools.clone();
+            let max_rounds = self.max_tool_rounds;
+            ChatClientBuilder::new()
+                .leaf(leaf)
+                .use_decorator(Box::new(move |inner| {
+                    Arc::new(
+                        FunctionInvokingChatClient::new(inner, tools.clone())
+                            .with_max_rounds(max_rounds),
+                    )
+                }))
+                .build()?
+        } else {
+            leaf
+        };
+
+        let mut agent = ChatClientAgent::new(&self.agent_id, pipeline_client)
             .with_instructions(&self.instructions)
             .with_context_providers(self.context_providers);
+
+        if let Some(strategy) = self.compression_strategy {
+            agent = agent.with_compression_strategy(strategy);
+        }
+        if let Some(counter) = self.token_counter {
+            agent = agent.with_token_counter(counter);
+        }
 
         if !self.description.is_empty() {
             agent = agent.with_description(&self.description);
@@ -150,21 +211,6 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
             agent = agent.with_tools(registry);
         }
 
-        let agent: Arc<dyn IAgent> = Arc::new(agent);
-
-        let agent: Arc<dyn IAgent> = if !self.tools.is_empty() {
-            Arc::new(
-                ToolLoopAgent::new(
-                    format!("{}-tool-loop", self.agent_id),
-                    agent,
-                    self.tools,
-                )
-                .with_max_rounds(self.max_tool_rounds),
-            )
-        } else {
-            agent
-        };
-
-        Ok(agent)
+        Ok(Arc::new(agent))
     }
 }

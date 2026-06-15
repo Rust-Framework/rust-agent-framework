@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use std::sync::Arc;
+use tracing;
 
 use rust_agent_core::{
     AgentId, AgentMetadata, AgentResponseResult, AgentRunOptions, BoxStream,
@@ -15,6 +16,14 @@ use tokio::sync::mpsc;
 ///
 /// Wraps an inner IAgent, intercepts ToolCallingContent, executes tools,
 /// injects ToolCalledContent, and feeds results back to the inner agent.
+///
+/// **Deprecated**: Use `ChatClientBuilder` + `FunctionInvokingChatClient` instead.
+/// The tool loop has been moved to the ChatClient pipeline layer following
+/// MAF's `FunctionInvokingChatClient` pattern.
+#[deprecated(
+    since = "0.2.0",
+    note = "Use ChatClientBuilder + FunctionInvokingChatClient instead. The tool loop has been moved to the ChatClient pipeline layer."
+)]
 pub struct ToolLoopAgent {
     id: AgentId,
     metadata: AgentMetadata,
@@ -23,7 +32,9 @@ pub struct ToolLoopAgent {
     max_rounds: usize,
 }
 
+#[allow(deprecated)]
 impl ToolLoopAgent {
+    #[allow(deprecated)]
     pub fn new(
         name: impl Into<String>,
         inner: Arc<dyn IAgent>,
@@ -69,6 +80,7 @@ enum LoopState {
     Done,
 }
 
+#[allow(deprecated)]
 #[async_trait]
 impl IAgent for ToolLoopAgent {
     fn id(&self) -> &AgentId {
@@ -125,6 +137,7 @@ impl IAgent for ToolLoopAgent {
 
                         LoopState::Looping { messages, round } => {
                             if round >= max_rounds {
+                                tracing::warn!(max_rounds, "Tool loop reached max rounds");
                                 let err_result = AgentResponseResult {
                                     id: None,
                                     model: None,
@@ -149,6 +162,7 @@ impl IAgent for ToolLoopAgent {
                             }
 
                             // Call inner agent.
+                            tracing::info!(round, "Tool loop iteration");
                             let stream = match inner
                                 .run(messages.clone(), session.clone(), options.clone())
                                 .await
@@ -254,27 +268,37 @@ impl IAgent for ToolLoopAgent {
                                         let tools = Arc::clone(&tools_clone);
                                         let meta = meta.clone();
                                         async move {
+                                            tracing::debug!(tool_name = %tc.name, call_id = %tc.call_id, "Executing tool");
                                             match tools.iter().find(|t| t.name() == tc.name) {
                                                 Some(tool) => match tool.execute(tc.arguments.clone()).await {
-                                                    Ok(output) => ToolCalledContent {
-                                                        meta,
-                                                        call_id: tc.call_id.clone(),
-                                                        result: Some(output),
-                                                        error: None,
-                                                    },
-                                                    Err(e) => ToolCalledContent {
+                                                    Ok(output) => {
+                                                        tracing::debug!(tool_name = %tc.name, call_id = %tc.call_id, has_error = false, "Tool execution completed");
+                                                        ToolCalledContent {
+                                                            meta,
+                                                            call_id: tc.call_id.clone(),
+                                                            result: Some(output),
+                                                            error: None,
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::debug!(tool_name = %tc.name, call_id = %tc.call_id, has_error = true, "Tool execution completed");
+                                                        ToolCalledContent {
+                                                            meta,
+                                                            call_id: tc.call_id.clone(),
+                                                            result: None,
+                                                            error: Some(e.to_string()),
+                                                        }
+                                                    }
+                                                },
+                                                None => {
+                                                    tracing::debug!(tool_name = %tc.name, call_id = %tc.call_id, has_error = true, "Tool not found");
+                                                    ToolCalledContent {
                                                         meta,
                                                         call_id: tc.call_id.clone(),
                                                         result: None,
-                                                        error: Some(e.to_string()),
-                                                    },
-                                                },
-                                                None => ToolCalledContent {
-                                                    meta,
-                                                    call_id: tc.call_id.clone(),
-                                                    result: None,
-                                                    error: Some(format!("Tool '{}' not found", tc.name)),
-                                                },
+                                                        error: Some(format!("Tool '{}' not found", tc.name)),
+                                                    }
+                                                }
                                             }
                                         }
                                     })
@@ -288,7 +312,7 @@ impl IAgent for ToolLoopAgent {
                                 // API protocol: assistant with tool_calls MUST be followed
                                 // by tool messages for each tool_call_id.
                                 if let Some(ref sess) = session_clone {
-                                    let _ = sess
+                                    if let Err(e) = sess
                                         .add_message(ChatMessage {
                                             role: MessageRole::Assistant,
                                             content: round_text.clone(),
@@ -301,8 +325,12 @@ impl IAgent for ToolLoopAgent {
                                                 }).collect(),
                                             ),
                                             tool_call_id: None,
+                                            source: None,
                                         })
-                                        .await;
+                                        .await
+                                    {
+                                        tracing::warn!(error = %e, "Failed to persist assistant tool_calls to session");
+                                    }
                                     for tc in &tool_callings {
                                         let content = tool_results
                                             .iter()
@@ -313,9 +341,12 @@ impl IAgent for ToolLoopAgent {
                                                 _ => None,
                                             })
                                             .unwrap_or_default();
-                                        let _ = sess
+                                        if let Err(e) = sess
                                             .add_message(ChatMessage::tool(content, &tc.call_id))
-                                            .await;
+                                            .await
+                                        {
+                                            tracing::warn!(error = %e, call_id = %tc.call_id, "Failed to persist tool result to session");
+                                        }
                                     }
                                 }
 

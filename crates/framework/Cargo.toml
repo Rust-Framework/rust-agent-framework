@@ -25,3 +25,11 @@ glob = "0.3"
 walkdir = "2"
 reqwest = { workspace = true }
 tarzi = "0.1"
+
+[features]
+default = []
+tiktoken = ["dep:tiktoken-rs"]
+
+[dependencies.tiktoken-rs]
+version = "0.6"
+optional = true

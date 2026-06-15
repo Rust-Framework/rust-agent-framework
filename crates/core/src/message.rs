@@ -1,6 +1,24 @@
 use crate::types::{AgentId, FinishReason, ResponseMetadata, ToolCall, Usage};
 use serde::{Deserialize, Serialize};
 
+/// Message source marker for tracking where a message originated.
+///
+/// Used by `InMemoryHistoryProvider` to filter messages during
+/// persistence, avoiding duplicate storage of history messages.
+/// Referenced from MAF's `AgentRequestMessageSourceType`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MessageSource {
+    /// External user input
+    External,
+    /// Loaded from chat history
+    ChatHistory,
+    /// Injected by a ContextProvider
+    ContextProvider,
+    /// Tool execution result
+    ToolResult,
+}
+
 /// Role of a message author, following MAF's unified ChatMessage model.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -22,6 +40,10 @@ pub struct ChatMessage {
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    /// Message source marker for tracking origin.
+    /// Used to prevent duplicate persistence of history messages.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<MessageSource>,
 }
 
 impl ChatMessage {
@@ -32,6 +54,7 @@ impl ChatMessage {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            source: None,
         }
     }
 
@@ -42,6 +65,7 @@ impl ChatMessage {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            source: None,
         }
     }
 
@@ -52,6 +76,7 @@ impl ChatMessage {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            source: None,
         }
     }
 
@@ -62,6 +87,7 @@ impl ChatMessage {
             name: None,
             tool_calls: Some(tool_calls),
             tool_call_id: None,
+            source: None,
         }
     }
 
@@ -72,6 +98,7 @@ impl ChatMessage {
             name: None,
             tool_calls: None,
             tool_call_id: Some(tool_call_id.into()),
+            source: None,
         }
     }
 
@@ -83,6 +110,7 @@ impl ChatMessage {
             name: Some(name.into()),
             tool_calls: None,
             tool_call_id: None,
+            source: None,
         }
     }
 }

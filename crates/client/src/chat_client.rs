@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use rust_agent_core::{
     AgentError, AgentResponseUpdate, BoxStream, ChatClientRunOptions, ChatMessage,
-    IChatClient, MessageRole, Result,
+    IChatClient, MessageRole, ModelMetadata, Result,
 };
 
 use crate::options::ChatClientOptions;
@@ -194,5 +194,9 @@ impl IChatClient for ChatClient {
 
     fn model_id(&self) -> &str {
         &self.options.model
+    }
+
+    fn model_metadata(&self) -> Option<&ModelMetadata> {
+        self.options.model_metadata.as_ref()
     }
 }

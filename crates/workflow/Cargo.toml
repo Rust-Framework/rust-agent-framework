@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Workflow orchestration patterns (sequential, concurrent, handoff, graph) for rust-agent-framework"
+description = "Workflow orchestration engine — graph-based execution with streaming observability for rust-agent-framework"
 
 [dependencies]
 rust-agent-core = { workspace = true }
@@ -18,3 +18,7 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+uuid = { workspace = true }
+tokio-stream = { workspace = true }

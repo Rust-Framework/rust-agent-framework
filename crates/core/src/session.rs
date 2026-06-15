@@ -8,6 +8,27 @@ use uuid::Uuid;
 
 use crate::{ChatMessage, Result, AgentError};
 
+/// Session TTL options for controlling session lifetime.
+#[derive(Debug, Clone)]
+pub struct SessionTTLOptions {
+    /// Maximum idle time in seconds before a session can be cleaned up.
+    pub max_idle_secs: Option<u64>,
+    /// Maximum lifetime in seconds before a session is forcefully cleaned up.
+    pub max_lifetime_secs: Option<u64>,
+    /// Interval in seconds between cleanup checks.
+    pub cleanup_interval_secs: u64,
+}
+
+impl Default for SessionTTLOptions {
+    fn default() -> Self {
+        Self {
+            max_idle_secs: None,
+            max_lifetime_secs: None,
+            cleanup_interval_secs: 3600, // 1 hour default
+        }
+    }
+}
+
 /// Session — MAF AgentSession equivalent, manages multi-turn message lifecycle.
 #[async_trait]
 pub trait ISession: Send + Sync {
@@ -46,6 +67,19 @@ pub trait ISession: Send + Sync {
 
     /// 获取上次请求的 messages 哈希
     fn get_last_request_hash(&self) -> Option<u64> { None }
+
+    /// Session creation timestamp.
+    fn created_at(&self) -> DateTime<Utc> {
+        Utc::now() // default fallback
+    }
+
+    /// Last activity timestamp.
+    fn last_active_at(&self) -> DateTime<Utc> {
+        Utc::now() // default fallback
+    }
+
+    /// Update the last activity timestamp.
+    async fn touch_last_active(&self) {}
 }
 
 /// Session metadata — creation time, message count, cache tracking hash
@@ -75,6 +109,54 @@ impl ProviderStateStore {
     pub fn remove(&mut self, provider_name: &str) { self.states.remove(provider_name); }
 }
 
+/// 类型安全的 Provider 状态访问器
+///
+/// 为 Provider 提供类型安全的 Session 状态读写能力，
+/// 避免手动序列化/反序列化和 key 拼写错误。
+///
+/// ## 使用方式
+///
+/// ```ignore
+/// struct MyState { last_count: usize }
+///
+/// let state_key = ProviderState::<MyState>::new("MyProvider");
+/// let state = state_key.get_or_init(&session);
+/// state.last_count += 1;
+/// state_key.save(&session, &state)?;
+/// ```
+pub struct ProviderState<T: serde::Serialize + serde::de::DeserializeOwned> {
+    key: String,
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T: serde::Serialize + serde::de::DeserializeOwned + Default> ProviderState<T> {
+    pub fn new(provider_name: &str) -> Self {
+        Self {
+            key: format!("provider_state::{}", provider_name),
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    /// 获取或初始化 Provider 状态
+    ///
+    /// 如果 Session 中存在该 Provider 的状态，反序列化返回；
+    /// 否则返回 T 的默认值。
+    pub fn get_or_init(&self, session: &dyn ISession) -> T {
+        session
+            .get_provider_state(&self.key)
+            .ok()
+            .and_then(|v| serde_json::from_value::<T>(v).ok())
+            .unwrap_or_default()
+    }
+
+    /// 保存 Provider 状态到 Session
+    pub fn save(&self, session: &dyn ISession, state: &T) -> Result<()> {
+        let value =
+            serde_json::to_value(state).map_err(|e| AgentError::Serialize(e.to_string()))?;
+        session.set_provider_state(&self.key, value)
+    }
+}
+
 /// Read-only session snapshot for debugging, UI display, auditing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionSnapshot {
@@ -90,6 +172,8 @@ pub struct AgentSession {
     history: RwLock<Vec<ChatMessage>>,
     metadata: RwLock<SessionMetadata>,
     provider_states: RwLock<ProviderStateStore>,
+    created_at: DateTime<Utc>,
+    last_active_at: RwLock<DateTime<Utc>>,
 }
 
 impl AgentSession {
@@ -102,6 +186,8 @@ impl AgentSession {
                 created_at: now, updated_at: now, message_count: 0, last_request_hash: None,
             }),
             provider_states: RwLock::new(ProviderStateStore::new()),
+            created_at: now,
+            last_active_at: RwLock::new(now),
         }
     }
 
@@ -114,6 +200,8 @@ impl AgentSession {
                 created_at: now, updated_at: now, message_count: 0, last_request_hash: None,
             }),
             provider_states: RwLock::new(ProviderStateStore::new()),
+            created_at: now,
+            last_active_at: RwLock::new(now),
         }
     }
 
@@ -202,11 +290,14 @@ impl ISession for AgentSession {
     fn deserialize(data: &str) -> Result<Self> {
         let snap: SessionSnapshot = serde_json::from_str(data)
             .map_err(|e| AgentError::Serialize(e.to_string()))?;
+        let created_at = snap.metadata.created_at;
         Ok(Self {
             session_id: snap.session_id,
             history: RwLock::new(snap.messages),
             metadata: RwLock::new(snap.metadata),
             provider_states: RwLock::new(snap.provider_states),
+            created_at,
+            last_active_at: RwLock::new(created_at),
         })
     }
 
@@ -250,5 +341,18 @@ impl ISession for AgentSession {
 
     fn get_last_request_hash(&self) -> Option<u64> {
         self.metadata.try_read().ok().and_then(|m| m.last_request_hash)
+    }
+
+    fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    fn last_active_at(&self) -> DateTime<Utc> {
+        self.last_active_at.try_read().map(|t| *t).unwrap_or(self.created_at)
+    }
+
+    async fn touch_last_active(&self) {
+        let mut t = self.last_active_at.write().await;
+        *t = Utc::now();
     }
 }
