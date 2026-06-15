@@ -240,14 +240,6 @@ impl AgentResolver for DefaultAgentResolver {
                 ContextProviderDecl::InMemoryHistory => {
                     // Already included by default in AgentBuilder
                 }
-                ContextProviderDecl::Memory { .. } => {
-                    // MemoryContextProvider requires IVectorStore which is not
-                    // yet configurable via declarations. Skip for now.
-                    tracing::warn!(
-                        "MemoryContextProvider skipped — requires IVectorStore (not yet \
-                         configurable via declarations)"
-                    );
-                }
                 ContextProviderDecl::Skills { names } => {
                     // Scan configured skill directories and match by name
                     let dirs: Vec<&std::path::Path> = if decl.skill_directories.is_empty() {

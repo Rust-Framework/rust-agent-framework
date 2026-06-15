@@ -33,3 +33,73 @@
 [2m2026-06-15T07:32:48.587342Z[0m [32m INFO[0m [2mrust_agent_framework::chat_client_decorators::function_invoking[0m[2m:[0m Executing tools [3mtool_count[0m[2m=[0m1
 [2m2026-06-15T07:32:48.588108Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)
 [2m2026-06-15T07:32:48.588103Z[0m [33m WARN[0m [2mrust_agent_framework::chat_client_decorators::function_invoking[0m[2m:[0m Tool loop reached max rounds, terminating [3mround[0m[2m=[0m3 [3mmax_rounds[0m[2m=[0m3
+[2m2026-06-15T11:36:55.647976Z[0m [32m INFO[0m [2mrust_agent_framework::agent_host[0m[2m:[0m Session created [3msession_id[0m[2m=[0m"test-session-1"
+[2m2026-06-15T11:36:55.648398Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:36:55.648905Z[0m [34mDEBUG[0m [2mreqwest::connect[0m[2m:[0m starting new connection: https://api.deepseek.com/
+[2m2026-06-15T11:36:55.663942Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 124.72.129.70:443
+[2m2026-06-15T11:36:55.683689Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 124.72.129.70:443
+[2m2026-06-15T11:36:56.710011Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:36:56.711109Z[0m [34mDEBUG[0m [2mrust_agent_workflow::engine::engine[0m[2m:[0m WorkflowEngine::execute_loop starting [3mnode_count[0m[2m=[0m1 [3mfingerprint[0m[2m=[0m88d4bab47768a504 [3mstart_node[0m[2m=[0mresearcher [3mhas_checkpoint[0m[2m=[0mtrue
+[2m2026-06-15T11:36:56.711141Z[0m [34mDEBUG[0m [2mrust_agent_workflow::engine::engine[0m[2m:[0m Checkpoint: create_initial [3msession_id[0m[2m=[0mworkflow-test [3mfingerprint[0m[2m=[0m88d4bab47768a504
+[2m2026-06-15T11:36:56.711226Z[0m [34mDEBUG[0m [2mrust_agent_workflow::engine::engine[0m[2m:[0m SuperStep: entering [3mstep[0m[2m=[0m0 [3mactive_node_count[0m[2m=[0m1 [3mactive_nodes[0m[2m=[0mresearcher
+[2m2026-06-15T11:36:56.711243Z[0m [34mDEBUG[0m [2mrust_agent_workflow::engine::engine[0m[2m:[0m Node: dispatching messages [3mnode_id[0m[2m=[0mresearcher [3mmessage_count[0m[2m=[0m1 [3mstep[0m[2m=[0m0
+[2m2026-06-15T11:36:56.711298Z[0m [34mDEBUG[0m [2mrust_agent_workflow::engine::engine[0m[2m:[0m Node: completed [3mnode_id[0m[2m=[0mresearcher [3moutput_message_count[0m[2m=[0m1
+[2m2026-06-15T11:36:56.711309Z[0m [34mDEBUG[0m [2mrust_agent_workflow::engine::engine[0m[2m:[0m SuperStep: completed [3mstep[0m[2m=[0m0 [3mnodes_processed[0m[2m=[0m1 [3mmessages_routed[0m[2m=[0m0 [3mnext_step_messages[0m[2m=[0m0
+[2m2026-06-15T11:36:56.711321Z[0m [34mDEBUG[0m [2mrust_agent_workflow::engine::engine[0m[2m:[0m Checkpoint: commit [3mstep[0m[2m=[0m0 [3msession_id[0m[2m=[0mworkflow-test [3mstate_keys[0m[2m=[0m0
+[2m2026-06-15T11:36:56.711349Z[0m [32m INFO[0m [2mrust_agent_workflow::engine::engine[0m[2m:[0m WorkflowEngine::execute_loop completed [3mtotal_steps[0m[2m=[0m1 [3mtotal_nodes[0m[2m=[0m1 [3msession_id[0m[2m=[0mworkflow-test
+[2m2026-06-15T11:37:01.727724Z[0m [32m INFO[0m [2mrust_agent_framework::session_store::in_memory[0m[2m:[0m Expired session eviction completed [3mremoved[0m[2m=[0m5
+[2m2026-06-15T11:37:01.728499Z[0m [32m INFO[0m [2mrust_agent_framework::chat_client_decorators::function_invoking[0m[2m:[0m FunctionInvokingChatClient created [3mtool_count[0m[2m=[0m1 [3mmax_rounds[0m[2m=[0m10
+[2m2026-06-15T11:37:01.728637Z[0m [32m INFO[0m [2mrust_agent_framework::chat_client_decorators::function_invoking[0m[2m:[0m FunctionInvokingChatClient::run starting [3minitial_message_count[0m[2m=[0m2 [3mmax_rounds[0m[2m=[0m3
+[2m2026-06-15T11:37:01.728691Z[0m [32m INFO[0m [2mrust_agent_framework::chat_client_decorators::function_invoking[0m[2m:[0m Tool loop iteration starting [3mround[0m[2m=[0m0 [3mmessage_count[0m[2m=[0m2
+[2m2026-06-15T11:37:01.728749Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:37:01.728914Z[0m [34mDEBUG[0m [2mreqwest::connect[0m[2m:[0m starting new connection: https://api.deepseek.com/
+[2m2026-06-15T11:37:01.735789Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 124.72.129.70:443
+[2m2026-06-15T11:37:01.752931Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 124.72.129.70:443
+[2m2026-06-15T11:37:03.233928Z[0m [32m INFO[0m [2mrust_agent_framework::chat_client_decorators::function_invoking[0m[2m:[0m Executing tools [3mtool_count[0m[2m=[0m1
+[2m2026-06-15T11:37:03.234411Z[0m [32m INFO[0m [2mrust_agent_framework::chat_client_decorators::function_invoking[0m[2m:[0m Tool loop iteration starting [3mround[0m[2m=[0m1 [3mmessage_count[0m[2m=[0m4
+[2m2026-06-15T11:37:03.234450Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:37:03.234505Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:37:03.234711Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m reuse idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:37:13.040424Z[0m [32m INFO[0m [2mrust_agent_framework::chat_client_decorators::function_invoking[0m[2m:[0m No tool calls detected — emitting final Finish(Stop)
+[2m2026-06-15T11:37:13.040584Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:37:13.041568Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:37:13.041743Z[0m [34mDEBUG[0m [2mreqwest::connect[0m[2m:[0m starting new connection: https://api.deepseek.com/
+[2m2026-06-15T11:37:13.046497Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 124.72.129.70:443
+[2m2026-06-15T11:37:13.064034Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 124.72.129.70:443
+[2m2026-06-15T11:37:14.311367Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:37:14.311545Z[0m [34mDEBUG[0m [2mrust_agent_workflow::orchestrations::handoff[0m[2m:[0m HandoffPattern: triage completed [3mtriage_text[0m[2m=[0mPythonExpert [3mavailable_agents[0m[2m=[0m["代码专家", "写作专家"]
+[2m2026-06-15T11:37:14.311656Z[0m [33m WARN[0m [2mrust_agent_workflow::orchestrations::handoff[0m[2m:[0m HandoffPattern: no matching agent found in triage response, returning triage output [3mtriage_text[0m[2m=[0mPythonExpert
+[2m2026-06-15T11:37:14.312737Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:37:14.312852Z[0m [34mDEBUG[0m [2mreqwest::connect[0m[2m:[0m starting new connection: https://api.deepseek.com/
+[2m2026-06-15T11:37:14.313188Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 124.72.129.70:443
+[2m2026-06-15T11:37:14.331283Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 124.72.129.70:443
+[2m2026-06-15T11:37:16.609670Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:37:16.609835Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:37:16.610048Z[0m [34mDEBUG[0m [2mreqwest::connect[0m[2m:[0m starting new connection: https://api.deepseek.com/
+[2m2026-06-15T11:37:16.610655Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 124.72.129.70:443
+[2m2026-06-15T11:37:16.629188Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 124.72.129.70:443
+[2m2026-06-15T11:37:19.112916Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:37:19.113548Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:37:19.113668Z[0m [34mDEBUG[0m [2mreqwest::connect[0m[2m:[0m starting new connection: https://api.deepseek.com/
+[2m2026-06-15T11:37:19.117932Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 124.72.129.70:443
+[2m2026-06-15T11:37:19.134464Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 124.72.129.70:443
+[2m2026-06-15T11:37:19.243678Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:37:19.243886Z[0m [34mDEBUG[0m [2mreqwest::connect[0m[2m:[0m starting new connection: https://api.deepseek.com/
+[2m2026-06-15T11:37:19.246316Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 124.72.129.70:443
+[2m2026-06-15T11:37:19.268136Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 124.72.129.70:443
+[2m2026-06-15T11:37:21.369930Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:37:22.356788Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:37:22.356928Z[0m [34mDEBUG[0m [2mreqwest::connect[0m[2m:[0m starting new connection: https://api.deepseek.com/
+[2m2026-06-15T11:37:22.357285Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 124.72.129.70:443
+[2m2026-06-15T11:37:22.384330Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 124.72.129.70:443
+[2m2026-06-15T11:37:28.375783Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:37:28.376342Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:37:28.376472Z[0m [34mDEBUG[0m [2mreqwest::connect[0m[2m:[0m starting new connection: https://api.deepseek.com/
+[2m2026-06-15T11:37:28.387907Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connecting to 124.72.129.70:443
+[2m2026-06-15T11:37:28.404328Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::connect::http[0m[2m:[0m connected to 124.72.129.70:443
+[2m2026-06-15T11:37:29.546046Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:37:29.546165Z[0m [34mDEBUG[0m [2mrust_agent_workflow::orchestrations::handoff[0m[2m:[0m HandoffPattern: triage completed [3mtriage_text[0m[2m=[0mcode-expert [3mavailable_agents[0m[2m=[0m["code-expert", "doc-expert"]
+[2m2026-06-15T11:37:29.546191Z[0m [32m INFO[0m [2mrust_agent_workflow::orchestrations::handoff[0m[2m:[0m HandoffPattern: routing to agent [3mtarget_agent[0m[2m=[0mcode-expert
+[2m2026-06-15T11:37:29.546255Z[0m [34mDEBUG[0m [2mrust_agent_client::chat_client[0m[2m:[0m ChatClient request to https://api.deepseek.com/chat/completions with model deepseek-v4-flash
+[2m2026-06-15T11:37:29.546385Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m reuse idle connection for ("https", api.deepseek.com)
+[2m2026-06-15T11:37:31.935185Z[0m [34mDEBUG[0m [2mhyper_util::client::legacy::pool[0m[2m:[0m pooling idle connection for ("https", api.deepseek.com)

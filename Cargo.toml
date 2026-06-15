@@ -10,6 +10,16 @@ members = [
     "crates/decl",
     "crates/workflow-cli",
 ]
+default-members = [
+    "crates/core",
+    "crates/client",
+    "crates/framework",
+    "crates/workflow",
+    "crates/cli",
+    "crates/macros",
+    "crates/rhai",
+    "crates/decl",
+]
 resolver = "2"
 
 [workspace.package]

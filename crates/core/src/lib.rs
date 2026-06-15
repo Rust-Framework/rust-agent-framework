@@ -13,7 +13,6 @@ pub mod stream;
 pub mod token_counter;
 pub mod tool;
 pub mod types;
-pub mod vector_store;
 
 // Re-export interfaces
 pub use agent::IAgent;
@@ -31,7 +30,6 @@ pub use session_store::ISessionStore;
 pub use stream::{BoxStream, collect_agent_response};
 pub use token_counter::ITokenCounter;
 pub use tool::{ITool, ToolRegistry};
-pub use vector_store::{IVectorStore, SearchResult};
 
 // Re-export core types
 pub use error::{AgentError, Result};

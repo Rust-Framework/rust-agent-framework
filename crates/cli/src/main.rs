@@ -11,6 +11,7 @@ use rust_agent_core::{
 };
 use rust_agent_framework::tool;
 use rust_agent_framework::AgentBuilder;
+use rust_agent_framework::tools::WebSearch;
 
 // ── Hardcoded API key for development ──────────────────────────
 const DEEPSEEK_API_KEY: &str = "sk-9f8dbaaa822e477faf339e32cdb89e91";
@@ -56,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
         .instructions("You are a helpful AI assistant. Respond concisely.")
         .with_tool(Echo)
         .with_tool(Add)
+        .with_tool(WebSearch)
         .build()?;
 
     let session = Arc::new(AgentSession::new());

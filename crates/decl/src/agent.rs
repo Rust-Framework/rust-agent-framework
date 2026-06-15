@@ -100,12 +100,6 @@ pub enum ToolRef {
 pub enum ContextProviderDecl {
     /// In-memory history provider (built into AgentBuilder by default).
     InMemoryHistory,
-    /// Memory context provider with semantic search.
-    Memory {
-        /// Mode: `"base"` or `"enhanced"`.
-        #[serde(default)]
-        mode: String,
-    },
     /// Skills provider — 按名称引用技能，架构从 skill_directories 自动查找并注册。
     Skills {
         /// 技能名称列表。
