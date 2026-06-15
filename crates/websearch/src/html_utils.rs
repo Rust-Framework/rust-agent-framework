@@ -64,7 +64,7 @@ pub fn resolve_duckduckgo_url(url: &str) -> String {
 
     // 协议相对 URL（如 //example.com/page）
     if let Some(rest) = decoded.strip_prefix("//") {
-        return format!("https:{rest}");
+        return format!("https://{rest}");
     }
 
     decoded

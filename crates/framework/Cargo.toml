@@ -11,6 +11,7 @@ description = "Agent runtime framework for building LLM-powered agents with tool
 rust-agent-core = { workspace = true }
 rust-agent-client = { workspace = true }
 rust-agent-macros = { workspace = true }
+rust-agent-rag = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }
 tokio = { workspace = true }
@@ -23,8 +24,6 @@ tracing = { workspace = true }
 regex = "1"
 glob = "0.3"
 walkdir = "2"
-reqwest = { workspace = true }
-tarzi = "0.1"
 
 [dev-dependencies]
 tempfile = "3"

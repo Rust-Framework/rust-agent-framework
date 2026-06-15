@@ -17,6 +17,7 @@ rust-agent-core = { workspace = true }
 rust-agent-framework = { workspace = true }
 rust-agent-client = { workspace = true }
 rust-agent-workflow = { workspace = true }
+rust-agent-websearch = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }
 tokio = { workspace = true }

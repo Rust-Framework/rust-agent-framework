@@ -1,5 +1,6 @@
 pub mod agent_host;
 pub mod agent_runtime;
+pub mod agents;
 pub mod builder;
 pub mod chat_client_agent;
 pub mod chat_client_decorators;
@@ -33,3 +34,6 @@ pub use token_counter::EstimateCounter;
 
 // Re-export #[tool] macro — framework is the natural home for tool definition utilities
 pub use rust_agent_macros::tool;
+
+/// Re-export of `rust-agent-rag` — RAG (Retrieval-Augmented Generation) support
+pub use rust_agent_rag as rag;

@@ -1,0 +1,19 @@
+[package]
+name = "rust-agent-websearch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Agent tool wrappers for web search — integrates rust-websearch as #[tool] implementations"
+
+[dependencies]
+rust-websearch = { workspace = true }
+rust-agent-core = { workspace = true }
+rust-agent-macros = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -9,8 +9,6 @@ pub mod move_file;
 pub mod find_files;
 pub mod search_file;
 pub mod run_command;
-pub mod web_search;
-pub mod web_fetch;
 
 pub use read_file::ReadFile;
 pub use write_file::WriteFile;
@@ -23,8 +21,6 @@ pub use move_file::MoveFile;
 pub use find_files::FindFiles;
 pub use search_file::SearchFile;
 pub use run_command::RunCommand;
-pub use web_search::WebSearch;
-pub use web_fetch::WebFetch;
 
 use rust_agent_core::ToolRegistry;
 
@@ -41,8 +37,6 @@ pub fn register_all(registry: &mut ToolRegistry) {
     registry.register(FindFiles);
     registry.register(SearchFile);
     registry.register(RunCommand);
-    registry.register(WebSearch);
-    registry.register(WebFetch);
 }
 
 /// Helper: build a success response.

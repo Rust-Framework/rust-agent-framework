@@ -3,7 +3,6 @@
 //! 通用网页搜索，使用 `scraper` crate 进行 CSS 选择器解析，
 //! 替代原先的正则表达式解析方式。
 
-use crate::anti_detection::user_agent;
 use crate::error::SearchError;
 use crate::html_utils::clean_html;
 use crate::types::{SearchConfig, SearchResult, SearchResults, SearchSource};
@@ -73,7 +72,7 @@ fn parse_html_results(
     let mut results: Vec<SearchResult> = Vec::new();
     let mut snippet_iter = document.select(&snippet_selector).peekable();
 
-    for (i, link_elem) in document.select(&result_a_selector).enumerate() {
+    for link_elem in document.select(&result_a_selector) {
         if results.len() >= max_results {
             break;
         }

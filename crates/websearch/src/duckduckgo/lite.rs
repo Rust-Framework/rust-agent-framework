@@ -3,7 +3,6 @@
 //! Lite 版本是最轻量的 DuckDuckGo 接口，返回极简 HTML，
 //! 不含 JavaScript，最不容易触发反爬机制。
 
-use crate::anti_detection::user_agent;
 use crate::error::SearchError;
 use crate::html_utils::clean_html;
 use crate::types::{SearchConfig, SearchResult, SearchResults, SearchSource};

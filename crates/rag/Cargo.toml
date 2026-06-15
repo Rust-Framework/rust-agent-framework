@@ -1,0 +1,41 @@
+[package]
+name = "rust-agent-rag"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "RAG (Retrieval-Augmented Generation) support for the rust-agent-framework ecosystem — document loading, chunking, embedding, vector storage, and retrieval"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Async trait
+async-trait = { workspace = true }
+
+# Text processing (token counting, chunking)
+unicode-segmentation = "1.12"
+
+# UUID generation for document IDs
+uuid = { workspace = true }
+
+# HTML parsing (for HTML document loading)
+scraper = "0.22"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[features]
+default = []

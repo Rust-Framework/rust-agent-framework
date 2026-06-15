@@ -1,11 +1,11 @@
-//! # rust-agent-websearch
+//! # rust-websearch
 //!
-//! 纯 Rust 实现、无需 API Key 的网络搜索库，专为 AI Agent 设计。
+//! 纯 Rust 实现、无需 API Key 的网络搜索库。
 //!
 //! ## 快速开始
 //!
 //! ```rust,no_run
-//! use rust_agent_websearch::{search, SearchConfig};
+//! use rust_websearch::{search, SearchConfig};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let config = SearchConfig::default();
@@ -35,7 +35,6 @@ pub mod error;
 pub mod fetcher;
 pub mod html_utils;
 pub mod searcher;
-#[cfg(feature = "searxng")]
 pub mod searxng;
 pub mod types;
 
@@ -44,8 +43,7 @@ pub mod types;
 pub use anti_detection::{CookieManager, ProxyManager, RateLimiter};
 pub use duckduckgo::{search_html, search_instant_answer, search_lite};
 pub use error::SearchError;
-pub use fetcher::{fetch_page, FetchConfig, FetchedPage};
+pub use fetcher::fetch_page;
 pub use searcher::search;
-#[cfg(feature = "searxng")]
 pub use searxng::search_searxng;
-pub use types::{SearchConfig, SearchResult, SearchResults, SearchSource};
+pub use types::{FetchConfig, FetchedPage, SearchConfig, SearchResult, SearchResults, SearchSource};
