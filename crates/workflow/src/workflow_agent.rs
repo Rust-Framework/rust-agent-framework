@@ -38,15 +38,15 @@ impl WorkflowAgent {
         let sub_agents = Self::extract_agents(&graph);
 
         let id = AgentId::new(format!("workflow_{}", graph.start_node_id()));
-        let metadata = AgentMetadata {
-            agent_type: "WorkflowAgent".to_string(),
-            key: format!("workflow_{}", graph.start_node_id()),
-            description: format!(
-                "图工作流: {} 节点, {} 条边",
-                graph.nodes().len(),
-                graph.edges().len()
-            ),
-        };
+        let mut metadata = AgentMetadata::new(
+            "WorkflowAgent",
+            format!("workflow_{}", graph.start_node_id()),
+        );
+        metadata.description = format!(
+            "图工作流: {} 节点, {} 条边",
+            graph.nodes().len(),
+            graph.edges().len()
+        );
 
         Self {
             id,

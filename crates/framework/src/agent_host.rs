@@ -188,6 +188,7 @@ mod tests {
                     agent_type: "MultiAgent".to_string(),
                     key: name.to_string(),
                     description: String::new(),
+                    ..Default::default()
                 },
                 agents,
             }

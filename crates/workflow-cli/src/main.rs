@@ -20,10 +20,14 @@ use futures_util::StreamExt;
 use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
 use rust_agent_core::{
     AgentId, AgentSession, ChatMessage, ISession, ISessionStore, SessionTTLOptions, Content,
+    IAgent,
 };
 use rust_agent_framework::{
     AgentBuilder, AgentHost, InMemorySessionStore,
     tools::ReadFile,
+};
+use rust_agent_workflow::orchestrations::{
+    SequentialWorkflow, HandoffWorkflow, ConcurrentWorkflow,
 };
 
 // ============================================================
@@ -94,6 +98,301 @@ async fn scenario_1_agent_host_pipeline() -> Result<()> {
     // 验证 agent 引用可达
     let agent_ref = host.agent();
     println!("  [agent] id={} type={}", agent_ref.id(), agent_ref.metadata().agent_type);
+
+    Ok(())
+}
+
+/// 场景 5：HandoffWorkflow — triage 路由 + as_agent() + get_subagent（真实 LLM）
+async fn scenario_5_handoff_routing() -> Result<()> {
+    println!("\n=== 场景 5：HandoffWorkflow — as_agent() + get_subagent ===");
+
+    let options = ChatClientOptions::deepseek(DEFAULT_MODEL, DEEPSEEK_API_KEY);
+
+    let coder = AgentBuilder::new("code-expert")
+        .chat_client(DeepSeekChatClient::new(options.clone())?)
+        .instructions("你是代码专家。用中文回复。")
+        .with_description("代码专家")
+        .build()?;
+
+    let writer = AgentBuilder::new("writing-expert")
+        .chat_client(DeepSeekChatClient::new(options.clone())?)
+        .instructions("你是写作专家。用中文回复。")
+        .with_description("写作专家")
+        .build()?;
+
+    let triage = AgentBuilder::new("triage")
+        .chat_client(DeepSeekChatClient::new(
+            ChatClientOptions::deepseek(DEFAULT_MODEL, DEEPSEEK_API_KEY)
+        )?)
+        .instructions("你是任务路由器，分析用户请求并选择最合适的专家。只回复专家名称。")
+        .build()?;
+
+    let workflow = HandoffWorkflow::new()
+        .triage(triage)
+        .agent(coder)
+        .agent(writer)
+        .build()?;
+
+    // ── as_agent() → IAgent 统一门面 ──
+    let agent: Arc<dyn IAgent> = workflow.as_agent();
+    println!("  [as_agent] id={}, type={}", agent.id(), agent.metadata().agent_type);
+    println!("  [as_agent] description: {}", agent.metadata().description);
+
+    // ── get_subagent 发现子代理 ──
+    for sub_id in &[
+        AgentId::new("code-expert"),
+        AgentId::new("writing-expert"),
+    ] {
+        let found = agent.get_subagent(sub_id);
+        println!("  [get_subagent] {} → {}", sub_id, if found.is_some() { "found" } else { "not found" });
+    }
+
+    let session = Arc::new(AgentSession::with_id("handoff-test"));
+
+    let stream = agent.run(
+        vec![ChatMessage::user("帮我写一段 Python 快速排序代码")],
+        Some(session),
+        None,
+    ).await?;
+
+    print!("  [stream] ");
+    let mut s = Box::pin(stream);
+    let mut text = String::new();
+    while let Some(chunk) = s.next().await {
+        match chunk {
+            Ok(result) => {
+                for content in &result.contents {
+                    if let Content::Text(ref t) = content {
+                        text.push_str(&t.delta);
+                        print!("{}", t.delta);
+                    }
+                }
+            }
+            Err(e) => eprintln!("\n  [error] {}", e),
+        }
+    }
+    println!();
+    println!("  [response] {} chars", text.len());
+    assert!(!text.is_empty(), "Should get response from target agent");
+
+    Ok(())
+}
+
+/// 场景 6：SequentialWorkflow — 多 Agent 顺序编排（真实 LLM）
+async fn scenario_6_sequential_multi_agent() -> Result<()> {
+    println!("\n=== 场景 6：SequentialWorkflow — 顺序编排 ===");
+
+    let options = ChatClientOptions::deepseek(DEFAULT_MODEL, DEEPSEEK_API_KEY);
+
+    let researcher = AgentBuilder::new("researcher")
+        .chat_client(DeepSeekChatClient::new(options.clone())?)
+        .instructions("你是研究员。用中文回复，简洁列出 3 个要点。")
+        .build()?;
+
+    let summarizer = AgentBuilder::new("summarizer")
+        .chat_client(DeepSeekChatClient::new(options)?)
+        .instructions("你是总结专家。将研究结果总结为一句话。用中文回复。")
+        .build()?;
+
+    let pattern = SequentialWorkflow::from_agents(vec![researcher, summarizer]);
+    let session = Arc::new(AgentSession::with_id("seq-test"));
+
+    let stream = pattern.run(
+        vec![ChatMessage::user("分析 AI 在医疗领域的应用前景")],
+        Some(session),
+        None,
+    ).await?;
+
+    print!("  [stream] ");
+    let mut s = Box::pin(stream);
+    let mut text = String::new();
+    while let Some(chunk) = s.next().await {
+        match chunk {
+            Ok(result) => {
+                for content in &result.contents {
+                    if let Content::Text(ref t) = content {
+                        text.push_str(&t.delta);
+                        print!("{}", t.delta);
+                    }
+                }
+            }
+            Err(e) => eprintln!("\n  [error] {}", e),
+        }
+    }
+    println!();
+    println!("  [response] {} chars", text.len());
+    assert!(!text.is_empty(), "Should get sequential result");
+
+    Ok(())
+}
+
+/// 场景 7：ConcurrentWorkflow — 并发多 Agent（真实 LLM）
+async fn scenario_7_concurrent_multi_agent() -> Result<()> {
+    println!("\n=== 场景 7：ConcurrentWorkflow — 并发编排 ===");
+
+    let options = ChatClientOptions::deepseek(DEFAULT_MODEL, DEEPSEEK_API_KEY);
+
+    let a1 = AgentBuilder::new("angle-tech")
+        .chat_client(DeepSeekChatClient::new(options.clone())?)
+        .instructions("你用一句话从技术角度评价 AI 发展。用中文。")
+        .build()?;
+
+    let a2 = AgentBuilder::new("angle-business")
+        .chat_client(DeepSeekChatClient::new(options)?)
+        .instructions("你用一句话从商业角度评价 AI 发展。用中文。")
+        .build()?;
+
+    let pattern = ConcurrentWorkflow::from_agents(vec![a1, a2]);
+    let session = Arc::new(AgentSession::with_id("concurrent-test"));
+
+    let stream = pattern.run(
+        vec![ChatMessage::user("评价 AI")],
+        Some(session),
+        None,
+    ).await?;
+
+    print!("  [stream] ");
+    let mut s = Box::pin(stream);
+    let mut text = String::new();
+    let mut result_count = 0;
+    while let Some(chunk) = s.next().await {
+        match chunk {
+            Ok(result) => {
+                for content in &result.contents {
+                    if let Content::Text(ref t) = content {
+                        text.push_str(&t.delta);
+                        print!("{}", t.delta);
+                    }
+                }
+                result_count += 1;
+            }
+            Err(e) => eprintln!("\n  [error] {}", e),
+        }
+    }
+    println!();
+    println!("  [results] {} agents, {} chars", result_count, text.len());
+    assert!(result_count >= 2, "Should get results from both agents");
+
+    Ok(())
+}
+
+/// 场景 8：as_agent() → get_subagent → 子代理独立流式输出（真实 LLM）
+///
+/// 验证 MAF 设计哲学的核心闭环：
+/// 1. WorkflowBuilder → as_agent() → IAgent 统一门面
+/// 2. get_subagent(id) 获取子代理 IAgent
+/// 3. 子代理独立 run() 产生流式输出
+/// 4. 父代理 run() 通过 triage 路由到子代理
+async fn scenario_8_sub_agent_handoff_flow() -> Result<()> {
+    println!("\n=== 场景 8：as_agent() → get_subagent → 子代理流式输出 ===");
+
+    let options = ChatClientOptions::deepseek(DEFAULT_MODEL, DEEPSEEK_API_KEY);
+
+    // 子代理 A — 代码专家
+    let coder_client = DeepSeekChatClient::new(options.clone())?;
+    let coder = AgentBuilder::new("code-expert")
+        .chat_client(coder_client)
+        .instructions("你是 Python 代码专家。用中文回复，只输出代码和简短解释。")
+        .build()?;
+    let coder_id = coder.id().clone();
+
+    // 子代理 B — 文档专家
+    let doc_options = ChatClientOptions::deepseek(DEFAULT_MODEL, DEEPSEEK_API_KEY);
+    let doc_client = DeepSeekChatClient::new(doc_options)?;
+    let writer = AgentBuilder::new("doc-expert")
+        .chat_client(doc_client)
+        .instructions("你是技术文档专家。用中文回复，简洁专业。")
+        .build()?;
+    let writer_id = writer.id().clone();
+
+    // Triage
+    let triage_options = ChatClientOptions::deepseek(DEFAULT_MODEL, DEEPSEEK_API_KEY);
+    let triage = AgentBuilder::new("triage")
+        .chat_client(DeepSeekChatClient::new(triage_options)?)
+        .instructions("你是任务路由器，分析用户请求。只回复 code-expert 或 doc-expert。")
+        .build()?;
+
+    let workflow = HandoffWorkflow::new()
+        .triage(triage)
+        .agent(coder)
+        .agent(writer)
+        .build()?;
+
+    // ── Step 1: as_agent() 获取统一门面 ──
+    let agent: Arc<dyn IAgent> = workflow.as_agent();
+    println!("  [1] as_agent → id={}", agent.id());
+
+    // ── Step 2: get_subagent 获取子代理 ──
+    let sub_coder = agent.get_subagent(&coder_id);
+    let sub_writer = agent.get_subagent(&writer_id);
+    assert!(sub_coder.is_some(), "Should find code-expert sub-agent");
+    assert!(sub_writer.is_some(), "Should find doc-expert sub-agent");
+    println!("  [2] get_subagent → code-expert: found, doc-expert: found");
+
+    // ── Step 3: 子代理独立运行（流式输出）──
+    let coder_agent = sub_coder.unwrap();
+    println!("  [3] sub-agent(id={}) running independently...", coder_agent.id());
+    let sub_session = Arc::new(AgentSession::with_id("sub-agent-test"));
+
+    let sub_stream = coder_agent.run(
+        vec![ChatMessage::user("写一个 Python 函数计算斐波那契数列")],
+        Some(sub_session),
+        None,
+    ).await?;
+
+    print!("      [coder stream] ");
+    let mut s = Box::pin(sub_stream);
+    let mut sub_text = String::new();
+    let mut sub_chunks = 0usize;
+    while let Some(chunk) = s.next().await {
+        match chunk {
+            Ok(result) => {
+                for content in &result.contents {
+                    if let Content::Text(ref t) = content {
+                        sub_text.push_str(&t.delta);
+                        print!("{}", t.delta);
+                    }
+                }
+                sub_chunks += 1;
+            }
+            Err(e) => eprintln!("\n      [error] {}", e),
+        }
+    }
+    println!();
+    println!("      [chunks] {}, [chars] {}", sub_chunks, sub_text.len());
+    assert!(!sub_text.is_empty(), "Sub-agent should produce text output");
+    assert!(sub_text.contains("def") || sub_text.contains("fib"), "Sub-agent should output Python code");
+
+    // ── Step 4: 父代理 triage 路由验证 ──
+    println!("  [4] parent agent triage routing...");
+    let parent_session = Arc::new(AgentSession::with_id("parent-test"));
+    let parent_stream = agent.run(
+        vec![ChatMessage::user("写一个 Python 快速排序函数")],
+        Some(parent_session),
+        None,
+    ).await?;
+
+    print!("      [parent stream] ");
+    let mut ps = Box::pin(parent_stream);
+    let mut parent_text = String::new();
+    while let Some(chunk) = ps.next().await {
+        match chunk {
+            Ok(result) => {
+                for content in &result.contents {
+                    if let Content::Text(ref t) = content {
+                        parent_text.push_str(&t.delta);
+                        print!("{}", t.delta);
+                    }
+                }
+            }
+            Err(e) => eprintln!("\n      [error] {}", e),
+        }
+    }
+    println!();
+    println!("      [chars] {}", parent_text.len());
+    assert!(!parent_text.is_empty(), "Parent triage should produce output");
+
+    println!("  ✅ as_agent → get_subagent → sub-agent stream → parent triage: ALL VERIFIED");
 
     Ok(())
 }
@@ -279,6 +578,10 @@ async fn main() -> Result<()> {
     run_scenario!("场景2: WorkflowEngine+Checkpoint", scenario_2_workflow_engine_checkpoint());
     run_scenario!("场景3: Session TTL cleanup", scenario_3_session_cleanup());
     run_scenario!("场景4: 工具调用管道", scenario_4_tool_call_pipeline());
+    run_scenario!("场景5: Handoff 路由编排", scenario_5_handoff_routing());
+    run_scenario!("场景6: Sequential 顺序编排", scenario_6_sequential_multi_agent());
+    run_scenario!("场景7: Concurrent 并发编排", scenario_7_concurrent_multi_agent());
+    run_scenario!("场景8: as_agent→get_subagent→流式输出", scenario_8_sub_agent_handoff_flow());
 
     println!("\n╔══════════════════════════════════════════╗");
     println!("║  结果: {}/{} 通过, {} 失败", passed, passed + failed, failed);

@@ -52,6 +52,7 @@ impl ChatClientAgent {
                 agent_type: "ChatClientAgent".to_string(),
                 key: name.clone(),
                 description: String::new(),
+                ..Default::default()
             },
             chat_client,
             instructions: String::new(),
@@ -231,15 +232,26 @@ impl IAgent for ChatClientAgent {
             } else {
                 Vec::new()
             };
+
+            // 按名称去重：若 provider 注入的工具与 registry 或已有 provider 工具同名，则跳过
+            use std::collections::HashSet;
+            let mut seen: HashSet<String> = tool_defs
+                .iter()
+                .filter_map(|d| d["function"]["name"].as_str().map(String::from))
+                .collect();
+
             for tool in &merged_provider_tools {
-                tool_defs.push(serde_json::json!({
-                    "type": "function",
-                    "function": {
-                        "name": tool.name(),
-                        "description": tool.description(),
-                        "parameters": tool.parameters_schema(),
-                    }
-                }));
+                let name = tool.name().to_string();
+                if seen.insert(name) {
+                    tool_defs.push(serde_json::json!({
+                        "type": "function",
+                        "function": {
+                            "name": tool.name(),
+                            "description": tool.description(),
+                            "parameters": tool.parameters_schema(),
+                        }
+                    }));
+                }
             }
             if !tool_defs.is_empty() {
                 client_opts.tools = tool_defs;

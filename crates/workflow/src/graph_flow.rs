@@ -29,6 +29,7 @@ impl GraphFlow {
                 agent_type: "GraphFlow".to_string(),
                 key: "graph_flow".to_string(),
                 description: String::new(),
+                ..Default::default()
             },
             agents: HashMap::new(),
             entry_agent: None,

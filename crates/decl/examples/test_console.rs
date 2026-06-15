@@ -70,11 +70,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let log_level = if std::env::var("RUST_LOG").is_ok() { "env" } else { "warn" };
 
     // ── Tracing setup ──
+    let mut filter = tracing_subscriber::EnvFilter::from_default_env();
+    if std::env::var("RUST_LOG").is_err() {
+        filter = filter.add_directive("warn".parse()?);
+    }
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("warn".parse()?)
-        )
+        .with_env_filter(filter)
         .with_target(false)
         .with_line_number(true)
         .init();
@@ -389,4 +390,233 @@ async fn run_agent(
                                     };
                                     eprintln!("\x1b[32m  {} = {}\x1b[0m", p.name, display);
                                 }
-                                Content::ToolCall
+                                Content::ToolCallArgsProgress(p) => {
+                                    tracing::debug!(
+                                        received = p.received,
+                                        "[run] Tool args progress"
+                                    );
+                                    eprintln!("\x1b[90m  progress: {:.1}KB\x1b[0m",
+                                        p.received as f64 / 1024.0);
+                                }
+                                Content::ToolCalling(tc) => {
+                                    tracing::info!(
+                                        tool_name = %tc.name,
+                                        "[run] Tool calling (executing)"
+                                    );
+                                    let args_str = serde_json::to_string(&tc.arguments).unwrap_or_default();
+                                    let display = if args_str.len() > 80 {
+                                        format!("{}...", &args_str[..80])
+                                    } else {
+                                        args_str
+                                    };
+                                    eprintln!("\x1b[33m[参数] {} {}\x1b[0m", tc.name, display);
+                                }
+                                Content::ToolCalled(tc) => {
+                                    if let Some(ref err) = tc.error {
+                                        tracing::warn!(
+                                            call_id = %tc.call_id,
+                                            error_len = err.len(),
+                                            "[run] Tool call FAILED"
+                                        );
+                                        let display = if err.len() > 200 {
+                                            format!("{}...({} chars)", &err[..200], err.len())
+                                        } else {
+                                            err.clone()
+                                        };
+                                        eprintln!("\x1b[31m[结果] 失败: {}\x1b[0m", display);
+                                    } else if let Some(ref result) = tc.result {
+                                        tracing::info!(
+                                            call_id = %tc.call_id,
+                                            result_len = result.len(),
+                                            "[run] Tool call SUCCEEDED"
+                                        );
+                                        let display = if result.len() > 200 {
+                                            format!("{}...({} chars)", &result[..200], result.len())
+                                        } else {
+                                            result.clone()
+                                        };
+                                        eprintln!("\x1b[32m[结果] {}\x1b[0m", display);
+                                    }
+                                }
+                                Content::Usage(u) => {
+                                    let usage = &u.usage;
+                                    total_tokens = usage.total_tokens;
+                                    tracing::info!(
+                                        prompt_tokens = usage.prompt_tokens,
+                                        completion_tokens = usage.completion_tokens,
+                                        cache_hit = usage.prompt_cache_hit_tokens.unwrap_or(0),
+                                        reasoning = usage.reasoning_tokens.unwrap_or(0),
+                                        total = usage.total_tokens,
+                                        "[run] Token usage"
+                                    );
+                                    eprintln!("\x1b[90m[用量] prompt={} completion={} cache_hit={} reasoning={} total={}\x1b[0m",
+                                        usage.prompt_tokens, usage.completion_tokens,
+                                        usage.prompt_cache_hit_tokens.unwrap_or(0),
+                                        usage.reasoning_tokens.unwrap_or(0),
+                                        usage.total_tokens);
+                                }
+                                Content::Error(e) => {
+                                    tracing::error!(
+                                        error_code = %e.error_code,
+                                        message = %e.message,
+                                        "[run] Content error"
+                                    );
+                                    eprintln!("\x1b[31m[错误] {}: {}\x1b[0m", e.error_code, e.message);
+                                }
+                                _ => {}
+                            }
+                        }
+
+                        if let Some(reason) = &chunk.finish_reason {
+                            match reason {
+                                rust_agent_core::FinishReason::Stop => {
+                                    let elapsed = t0.elapsed();
+                                    tracing::info!(
+                                        elapsed_ms = elapsed.as_millis(),
+                                        chunk_count = chunk_count,
+                                        text_bytes = text_bytes,
+                                        tool_calls = tool_call_count,
+                                        total_tokens = total_tokens,
+                                        "[run] Agent finished (Stop)"
+                                    );
+                                    println!();
+                                    break;
+                                }
+                                rust_agent_core::FinishReason::ToolCalls => {
+                                    tracing::debug!("[run] Agent paused for tool execution");
+                                }
+                                other => {
+                                    tracing::info!(reason = ?other, "[run] Agent finished (other)");
+                                    eprintln!("\x1b[90m[结束] {:?}\x1b[0m", other);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Ok(Some(Err(e))) => {
+                        tracing::error!(error = %e, elapsed_ms = t0.elapsed().as_millis(), "[run] Stream error");
+                        eprintln!("\n\x1b[31m[流错误] {}\x1b[0m", e);
+                        break;
+                    }
+                    Ok(None) => {
+                        tracing::info!(elapsed_ms = t0.elapsed().as_millis(), "[run] Stream ended (None)");
+                        break;
+                    }
+                    Err(_) => {
+                        tracing::error!("[run] Timeout after 120s");
+                        eprintln!("\n\x1b[31m[超时] 120s 无响应\x1b[0m");
+                        break;
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!(error = %e, elapsed_ms = t0.elapsed().as_millis(), "[run] Agent error");
+            eprintln!("\x1b[31m[Agent 错误] {}\x1b[0m", e);
+        }
+    }
+    println!();
+}
+
+// ── Auto Test Sequence ──
+
+async fn auto_test(
+    agent: &Arc<dyn IAgent>,
+    session: &mut Arc<dyn rust_agent_core::ISession>,
+    thinking: &mut bool,
+) {
+    let t0 = Instant::now();
+
+    let tests: Vec<(&str, &str)> = vec![
+        ("Basic greeting", "Say hello in 3 languages."),
+        ("Math tool", "What is 123 + 456? Use the add tool."),
+        ("Echo tool", "Echo back: 'declarative testing works!'"),
+    ];
+
+    tracing::info!(
+        test_count = tests.len(),
+        agent_id = %agent.id(),
+        "========== AUTO TEST: Starting {} tests ==========",
+        tests.len()
+    );
+
+    for (i, (name, prompt)) in tests.iter().enumerate() {
+        let test_start = Instant::now();
+        tracing::info!(
+            test_num = i + 1,
+            total = tests.len(),
+            test_name = *name,
+            prompt = *prompt,
+            "---------- [AUTO] Test {}/{}: {} ----------",
+            i + 1, tests.len(), name
+        );
+
+        println!("\x1b[36m[Test {}/{}] {}\x1b[0m", i + 1, tests.len(), name);
+        println!("\x1b[90m  Prompt: {}\x1b[0m\n", prompt);
+
+        run_agent(agent, session, prompt, *thinking).await;
+
+        tracing::info!(
+            test_num = i + 1,
+            elapsed_ms = test_start.elapsed().as_millis(),
+            "[AUTO] Test {}/{} completed",
+            i + 1, tests.len()
+        );
+    }
+
+    tracing::info!(
+        total_elapsed_ms = t0.elapsed().as_millis(),
+        test_count = tests.len(),
+        "========== AUTO TEST: All {} tests passed ==========",
+        tests.len()
+    );
+}
+
+// ── Help ──
+
+fn print_help() {
+    println!();
+    println!("\x1b[1mCommands:\x1b[0m");
+    println!("  \x1b[33m/help\x1b[0m              Show this help");
+    println!("  \x1b[33m/quit\x1b[0m              Exit the console");
+    println!("  \x1b[33m/clear\x1b[0m             Clear session history and reset agent");
+    println!("  \x1b[33m/agent\x1b[0m             Show current agent declaration");
+    println!("  \x1b[33m/tools\x1b[0m             List available tools (echo, add + builtins)");
+    println!("  \x1b[33m/think on|off\x1b[0m      Toggle reasoning/thinking mode");
+    println!("  \x1b[33m/load <file.json>\x1b[0m   Load agent declaration from JSON file");
+    println!("  \x1b[33m/validate <file.json>\x1b[0m Parse and validate an agent declaration");
+    println!();
+    println!("\x1b[90mAny other input is sent as a chat message to the agent.\x1b[0m");
+    println!("\x1b[90mRun with --auto for automated test sequence.\x1b[0m");
+    println!("\x1b[90mRUST_LOG=info for detailed trace output.\x1b[0m");
+    println!();
+}
+
+// ── Stream helper ──
+
+async fn poll_next<T: Unpin>(
+    stream: &mut (dyn Stream<Item = T> + Unpin + Send),
+) -> Option<T> {
+    StreamNext { stream }.await
+}
+
+struct StreamNext<'a, T> {
+    stream: &'a mut (dyn Stream<Item = T> + Unpin + Send),
+}
+
+impl<T: Unpin> std::future::Future for StreamNext<'_, T> {
+    type Output = Option<T>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Pin::new(&mut *self.stream).poll_next(cx)
+    }
+}
+
+// ── dirs_next helper (avoid extra dep) ──
+
+fn dirs_next() -> Option<std::path::PathBuf> {
+    std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()
+        .map(std::path::PathBuf::from)
+}

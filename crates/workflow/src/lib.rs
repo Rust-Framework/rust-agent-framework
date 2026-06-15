@@ -23,8 +23,19 @@ pub mod executor;
 pub mod graph;
 pub mod workflow_agent;
 
-// 向后兼容：保留旧的 patterns 模块
-pub mod patterns;
+pub mod orchestrations;
+// backwards compatibility
+pub mod patterns {}
+
+pub use crate::orchestrations::{
+    ConcurrentWorkflow, HandoffBuilder, HandoffWorkflow, SequentialWorkflow, WorkflowAsAgent,
+    // legacy aliases
+    ConcurrentWorkflow as ConcurrentPattern,
+    ConcurrentWorkflow as FanOutWorkflow,
+    ConcurrentWorkflow as ParallelWorkflow,
+    HandoffWorkflow as HandoffPattern,
+    SequentialWorkflow as SequentialPattern,
+};
 
 // 旧模块（待迁移到新架构后废弃）
 pub mod graph_flow;

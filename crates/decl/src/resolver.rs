@@ -6,7 +6,7 @@ use rust_agent_client::{DeepSeekChatClient, OpenAiChatClient};
 use rust_agent_client::ChatClientOptions;
 use rust_agent_core::{IAgent, IChatClient, ITool};
 use rust_agent_framework::{
-    AgentBuilder,
+    AgentBuilder, AgentSkillsProvider,
     compression::{CompressionPipeline, SlidingWindowStrategy, TokenBudgetStrategy},
     tools::{
         EditFile, FindFiles, InspectFile, ListFiles, MakeDirectory, MoveFile, ReadFile,
@@ -247,6 +247,50 @@ impl AgentResolver for DefaultAgentResolver {
                         "MemoryContextProvider skipped — requires IVectorStore (not yet \
                          configurable via declarations)"
                     );
+                }
+                ContextProviderDecl::Skills { names } => {
+                    // Scan configured skill directories and match by name
+                    let dirs: Vec<&std::path::Path> = if decl.skill_directories.is_empty() {
+                        vec![std::path::Path::new("./skills")]
+                    } else {
+                        decl.skill_directories.iter().map(|d| std::path::Path::new(d)).collect()
+                    };
+
+                    let provider = if names.is_empty() {
+                        // Load all skills from all directories
+                        AgentSkillsProvider::scan_dirs(&dirs)?
+                    } else {
+                        // Load only named skills
+                        let mut provider = AgentSkillsProvider::new();
+                        for dir in &dirs {
+                            if let Ok(dir_provider) = AgentSkillsProvider::scan(dir) {
+                                for skill_name in names {
+                                    // Find skill by name from the scanned directory
+                                    if let Some(skill) = dir_provider.skills.iter()
+                                        .find(|s| s.metadata.name == *skill_name)
+                                    {
+                                        provider = provider.with_skill(skill.clone());
+                                    }
+                                }
+                            }
+                        }
+                        // Warn about skills not found
+                        for name in names {
+                            let found = provider.skills.iter()
+                                .any(|s| s.metadata.name == *name);
+                            if !found {
+                                tracing::warn!(
+                                    "Skill '{}' not found in directories: {:?}",
+                                    name, dirs
+                                );
+                            }
+                        }
+                        provider
+                    };
+
+                    if !provider.skills.is_empty() {
+                        builder = builder.add_context_provider(provider);
+                    }
                 }
             }
         }

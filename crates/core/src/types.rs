@@ -29,12 +29,44 @@ impl AsRef<str> for AgentId {
     }
 }
 
-/// Metadata describing an agent, following MAF's AgentMetadata.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Static metadata describing an Agent's identity and capabilities.
+///
+/// Used by AgentRegistry for dynamic discovery — frontends and orchestration
+/// engines can query the full capability matrix without invoking the agent.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AgentMetadata {
+    /// Agent class name (e.g. "ChatClientAgent", "WorkflowAgent")
     pub agent_type: String,
+    /// Short identifier (agent id as string)
     pub key: String,
+    /// Human-readable description. Auto-generated from instructions if unset.
     pub description: String,
+    /// Names of registered tools (e.g. ["read_file", "web_search"])
+    #[serde(default)]
+    pub tool_names: Vec<String>,
+    /// LLM model identifier (e.g. "deepseek-v4-flash")
+    #[serde(default)]
+    pub model_id: Option<String>,
+    /// Capability tags for discovery (e.g. ["file_operations", "code"])
+    #[serde(default)]
+    pub capability_tags: Vec<String>,
+    /// First 200 chars of system instructions for quick preview
+    #[serde(default)]
+    pub instructions_preview: String,
+}
+
+impl AgentMetadata {
+    pub fn new(agent_type: impl Into<String>, key: impl Into<String>) -> Self {
+        Self {
+            agent_type: agent_type.into(),
+            key: key.into(),
+            description: String::new(),
+            tool_names: Vec::new(),
+            model_id: None,
+            capability_tags: Vec::new(),
+            instructions_preview: String::new(),
+        }
+    }
 }
 
 /// A tool call requested by the agent during response generation.

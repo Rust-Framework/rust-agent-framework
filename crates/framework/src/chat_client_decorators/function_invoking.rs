@@ -116,16 +116,38 @@ impl IChatClient for FunctionInvokingChatClient {
                             None
                         }
 
-                        LoopState::Streaming { mut rx, on_done } => {
+                        LoopState::Streaming { mut rx, on_done, mut msg_rx } => {
                             match rx.recv().await {
                                 Some(Ok(update)) => {
                                     if matches!(&update, AgentResponseUpdate::Finish { finish_reason, .. }
                                         if *finish_reason == FinishReason::ToolCalls)
                                     {
                                         tracing::trace!("Detected ToolCalls finish signal, transitioning to next loop iteration");
-                                        Some((Ok(update), *on_done))
+                                        // Read accumulated messages (built by the spawned task)
+                                        if let Some(ref mut mr) = msg_rx {
+                                            match mr.recv().await {
+                                                Some(new_msgs) => {
+                                                    // Clone the next state and merge accumulated messages
+                                                    match *on_done {
+                                                        LoopState::Looping { messages, round, options } => {
+                                                            let mut combined = messages;
+                                                            combined.extend(new_msgs);
+                                                            tracing::trace!(round, total_messages = combined.len(), "Streaming→Looping with accumulated messages");
+                                                            Some((Ok(update), LoopState::Looping { messages: combined, round, options }))
+                                                        }
+                                                        other => Some((Ok(update), other)),
+                                                    }
+                                                }
+                                                None => {
+                                                    tracing::warn!("Message channel closed unexpectedly");
+                                                    Some((Ok(update), *on_done))
+                                                }
+                                            }
+                                        } else {
+                                            Some((Ok(update), *on_done))
+                                        }
                                     } else {
-                                        Some((Ok(update), LoopState::Streaming { rx, on_done }))
+                                        Some((Ok(update), LoopState::Streaming { rx, on_done, msg_rx }))
                                     }
                                 }
                                 Some(Err(e)) => {
@@ -355,27 +377,34 @@ impl IChatClient for FunctionInvokingChatClient {
                                     let is_tool_calls = matches!(&update, AgentResponseUpdate::Finish { finish_reason, .. }
                                         if *finish_reason == FinishReason::ToolCalls);
 
-                                    let next_round_messages = if is_tool_calls {
-                                        match msg_rx.recv().await {
+                                    let next = if is_tool_calls {
+                                        // Rare: first item already is ToolCalls — read accumulated messages now
+                                        let combined = match msg_rx.recv().await {
                                             Some(new_msgs) => {
-                                                let mut combined = messages.clone();
-                                                combined.extend(new_msgs);
-                                                tracing::trace!(round = round + 1, total_messages = combined.len(), "Preparing messages for next iteration");
-                                                combined
+                                                let mut c = messages.clone();
+                                                c.extend(new_msgs);
+                                                tracing::trace!(round = round + 1, total_messages = c.len(), "First-item ToolCalls: preparing messages for next iteration");
+                                                c
                                             }
                                             None => {
                                                 tracing::warn!("Message channel closed unexpectedly");
                                                 messages.clone()
                                             }
+                                        };
+                                        LoopState::Looping { messages: combined, round: round + 1, options }
+                                    } else {
+                                        // Normal case: first item is ToolCallStart/etc.
+                                        // Defer msg_rx to Streaming state — it will read accumulated messages
+                                        // when it detects Finish(ToolCalls)
+                                        LoopState::Streaming {
+                                            rx,
+                                            on_done: Box::new(LoopState::Looping {
+                                                messages: messages.clone(),
+                                                round: round + 1,
+                                                options,
+                                            }),
+                                            msg_rx: Some(msg_rx),
                                         }
-                                    } else {
-                                        messages.clone()
-                                    };
-
-                                    let next = if is_tool_calls {
-                                        LoopState::Looping { messages: next_round_messages, round: round + 1, options }
-                                    } else {
-                                        LoopState::Streaming { rx, on_done: Box::new(LoopState::Looping { messages: next_round_messages, round: round + 1, options }) }
                                     };
 
                                     Some((Ok(update), next))

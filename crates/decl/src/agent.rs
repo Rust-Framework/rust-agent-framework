@@ -106,6 +106,11 @@ pub enum ContextProviderDecl {
         #[serde(default)]
         mode: String,
     },
+    /// Skills provider — 按名称引用技能，架构从 skill_directories 自动查找并注册。
+    Skills {
+        /// 技能名称列表。
+        names: Vec<String>,
+    },
 }
 
 // ── Compression / Token Counter ──
@@ -179,6 +184,10 @@ pub struct AgentDecl {
     /// Context providers to attach.
     #[serde(default)]
     pub context_providers: Vec<ContextProviderDecl>,
+    /// Skill directory search paths. Used when `Skills` context provider
+    /// references skills by name — the resolver scans these directories.
+    #[serde(default)]
+    pub skill_directories: Vec<String>,
     /// Arbitrary key-value properties.
     #[serde(default)]
     pub properties: HashMap<String, serde_json::Value>,
