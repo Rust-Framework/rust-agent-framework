@@ -367,4 +367,26 @@ async fn run_agent(
                                     eprint!("\x1b[90m[思考] {}\x1b[0m", t.delta);
                                 }
                                 Content::ToolCallStart(s) => {
-                                    tool
+                                    tool_call_count += 1;
+                                    tracing::info!(
+                                        tool_name = %s.name,
+                                        call_id = %s.call_id,
+                                        "[run] Tool call started"
+                                    );
+                                    eprintln!("\x1b[36m[调用] {}\x1b[0m", s.name);
+                                }
+                                Content::ToolCallArgsParsed(p) => {
+                                    let val_str = serde_json::to_string(&p.value).unwrap_or_default();
+                                    tracing::debug!(
+                                        tool_name = %p.name,
+                                        value_len = val_str.len(),
+                                        "[run] Tool args parsed"
+                                    );
+                                    let display = if val_str.len() > 200 {
+                                        format!("{}...({:.1}KB)", &val_str[..200], val_str.len() as f64 / 1024.0)
+                                    } else {
+                                        val_str
+                                    };
+                                    eprintln!("\x1b[32m  {} = {}\x1b[0m", p.name, display);
+                                }
+                                Content::ToolCall
