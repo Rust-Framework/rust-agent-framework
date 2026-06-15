@@ -313,6 +313,23 @@ impl IChatClient for FunctionInvokingChatClient {
                                     let meta = meta.clone();
                                     async move {
                                         tracing::trace!(tool_name = %tc.name, call_id = %tc.id, args = %tc.arguments, "Executing tool");
+
+                                        // ── 处理空参数：当 LLM 发送的参数字符串完全为空时（非 "{}"），提前返回 schema 信息 ──
+                                        let args_trimmed = tc.arguments.trim();
+                                        if args_trimmed.is_empty() {
+                                            if let Some(tool) = tools.iter().find(|t| t.name() == tc.name) {
+                                                let schema = tool.parameters_schema();
+                                                let msg = format!(
+                                                    "Tool '{}' was called without any arguments. Expected schema: {}. Please provide all required fields.",
+                                                    tc.name, schema
+                                                );
+                                                tracing::warn!(tool_name = %tc.name, call_id = %tc.id, "Empty tool call arguments (empty string)");
+                                                return ToolCalledContent {
+                                                    meta, call_id: tc.id.clone(), result: None, error: Some(msg),
+                                                };
+                                            }
+                                        }
+
                                         let args_value = serde_json::from_str(&tc.arguments).unwrap_or(serde_json::Value::Object(Default::default()));
                                         match tools.iter().find(|t| t.name() == tc.name) {
                                             Some(tool) => match tool.execute(args_value).await {
@@ -322,7 +339,12 @@ impl IChatClient for FunctionInvokingChatClient {
                                                 }
                                                 Err(e) => {
                                                     tracing::warn!(tool_name = %tc.name, call_id = %tc.id, error = %e, "Tool execution failed");
-                                                    ToolCalledContent { meta, call_id: tc.id.clone(), result: None, error: Some(e.to_string()) }
+                                                    let schema = tool.parameters_schema();
+                                                    let msg = format!(
+                                                        "Tool '{}' execution failed: {}. Expected schema: {}. Please check your parameters and retry.",
+                                                        tc.name, e, schema
+                                                    );
+                                                    ToolCalledContent { meta, call_id: tc.id.clone(), result: None, error: Some(msg) }
                                                 }
                                             },
                                             None => {

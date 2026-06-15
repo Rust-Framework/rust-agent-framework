@@ -21,6 +21,7 @@ rust-agent-client = { workspace = true }
 rust-agent-framework = { workspace = true }
 rust-agent-workflow = { workspace = true }
 rust-agent-rhai = { workspace = true }
+rust-agent-websearch = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { version = "0.9", optional = true }

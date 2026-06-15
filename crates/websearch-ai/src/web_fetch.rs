@@ -22,12 +22,23 @@ async fn web_fetch(
             })
             .to_string()
         }
-        Err(e) => serde_json::json!({
-            "ok": false,
-            "data": null,
-            "error": format!("Fetch failed: {e}"),
-        })
-        .to_string(),
+        Err(e) => {
+            let error_str = format!("{e}");
+            let suggestion = if error_str.contains("Timeout") || error_str.contains("Connection") {
+                format!("The URL is unreachable. Check the URL and try again.")
+            } else if error_str.contains("404") || error_str.contains("Not Found") {
+                format!("The URL returned 404. Check if the URL is correct.")
+            } else {
+                format!("Check the URL and try again.")
+            };
+            serde_json::json!({
+                "ok": false,
+                "data": null,
+                "error": format!("Fetch failed: {error_str}"),
+                "suggestion": suggestion,
+            })
+            .to_string()
+        }
     }
 }
 

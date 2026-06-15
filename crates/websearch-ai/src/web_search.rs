@@ -1,4 +1,5 @@
 use rust_agent_macros::tool;
+use std::hash::{Hash, Hasher};
 
 const DEFAULT_COUNT: i64 = 5;
 const MAX_COUNT: i64 = 10;
@@ -29,22 +30,45 @@ async fn web_search(
                 })
                 .collect();
 
+            // 生成指纹：基于所有结果 URL 计算哈希，帮助 LLM 识别重复结果
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            for r in &search_results.results {
+                r.url.hash(&mut hasher);
+            }
+            let fingerprint = hasher.finish();
+
             serde_json::json!({
                 "ok": true,
                 "data": {
                     "query": query,
                     "results": results,
                     "count": results.len(),
+                    "_source": format!("{:?}", search_results.source),
+                    "_fingerprint": fingerprint,
+                    "_tip": "Use web_fetch(url) to get full content from any URL above. If results don't change across calls (_fingerprint is same), try a more specific query or fetch a URL directly.",
                 }
             })
             .to_string()
         }
-        Err(e) => serde_json::json!({
-            "ok": false,
-            "data": null,
-            "error": format!("Search failed: {e}"),
-        })
-        .to_string(),
+        Err(e) => {
+            let error_str = format!("{e}");
+            let suggestion = if error_str.contains("No search results") {
+                "Try a different or more specific query.".to_string()
+            } else if error_str.contains("Timeout") || error_str.contains("Network error") || error_str.contains("Connection failed") {
+                format!("Search backend is currently unreachable. You can use web_fetch(url) with a known URL to fetch content directly instead.")
+            } else if error_str.contains("Rate limited") || error_str.contains("CAPTCHA") {
+                format!("Search backend is rate-limited. Try again later or use web_fetch(url) with a known URL.")
+            } else {
+                format!("Try a different query or use web_fetch(url) with a known URL.")
+            };
+            serde_json::json!({
+                "ok": false,
+                "data": null,
+                "error": format!("Search failed: {error_str}"),
+                "suggestion": suggestion,
+            })
+            .to_string()
+        }
     }
 }
 

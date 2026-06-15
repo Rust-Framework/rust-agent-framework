@@ -10,11 +10,12 @@ use rust_agent_framework::{
     compression::{CompressionPipeline, SlidingWindowStrategy, TokenBudgetStrategy},
     tools::{
         EditFile, FindFiles, InspectFile, ListFiles, MakeDirectory, MoveFile, ReadFile,
-        RemovePath, RunCommand, SearchFile, WebFetch, WebSearch, WriteFile,
+        RemovePath, RunCommand, SearchFile, WriteFile,
     },
 };
 use rust_agent_framework::token_counter::EstimateCounter;
 use rust_agent_rhai::{RhaiExecutor, RhaiTool};
+use rust_agent_websearch::{WebFetch, WebSearch};
 use rust_agent_workflow::graph::WorkflowGraph;
 use rust_agent_workflow::executor::{AgentExecutor, IExecutor};
 use rust_agent_workflow::executor::base::TypeTag;
