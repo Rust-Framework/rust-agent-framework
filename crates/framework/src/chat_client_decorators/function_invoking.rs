@@ -370,7 +370,9 @@ impl IChatClient for FunctionInvokingChatClient {
 
                                 for (i, result) in results.iter().enumerate() {
                                     let call_id = &tool_calls[i].id;
-                                    let content = result.result.clone().unwrap_or_default();
+                                    let content = result.result.clone()
+                                        .or_else(|| result.error.clone())
+                                        .unwrap_or_default();
                                     next_messages.push(ChatMessage {
                                         role: MessageRole::Tool, content,
                                         name: Some(tool_calls[i].name.clone()),

@@ -1,12 +1,13 @@
-//! 网页内容抓取（替代 tarzi::WebFetcher）。
+//! 网页内容抓取。
 //!
-//! 纯 reqwest HTTP 实现，不依赖外部浏览器。
-//! 提取 HTML title 和正文，转换为纯文本。
+//! 主动态 HTTP 请求抓取 + 字符编码自动检测 + 正文智能提取。
+//! 支持中文站点 GBK/GB2312/GB18030/Big5 等编码的自动识别。
 
 use crate::anti_detection::RateLimiter;
+use crate::content_extractor::extract_main_content;
+use crate::encoding::{decode_bytes, parse_content_type_charset, parse_meta_charset};
 use crate::error::SearchError;
 use crate::types::{FetchedPage, FetchConfig};
-use scraper::{Html, Selector};
 use std::sync::Arc;
 
 fn fetch_rate_limiter() -> &'static Arc<RateLimiter> {
@@ -16,7 +17,13 @@ fn fetch_rate_limiter() -> &'static Arc<RateLimiter> {
 
 /// 抓取网页内容。
 ///
-/// 使用纯 HTTP 请求获取页面，提取标题和正文，转为纯文本。
+/// ## 处理流程
+///
+/// 1. 发送 HTTP GET 请求，获取响应字节（不直接用 `.text()`，以便编码检测）
+/// 2. 从 Content-Type header 和 HTML <meta> 标签提取声明的 charset
+/// 3. 使用 `encoding_rs` 自动检测并解码为 UTF-8
+/// 4. 对 HTML 页面使用正文提取算法，去噪后返回纯文本
+/// 5. 对非 HTML 内容直接作为文本返回
 pub async fn fetch_page(url: &str, config: &FetchConfig) -> Result<FetchedPage, SearchError> {
     if url.is_empty() {
         return Err(SearchError::Config("URL cannot be empty".into()));
@@ -24,21 +31,7 @@ pub async fn fetch_page(url: &str, config: &FetchConfig) -> Result<FetchedPage, 
 
     fetch_rate_limiter().wait(config.min_interval_ms).await;
 
-    let ua = crate::anti_detection::random_user_agent();
-    let mut builder = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(config.timeout_secs))
-        .user_agent(ua)
-        .redirect(reqwest::redirect::Policy::limited(5));
-
-    if let Some(ref proxy_url) = config.proxy_url {
-        let proxy = reqwest::Proxy::all(proxy_url)
-            .map_err(|e| SearchError::Config(format!("Invalid proxy URL: {e}")))?;
-        builder = builder.proxy(proxy);
-    }
-
-    let client = builder
-        .build()
-        .map_err(|e| SearchError::Config(format!("Failed to build HTTP client: {e}")))?;
+    let client = build_fetch_client(config)?;
 
     let response = client.get(url).send().await?;
 
@@ -52,23 +45,77 @@ pub async fn fetch_page(url: &str, config: &FetchConfig) -> Result<FetchedPage, 
         });
     }
 
-    // 检查 Content-Type，只处理 HTML 和文本
+    // ── 编码检测 ──
+    // 1. 从 Content-Type header 获取声明的 charset
     let content_type = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_default();
+        .unwrap_or("");
+
+    let declared_charset = parse_content_type_charset(content_type);
 
     // 判断是否为 HTML
-    let is_html = content_type.contains("text/html") || content_type.is_empty();
+    let is_html = content_type.contains("text/html")
+        || content_type.is_empty()
+        || content_type.contains("application/xhtml");
 
-    let html = response.text().await.map_err(|e| {
+    // ── 获取原始字节 ──
+    let bytes = response.bytes().await.map_err(|e| {
         SearchError::Parse(format!("Failed to read response body: {e}"))
     })?;
 
+    // 2. 从 HTML meta 标签提取 charset（如果声明的不够确定）
+    let meta_charset = if is_html {
+        parse_meta_charset(&bytes)
+    } else {
+        None
+    };
+
+    // 选择最终的 charset 提示
+    let charset_hint = meta_charset
+        .or(declared_charset)
+        .or_else(|| {
+            // 根据 final_url 域名猜测编码（中国域名大概率是 GBK/UTF-8）
+            guess_charset_by_domain(&final_url)
+        });
+
+    // 解码为 UTF-8
+    let html = decode_bytes(&bytes, charset_hint.as_deref());
+
+    tracing::debug!(
+        url = %url,
+        final_url = %final_url,
+        is_html = is_html,
+        charset = ?charset_hint,
+        bytes_len = bytes.len(),
+        decoded_len = html.len(),
+        "Page fetched and decoded"
+    );
+
+    // ── 内容提取 ──
     let (title, content) = if is_html {
-        extract_text_content(&html)
+        let extracted = extract_main_content(&html);
+
+        // 解析标题
+        let title = extracted
+            .strip_prefix("Title: ")
+            .and_then(|s| s.split("\n\n").next())
+            .unwrap_or("")
+            .to_string();
+
+        let body = if extracted.starts_with("Title: ") {
+            // 移除标题行
+            let after_title = extracted
+                .splitn(2, "\n\n")
+                .nth(1)
+                .unwrap_or(&extracted);
+            after_title.to_string()
+        } else {
+            extracted
+        };
+
+        (title, body)
     } else {
         // 非 HTML 内容，直接作为文本返回
         (String::new(), html)
@@ -84,7 +131,9 @@ pub async fn fetch_page(url: &str, config: &FetchConfig) -> Result<FetchedPage, 
             .unwrap_or(0);
         let truncated_content = &content[..truncate_at];
         let truncated = format!(
-            "{truncated_content}\n\n[truncated — content too large]"
+            "{truncated_content}\n\n[Content truncated: {total} bytes total, showing first {shown} bytes. Use a smaller scope or more specific query to get relevant data.]",
+            total = content_length,
+            shown = truncate_at
         );
         (truncated, true)
     } else {
@@ -102,81 +151,63 @@ pub async fn fetch_page(url: &str, config: &FetchConfig) -> Result<FetchedPage, 
     })
 }
 
-/// 从 HTML 中提取标题和正文（纯文本）。
-fn extract_text_content(html: &str) -> (String, String) {
-    let document = Html::parse_document(html);
+/// 构建抓取专用 HTTP 客户端。
+fn build_fetch_client(config: &FetchConfig) -> Result<reqwest::Client, SearchError> {
+    let ua = crate::anti_detection::random_user_agent();
+    let mut builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(config.timeout_secs))
+        .user_agent(ua)
+        .redirect(reqwest::redirect::Policy::limited(5))
+        // 设置中文友好的默认请求头
+        .default_headers({
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static(
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                ),
+            );
+            headers.insert(
+                reqwest::header::ACCEPT_LANGUAGE,
+                reqwest::header::HeaderValue::from_static("zh-CN,zh;q=0.9,en;q=0.8"),
+            );
+            headers
+        });
 
-    // 提取 title
-    let title = document
-        .select(&Selector::parse("title").unwrap())
-        .next()
-        .map(|t| t.text().collect::<Vec<_>>().join(" ").trim().to_string())
-        .unwrap_or_default();
-
-    // 提取正文：去除 script/style 后获取 body 文本
-    let body_text = document
-        .select(&Selector::parse("body").unwrap())
-        .next()
-        .map(|body| {
-            // 先去除 script 和 style
-            let mut html_str = body.inner_html();
-            html_str = remove_tags(&html_str, "script");
-            html_str = remove_tags(&html_str, "style");
-            html_str = remove_tags(&html_str, "noscript");
-
-            // 解码 HTML 实体并去除标签
-            crate::html_utils::clean_html(&html_str)
-        })
-        .unwrap_or_default();
-
-    // fallback: 如果没有 body，使用全部文本
-    let content = if body_text.trim().is_empty() {
-        let mut html_str = html.to_string();
-        html_str = remove_tags(&html_str, "script");
-        html_str = remove_tags(&html_str, "style");
-        crate::html_utils::clean_html(&html_str)
-    } else {
-        body_text
-    };
-
-    (title, content.trim().to_string())
-}
-
-/// 从 HTML 字符串中移除指定标签（包括内容）。
-fn remove_tags(html: &str, tag: &str) -> String {
-    let open = format!("<{tag}");
-    let close = format!("</{tag}>");
-
-    let mut result = String::with_capacity(html.len());
-    let mut rest = html;
-
-    loop {
-        let Some(start_idx) = rest.find(&open) else {
-            result.push_str(rest);
-            break;
-        };
-
-        result.push_str(&rest[..start_idx]);
-
-        // 找到标签闭合的 >
-        let after_open = &rest[start_idx..];
-        let Some(end_of_open) = after_open.find('>') else {
-            result.push_str(&rest[start_idx..]);
-            break;
-        };
-
-        let after_tag = &after_open[end_of_open + 1..];
-
-        // 找到对应的 </tag>
-        let Some(close_idx) = after_tag.find(&close) else {
-            result.push_str(&rest[start_idx..]);
-            break;
-        };
-
-        rest = &after_tag[close_idx + close.len()..];
+    if let Some(ref proxy_url) = config.proxy_url {
+        let proxy = reqwest::Proxy::all(proxy_url)
+            .map_err(|e| SearchError::Config(format!("Invalid proxy URL: {e}")))?;
+        builder = builder.proxy(proxy);
     }
 
-    result
+    builder
+        .build()
+        .map_err(|e| SearchError::Config(format!("Failed to build HTTP client: {e}")))
+}
+
+/// 根据域名猜测可能的编码。
+///
+/// `.cn` 域名大概率使用 GBK/UTF-8，`.jp` 使用 Shift_JIS 等。
+fn guess_charset_by_domain(url: &str) -> Option<String> {
+    let domain = url
+        .split("://")
+        .nth(1)
+        .unwrap_or(url)
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
+
+    if domain.ends_with(".cn") || domain.ends_with(".com.cn") {
+        // 中国域名，优先尝试 GBK 再 UTF-8（实际解码时 auto-detection 会处理）
+        Some("gbk".to_string())
+    } else if domain.ends_with(".jp") {
+        Some("shift_jis".to_string())
+    } else if domain.ends_with(".tw") || domain.ends_with(".hk") {
+        Some("big5".to_string())
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -184,39 +215,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_extract_text_content() {
-        let html = r#"<!DOCTYPE html>
-<html>
-<head><title>Test Page</title></head>
-<body>
-    <h1>Hello World</h1>
-    <p>This is a <b>test</b> paragraph.</p>
-    <script>console.log('should be removed');</script>
-    <style>body { color: red; }</style>
-</body>
-</html>"#;
-
-        let (title, content) = extract_text_content(html);
-        assert_eq!(title, "Test Page");
-        assert!(content.contains("Hello World"));
-        assert!(content.contains("This is a test paragraph"));
-        assert!(!content.contains("console.log"));
-        assert!(!content.contains("color: red"));
+    fn test_guess_charset_cn() {
+        assert_eq!(
+            guess_charset_by_domain("https://finance.sina.com.cn/page"),
+            Some("gbk".to_string())
+        );
     }
 
     #[test]
-    fn test_remove_tags() {
-        let html = "<div>keep me</div><script>remove me</script><p>keep too</p>";
-        let result = remove_tags(html, "script");
-        assert!(result.contains("keep me"));
-        assert!(!result.contains("remove me"));
-        assert!(result.contains("keep too"));
+    fn test_guess_charset_non_cn() {
+        assert_eq!(
+            guess_charset_by_domain("https://example.com/page"),
+            None
+        );
     }
 
     #[test]
-    fn test_extract_text_no_body() {
-        let html = "<html>Hello <b>World</b></html>";
-        let (title, content) = extract_text_content(html);
-        assert!(content.contains("Hello World"));
+    fn test_build_fetch_client() {
+        let config = FetchConfig::default();
+        let client = build_fetch_client(&config);
+        assert!(client.is_ok());
     }
 }

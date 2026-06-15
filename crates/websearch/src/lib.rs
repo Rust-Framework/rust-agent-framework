@@ -31,7 +31,9 @@
 
 pub mod anti_detection;
 pub mod bing;
+pub mod content_extractor;
 pub mod duckduckgo;
+pub mod encoding;
 pub mod error;
 pub mod fetcher;
 pub mod html_utils;
@@ -44,7 +46,9 @@ pub mod types;
 
 pub use anti_detection::{CookieManager, ProxyManager, RateLimiter};
 pub use bing::search_bing;
+pub use content_extractor::extract_main_content;
 pub use duckduckgo::{search_html, search_instant_answer, search_lite};
+pub use encoding::{decode_bytes, parse_content_type_charset, parse_meta_charset};
 pub use error::SearchError;
 pub use fetcher::fetch_page;
 pub use probe::{clear_cache as clear_probe_cache, BackendKind, Reachability};

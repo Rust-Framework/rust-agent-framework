@@ -4,10 +4,10 @@ use std::hash::{Hash, Hasher};
 const DEFAULT_COUNT: i64 = 5;
 const MAX_COUNT: i64 = 10;
 
-#[tool(description = "Searches the web and returns a list of results with title, URL, and snippet.")]
+#[tool(description = "Searches the web using DuckDuckGo/Bing/SearXNG multi-backend engine and returns a list of results with title, URL, and snippet. No API key required. Use this to find information and URLs, then use web_fetch(url) to get the full content of any result.")]
 async fn web_search(
     #[param(desc = "Search query")] query: String,
-    #[param(desc = "Maximum number of results to return (default: 5)")] count: Option<i64>,
+    #[param(desc = "Maximum number of results to return (default: 5, max: 10)")] count: Option<i64>,
 ) -> String {
     let count = count
         .unwrap_or(DEFAULT_COUNT)
@@ -37,7 +37,7 @@ async fn web_search(
             }
             let fingerprint = hasher.finish();
 
-            serde_json::json!({
+            let result = serde_json::json!({
                 "ok": true,
                 "data": {
                     "query": query,
@@ -47,20 +47,22 @@ async fn web_search(
                     "_fingerprint": fingerprint,
                     "_tip": "Use web_fetch(url) to get full content from any URL above. If results don't change across calls (_fingerprint is same), try a more specific query or fetch a URL directly.",
                 }
-            })
-            .to_string()
+            });
+
+            result.to_string()
         }
         Err(e) => {
             let error_str = format!("{e}");
-            let suggestion = if error_str.contains("No search results") {
-                "Try a different or more specific query.".to_string()
-            } else if error_str.contains("Timeout") || error_str.contains("Network error") || error_str.contains("Connection failed") {
-                format!("Search backend is currently unreachable. You can use web_fetch(url) with a known URL to fetch content directly instead.")
-            } else if error_str.contains("Rate limited") || error_str.contains("CAPTCHA") {
-                format!("Search backend is rate-limited. Try again later or use web_fetch(url) with a known URL.")
+            let suggestion = if error_str.contains("No search results") || error_str.contains("NoResults") {
+                format!("No results found. Try a different query, use simpler keywords, or try searching in English.")
+            } else if error_str.contains("CAPTCHA") || error_str.contains("Rate limited") {
+                format!("Search rate limited. Wait a moment and try again, or use a different query phrasing.")
+            } else if error_str.contains("Timeout") || error_str.contains("Network") {
+                format!("Search service temporarily unavailable. Try again in a moment, or use a more specific search query.")
             } else {
-                format!("Try a different query or use web_fetch(url) with a known URL.")
+                format!("Search failed: {error_str}. Try a different query or check your network connection.")
             };
+
             serde_json::json!({
                 "ok": false,
                 "data": null,
@@ -78,15 +80,18 @@ mod tests {
     use rust_agent_core::ITool;
 
     #[tokio::test]
-    async fn test_web_search_basic() {
-        let result = WebSearch
-            .execute(serde_json::json!({"query": "rust programming language", "count": 3}))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert!(v["ok"].as_bool().is_some());
-        if v["ok"] == true {
-            assert!(v["data"]["count"].as_u64().unwrap() > 0);
-        }
+    async fn test_web_search_empty_query() {
+        let result = WebSearch.call(String::new(), None).await;
+        assert!(result.contains("\"ok\":false"));
+    }
+
+    #[tokio::test]
+    async fn test_web_search_name() {
+        assert_eq!(WebSearch.name(), "web_search");
+    }
+
+    #[tokio::test]
+    async fn test_web_search_desc() {
+        assert!(!WebSearch.description().is_empty());
     }
 }

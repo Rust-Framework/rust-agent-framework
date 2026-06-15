@@ -30,6 +30,9 @@ scraper = "0.22"
 # Cookie store for session management
 cookie_store = "0.22"
 
+# Character encoding detection (Firefox's encoding library)
+encoding_rs = "0.8"
+
 # Random number generation (UA rotation, jitter)
 rand = "0.8"
 
