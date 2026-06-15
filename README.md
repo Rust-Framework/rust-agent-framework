@@ -26,7 +26,7 @@ A modular, async-native Rust framework for building LLM-powered AI agents with s
 |---|---|---|
 | [core](crates/core/) | `rust-agent-core` | Core traits (`IAgent`, `IChatClient`, `ITool`, `ISession`, `IContextProvider`), message/stream types, error system |
 | [client](crates/client/) | `rust-agent-client` | LLM provider clients (OpenAI, DeepSeek), HTTP/SSE transport, usage parsing |
-| [framework](crates/framework/) | `rust-agent-framework` | Agent runtime, `ChatClientAgent`, `ToolLoopAgent`, `AgentBuilder`, 13 built-in tools, context providers |
+| [framework](crates/framework/) | `rust-agent-framework` | Agent runtime, `ChatClientAgent`, `FunctionInvokingChatClient`, `AgentBuilder`, 13 built-in tools, context providers |
 | [macros](crates/macros/) | `rust-agent-macros` | `#[tool]` proc-macro for ergonomic tool definitions |
 | [workflow](crates/workflow/) | `rust-agent-workflow` | Graph-based workflow engine, patterns (Sequential, Concurrent, Handoff) |
 | [cli](crates/cli/) | `rust-agent-cli` | Interactive CLI application demonstrating full framework usage |
@@ -34,7 +34,7 @@ A modular, async-native Rust framework for building LLM-powered AI agents with s
 ## Key Features
 
 - **Streaming-first** — every interface uses `BoxStream` for real-time token-by-token output
-- **Auto tool-calling loop** — `ToolLoopAgent` intercepts tool calls, executes tools in parallel, and feeds results back
+- **Auto tool-calling loop** — `FunctionInvokingChatClient` (ChatClient pipeline decorator) intercepts tool calls, executes tools in parallel, and feeds results back
 - **Complete tool call lifecycle** — 5-stage streaming lifecycle: `Start → Args(×N) → End → Calling → Called`
 - **Provider-agnostic** — OpenAI and DeepSeek support out of the box, extendable via `IChatClient`
 - **Context provider chain** — composable pre/post-invocation hooks for history management, RAG, compression

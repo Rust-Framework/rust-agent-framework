@@ -90,13 +90,13 @@ impl CheckpointManager {
             .map(|(k, v)| (k.to_key_string(), v))
             .collect();
 
-        // 获取当前计数值
-        let mut counter = self.counter.write();
-        let count = counter.entry(session_id.to_string()).or_insert(0);
-
-        // 判断是否需要全量快照（首次从 create_initial 开始，所以 count>0 时检查）
-        // create_initial 已产生一个全量快照，故后续增量直到 interval 才再次全量
-        let is_full = *count > 0 && *count % self.config.full_snapshot_interval == 0;
+        // 获取当前计数值（须在 await 前释放锁，parking_lot 锁不实现 Send）
+        let (count, is_full) = {
+            let mut counter = self.counter.write();
+            let count = counter.entry(session_id.to_string()).or_insert(0);
+            let is_full = *count > 0 && *count % self.config.full_snapshot_interval == 0;
+            (*count, is_full)
+        };
 
         // 获取父检查点 ID（最近一次保存的检查点，即上一个增量）
         let parent_id = if is_full {
@@ -123,7 +123,11 @@ impl CheckpointManager {
 
         let info = self.store.save(session_id, &checkpoint).await?;
 
-        *count += 1;
+        {
+            let mut counter = self.counter.write();
+            let entry = counter.entry(session_id.to_string()).or_insert(0);
+            *entry = count + 1;
+        }
 
         Ok(info)
     }

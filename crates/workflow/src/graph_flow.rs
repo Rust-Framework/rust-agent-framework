@@ -80,10 +80,6 @@ impl IAgent for GraphFlow {
         self.agents.get(agent_id).cloned()
     }
 
-    fn list_subagents(&self) -> Vec<Arc<dyn IAgent>> {
-        self.agents.values().cloned().collect()
-    }
-
     async fn reset(&self) -> Result<()> {
         Ok(())
     }

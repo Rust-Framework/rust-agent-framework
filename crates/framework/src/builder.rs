@@ -41,7 +41,7 @@ use crate::context_providers::history_provider::InMemoryHistoryProvider;
 ///
 /// When tools are registered, `AgentBuilder` automatically wraps the
 /// `IChatClient` in a `FunctionInvokingChatClient` decorator (MAF pipeline
-/// pattern) instead of wrapping the Agent in a ToolLoopAgent.
+/// pattern).
 pub struct AgentBuilder<C> {
     agent_id: String,
     chat_client: Option<C>,
@@ -163,8 +163,7 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
     /// Build the agent using ChatClient pipeline pattern.
     ///
     /// When tools are registered, the IChatClient is wrapped in a
-    /// `FunctionInvokingChatClient` decorator (MAF pipeline pattern)
-    /// instead of wrapping the Agent in a ToolLoopAgent.
+    /// `FunctionInvokingChatClient` decorator (MAF pipeline pattern).
     pub fn build(self) -> Result<Arc<dyn IAgent>> {
         let chat_client = self.chat_client.ok_or_else(|| {
             rust_agent_core::AgentError::ConfigError("chat_client is required".into())

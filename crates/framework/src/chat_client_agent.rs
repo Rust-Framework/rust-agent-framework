@@ -40,8 +40,6 @@ impl IAgent for AgentProxy {
     async fn run(&self, _: Vec<ChatMessage>, _: Option<Arc<dyn ISession>>, _: Option<AgentRunOptions>) -> Result<BoxStream<'static, Result<AgentResponseResult>>> {
         Err(rust_agent_core::AgentError::ConfigError("AgentProxy::run not supported".into()))
     }
-    fn get_subagent(&self, _: &AgentId) -> Option<Arc<dyn IAgent>> { None }
-    fn list_subagents(&self) -> Vec<Arc<dyn IAgent>> { vec![] }
     async fn reset(&self) -> Result<()> { Ok(()) }
 }
 
@@ -343,7 +341,5 @@ impl IAgent for ChatClientAgent {
         Ok(Box::pin(converted))
     }
 
-    fn get_subagent(&self, _agent_id: &AgentId) -> Option<Arc<dyn IAgent>> { None }
-    fn list_subagents(&self) -> Vec<Arc<dyn IAgent>> { vec![] }
     async fn reset(&self) -> Result<()> { Ok(()) }
 }

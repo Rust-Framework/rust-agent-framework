@@ -167,7 +167,7 @@ impl HasMeta for UriContent {
 ///
 /// - ①~③ 是**流式阶段**，在 SSE 数据到达时实时发出，消费方可据此展示进度
 /// - ④ 是**汇总阶段**，在流结束时一次性发出，携带完整解析后的参数结构体
-/// - ⑤ 是**执行阶段**，由 ToolLoopAgent/ToolMiddleware 执行后发出
+/// - ⑤ 是**执行阶段**，由 FunctionInvokingChatClient 管道装饰器执行后发出
 
 /// ④ 完整工具调用 — 流式参数已收集完毕，arguments 被解析为 `serde_json::Value`。
 ///

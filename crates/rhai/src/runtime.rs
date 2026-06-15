@@ -1,0 +1,338 @@
+use rhai::{Dynamic, Engine, Scope, AST};
+use rust_agent_core::Result;
+use serde_json::Value;
+
+const DEFAULT_MAX_OPERATIONS: u64 = 100_000;
+
+/// High-cohesion, low-coupling Rhai scripting runtime.
+///
+/// Manages the script engine, scope, module registration, and security policy.
+/// External dependencies (context, progress callbacks, etc.) are injected via
+/// function registration, keeping coupling low.
+pub struct RhaiRuntime {
+    engine: Engine,
+    scope: Scope<'static>,
+    ast: Option<AST>,
+    script_source: Option<String>,
+    max_operations: u64,
+}
+
+impl RhaiRuntime {
+    /// Create a sandboxed runtime using `Engine::new_raw()`.
+    pub fn new() -> Self {
+        let mut engine = Engine::new_raw();
+        engine.set_max_operations(DEFAULT_MAX_OPERATIONS);
+
+        // Register built-in helper: json_get(obj, key)
+        engine.register_fn("json_get", |obj: &mut Dynamic, key: &str| -> Dynamic {
+            if obj.is_map() {
+                let map = std::mem::take(obj).cast::<rhai::Map>();
+                let val = map.get(key).cloned().unwrap_or(Dynamic::UNIT);
+                // Put the map back
+                *obj = Dynamic::from_map(map);
+                val
+            } else {
+                Dynamic::UNIT
+            }
+        });
+
+        Self {
+            engine,
+            scope: Scope::new(),
+            ast: None,
+            script_source: None,
+            max_operations: DEFAULT_MAX_OPERATIONS,
+        }
+    }
+
+    /// Set the maximum operation limit.
+    pub fn max_operations(&mut self, ops: u64) -> &mut Self {
+        self.max_operations = ops;
+        self.engine.set_max_operations(ops);
+        self
+    }
+
+    /// Set and compile the script source.
+    pub fn with_script(&mut self, script: impl Into<String>) -> &mut Self {
+        let source = script.into();
+        self.script_source = Some(source.clone());
+        self._compile(&source);
+        self
+    }
+
+    /// Inject a variable into the runtime scope.
+    pub fn with_variable(&mut self, name: &str, value: Dynamic) -> &mut Self {
+        self.scope.push(name, value);
+        self
+    }
+
+    /// Inject a variable as a JSON Value.
+    pub fn with_json_variable(&mut self, name: &str, value: Value) -> &mut Self {
+        let dynamic = json_to_dynamic(&value);
+        self.scope.push(name, dynamic);
+        self
+    }
+
+    /// Register a custom Rhai module.
+    pub fn with_module(&mut self, _name: impl AsRef<str>, module: rhai::Module) -> &mut Self {
+        self.engine.register_global_module(module.into());
+        self
+    }
+
+    /// Register a custom type.
+    pub fn register_type<T: rhai::CustomType>(&mut self) -> &mut Self {
+        self.engine.build_type::<T>();
+        self
+    }
+
+    /// Use a pre-compiled AST.
+    pub fn with_ast(&mut self, ast: AST) -> &mut Self {
+        self.ast = Some(ast);
+        self
+    }
+
+    fn _compile(&mut self, script: &str) {
+        match self.engine.compile(script) {
+            Ok(ast) => self.ast = Some(ast),
+            Err(e) => {
+                tracing::warn!("Rhai script compilation failed: {}", e);
+            }
+        }
+    }
+
+    /// Compile a script and return the AST.
+    pub fn compile_standalone(&self, script: &str) -> std::result::Result<AST, rhai::ParseError> {
+        self.engine.compile(script)
+    }
+
+    /// Run the pre-compiled script and return the result as JSON.
+    pub fn run(&mut self) -> Result<Value> {
+        let ast = match &self.ast {
+            Some(ast) => ast.clone(),
+            None => {
+                let source = self.script_source.as_deref().unwrap_or("");
+                return Err(rust_agent_core::AgentError::WorkflowError(format!(
+                    "Rhai script not compiled: {}",
+                    if source.len() > 100 { &source[..100] } else { source }
+                )));
+            }
+        };
+
+        // Use eval_ast_with_scope which returns the script's return value
+        match self.engine.eval_ast_with_scope::<Dynamic>(&mut self.scope, &ast) {
+            Ok(result) => Ok(dynamic_to_json(&result)),
+            Err(e) => Err(rust_agent_core::AgentError::WorkflowError(format!(
+                "Rhai script execution error: {}",
+                *e
+            ))),
+        }
+    }
+
+    /// Compile and execute a script in one step.
+    pub fn eval(&mut self, script: &str) -> Result<Value> {
+        self.ast = Some(
+            self.engine
+                .compile(script)
+                .map_err(|e| {
+                    rust_agent_core::AgentError::WorkflowError(format!(
+                        "Rhai script compilation error: {}",
+                        e
+                    ))
+                })?
+        );
+
+        self.run()
+    }
+
+    /// Evaluate an expression and return the Dynamic value.
+    pub fn eval_expression(&mut self, expr: &str) -> Result<Dynamic> {
+        let ast = self.engine.compile_expression(expr).map_err(|e| {
+            rust_agent_core::AgentError::WorkflowError(format!(
+                "Rhai expression compilation error: {}",
+                e
+            ))
+        })?;
+        self.engine
+            .eval_ast_with_scope::<Dynamic>(&mut self.scope, &ast)
+            .map_err(|e| {
+                rust_agent_core::AgentError::WorkflowError(format!(
+                    "Rhai expression evaluation error: {}",
+                    *e
+                ))
+            })
+    }
+
+    /// Get a variable from the scope.
+    pub fn get_variable(&self, name: &str) -> Option<Dynamic> {
+        self.scope.get_value(name)
+    }
+
+    /// Mutable access to the engine (advanced: for dynamic function registration).
+    pub fn engine_mut(&mut self) -> &mut Engine {
+        &mut self.engine
+    }
+
+    /// Mutable access to the scope.
+    pub fn scope_mut(&mut self) -> &mut Scope<'static> {
+        &mut self.scope
+    }
+}
+
+impl Default for RhaiRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── JSON ↔ Dynamic conversions ──
+
+/// Convert serde_json::Value to rhai::Dynamic.
+pub fn json_to_dynamic_val(value: &Value) -> Dynamic {
+    json_to_dynamic(value)
+}
+
+/// Convert rhai::Dynamic to serde_json::Value.
+pub fn dynamic_to_json_val(dynamic: &Dynamic) -> Value {
+    dynamic_to_json(dynamic)
+}
+
+fn json_to_dynamic(value: &Value) -> Dynamic {
+    match value {
+        Value::Null => Dynamic::UNIT,
+        Value::Bool(b) => Dynamic::from_bool(*b),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Dynamic::from_int(i)
+            } else if let Some(f) = n.as_f64() {
+                Dynamic::from_float(f)
+            } else {
+                Dynamic::UNIT
+            }
+        }
+        Value::String(s) => Dynamic::from(s.clone()),
+        Value::Array(arr) => {
+            let mut ary = rhai::Array::with_capacity(arr.len());
+            for item in arr {
+                ary.push(json_to_dynamic(item));
+            }
+            Dynamic::from_array(ary)
+        }
+        Value::Object(obj) => {
+            let mut map = rhai::Map::new();
+            for (k, v) in obj {
+                map.insert(k.clone().into(), json_to_dynamic(v));
+            }
+            Dynamic::from_map(map)
+        }
+    }
+}
+
+fn dynamic_to_json(dynamic: &Dynamic) -> Value {
+    if dynamic.is::<rhai::Map>() {
+        let map = dynamic.clone().cast::<rhai::Map>();
+        let mut obj = serde_json::Map::new();
+        for (k, v) in map {
+            obj.insert(k.to_string(), dynamic_to_json(&v));
+        }
+        Value::Object(obj)
+    } else if dynamic.is::<rhai::Array>() {
+        let arr = dynamic.clone().cast::<rhai::Array>();
+        let values: Vec<Value> = arr.iter().map(dynamic_to_json).collect();
+        Value::Array(values)
+    } else if dynamic.is::<bool>() {
+        Value::Bool(dynamic.as_bool().unwrap_or(false))
+    } else if dynamic.is::<i64>() {
+        Value::Number(dynamic.as_int().unwrap_or(0).into())
+    } else if dynamic.is::<f64>() {
+        match dynamic.as_float() {
+            Ok(f) => serde_json::Number::from_f64(f)
+                .map(Value::Number)
+                .unwrap_or(Value::Null),
+            Err(_) => Value::Null,
+        }
+    } else if dynamic.is::<rhai::ImmutableString>() {
+        Value::String(dynamic.clone().into_string().unwrap_or_default())
+    } else if dynamic.is_unit() {
+        Value::Null
+    } else {
+        Value::String(format!("{:?}", dynamic))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_execution() {
+        let mut rt = RhaiRuntime::new();
+        rt.with_script("42");
+        let result = rt.run().unwrap();
+        assert_eq!(result, Value::Number(serde_json::Number::from(42)));
+    }
+
+    #[test]
+    fn test_string_result() {
+        let mut rt = RhaiRuntime::new();
+        rt.with_script(r#""hello world""#);
+        let result = rt.run().unwrap();
+        assert_eq!(result, Value::String("hello world".to_string()));
+    }
+
+    #[test]
+    fn test_variable_injection() {
+        let mut rt = RhaiRuntime::new();
+        rt.with_variable("x", Dynamic::from(10_i64))
+          .with_variable("y", Dynamic::from(20_i64))
+          .with_script("x + y");
+        let result = rt.run().unwrap();
+        assert_eq!(result, Value::Number(serde_json::Number::from(30)));
+    }
+
+    #[test]
+    fn test_json_variable() {
+        let mut rt = RhaiRuntime::new();
+        rt.with_json_variable("data", serde_json::json!({"name": "test", "count": 5}))
+          .with_script("json_get(data, \"name\")");
+        let result = rt.run().unwrap();
+        assert_eq!(result, Value::String("test".to_string()));
+    }
+
+    #[test]
+    fn test_expression_eval() {
+        let mut rt = RhaiRuntime::new();
+        rt.with_variable("x", Dynamic::from(10_i64));
+        let result = rt.eval_expression("x * 3").unwrap();
+        assert_eq!(result.as_int().unwrap(), 30);
+    }
+
+    #[test]
+    fn test_sandbox_no_eval() {
+        let mut rt = RhaiRuntime::new();
+        rt.with_script("eval(\"42\")");
+        let result = rt.run();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_max_operations() {
+        let mut rt = RhaiRuntime::new();
+        rt.max_operations(100)
+          .with_script("for i in 0..1000 { let x = i; }");
+        let result = rt.run();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_conversion_roundtrip() {
+        let original = serde_json::json!({
+            "name": "test",
+            "count": 42,
+            "nested": {"key": "value"},
+            "list": [1, 2, 3]
+        });
+        let dynamic = json_to_dynamic_val(&original);
+        let back = dynamic_to_json_val(&dynamic);
+        assert_eq!(original, back);
+    }
+}

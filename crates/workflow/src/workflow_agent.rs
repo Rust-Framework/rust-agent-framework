@@ -295,10 +295,6 @@ impl IAgent for WorkflowAgent {
             .cloned()
     }
 
-    fn list_subagents(&self) -> Vec<Arc<dyn IAgent>> {
-        self.sub_agents.clone()
-    }
-
     async fn reset(&self) -> Result<()> {
         for agent in &self.sub_agents {
             agent.reset().await?;

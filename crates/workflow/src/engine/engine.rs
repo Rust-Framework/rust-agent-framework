@@ -5,6 +5,7 @@ use futures_util::StreamExt;
 use rust_agent_core::{BoxStream, ISession, Result};
 use tokio::sync::broadcast;
 
+use crate::checkpoint::{CheckpointManager, ScopeKey};
 use crate::executor::{HandlerResult, NodeProgress};
 use crate::graph::WorkflowGraph;
 
@@ -25,6 +26,7 @@ pub struct WorkflowEngine {
     graph: Arc<WorkflowGraph>,
     edge_runners: HashMap<String, Arc<dyn IEdgeRunner>>,
     event_tx: broadcast::Sender<WorkflowEvent>,
+    checkpoint_manager: Option<Arc<CheckpointManager>>,
 }
 
 impl WorkflowEngine {
@@ -44,7 +46,14 @@ impl WorkflowEngine {
             graph: Arc::new(graph),
             edge_runners,
             event_tx,
+            checkpoint_manager: None,
         }
+    }
+
+    /// 配置检查点管理器，启用工作流故障恢复
+    pub fn with_checkpoint_manager(mut self, manager: Arc<CheckpointManager>) -> Self {
+        self.checkpoint_manager = Some(manager);
+        self
     }
 
     // ═══ 核心 API ═══
@@ -64,6 +73,7 @@ impl WorkflowEngine {
         let graph = self.graph.clone();
         let event_tx = self.event_tx.clone();
         let edge_runners_map = self.edge_runners.clone();
+        let checkpoint_manager = self.checkpoint_manager.clone();
 
         // 后台执行
         tokio::spawn(async move {
@@ -74,6 +84,7 @@ impl WorkflowEngine {
                 output_tx,
                 initial_message,
                 session,
+                checkpoint_manager,
             )
             .await
             {
@@ -112,6 +123,7 @@ impl WorkflowEngine {
         output_tx: tokio::sync::mpsc::Sender<Result<WorkflowOutput>>,
         initial_message: Box<dyn std::any::Any + Send + Sync>,
         session: Option<Arc<dyn ISession>>,
+        checkpoint_manager: Option<Arc<CheckpointManager>>,
     ) -> Result<()> {
         // 构建 executor map（用于 edge_runner chase）
         let executor_map: HashMap<String, Arc<dyn crate::executor::IExecutor>> = graph
@@ -120,13 +132,43 @@ impl WorkflowEngine {
             .map(|(id, node)| (id.clone(), node.executor.clone()))
             .collect();
 
+        // 生成图指纹（用于 checkpoint 校验图结构一致性）
+        let graph_fingerprint = compute_graph_fingerprint(&graph);
+        let node_count = graph.nodes().len();
+
+        tracing::debug!(
+            node_count,
+            fingerprint = %graph_fingerprint,
+            start_node = %graph.start_node_id(),
+            has_checkpoint = checkpoint_manager.is_some(),
+            "WorkflowEngine::execute_loop starting"
+        );
+
+        // 用于收集 executor 写入的状态（供 checkpoint 保存）
+        let state_map: Arc<tokio::sync::Mutex<HashMap<String, serde_json::Value>>> =
+            Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+
+        let session_id = session
+            .as_ref()
+            .map(|s| s.session_id().to_string())
+            .unwrap_or_default();
+
+        // checkpoint: 创建初始检查点
+        if let Some(ref cp) = checkpoint_manager {
+            tracing::debug!(
+                session_id = %session_id,
+                fingerprint = %graph_fingerprint,
+                "Checkpoint: create_initial"
+            );
+            if let Err(e) = cp.create_initial(&session_id, &graph_fingerprint).await {
+                tracing::warn!(error = %e, "Failed to create initial checkpoint");
+            }
+        }
+
         // 发送 WorkflowStarted 事件
         let node_ids: Vec<String> = graph.nodes().keys().cloned().collect();
         let _ = event_tx.send(WorkflowEvent::WorkflowStarted {
-            session_id: session
-                .as_ref()
-                .map(|s| s.session_id().to_string())
-                .unwrap_or_default(),
+            session_id: session_id.clone(),
             graph_node_ids: node_ids,
             start_node_id: graph.start_node_id().to_string(),
         });
@@ -150,6 +192,12 @@ impl WorkflowEngine {
             let current_step_number = step_ctx.step_number;
 
             let active_nodes = step_ctx.active_nodes();
+            tracing::debug!(
+                step = current_step_number,
+                active_node_count = active_nodes.len(),
+                active_nodes = %active_nodes.join(", "),
+                "SuperStep: entering"
+            );
             let _ = event_tx.send(WorkflowEvent::SuperStepStarted {
                 step_number: current_step_number,
                 active_nodes: active_nodes.clone(),
@@ -169,6 +217,13 @@ impl WorkflowEngine {
                     None => continue,
                 };
 
+                tracing::debug!(
+                    node_id = %node_id,
+                    message_count = messages.len(),
+                    step = current_step_number,
+                    "Node: dispatching messages"
+                );
+
                 total_nodes += 1;
 
                 let executor = node.executor.clone();
@@ -176,6 +231,7 @@ impl WorkflowEngine {
                 let output_tx_clone = output_tx.clone();
                 let session_clone = session.clone();
                 let node_label = node_id.clone();
+                let state_map_clone = state_map.clone();
 
                 let handle = tokio::spawn(async move {
                     let _ = event_tx_clone.send(WorkflowEvent::NodeInvoking {
@@ -204,6 +260,7 @@ impl WorkflowEngine {
                         let work_ctx = EngineWorkContext {
                             node_id: node_label.clone(),
                             session: session_clone.clone(),
+                            state_map: state_map_clone.clone(),
                         };
 
                         match executor.handle(env.content, &work_ctx, progress_tx).await {
@@ -256,9 +313,15 @@ impl WorkflowEngine {
             }
 
             // 等待所有节点完成并路由消息
+            let mut routed_total = 0usize;
             for handle in handles {
                 match handle.await {
                     Ok(Ok((source_node_id, messages, _is_output))) => {
+                        tracing::debug!(
+                            node_id = %source_node_id,
+                            output_message_count = messages.len(),
+                            "Node: completed"
+                        );
                         for msg in messages {
                             let type_name = std::any::type_name_of_val(&msg);
                             let env = MessageEnvelope::new(
@@ -275,8 +338,14 @@ impl WorkflowEngine {
                                     for delivery in deliveries {
                                         let mut routed_env = delivery.envelope;
                                         routed_env.target_node_id =
-                                            Some(delivery.target_node_id);
+                                            Some(delivery.target_node_id.clone());
+                                        tracing::debug!(
+                                            source = %source_node_id,
+                                            target = %delivery.target_node_id,
+                                            "Edge: message routed"
+                                        );
                                         next_step_ctx.enqueue(routed_env);
+                                        routed_total += 1;
                                     }
                                 }
                             }
@@ -306,6 +375,46 @@ impl WorkflowEngine {
                 outputs_count: 0,
             });
 
+            tracing::debug!(
+                step = current_step_number,
+                nodes_processed = total_nodes,
+                messages_routed = routed_total,
+                next_step_messages = next_step_ctx.message_count(),
+                "SuperStep: completed"
+            );
+
+            // checkpoint: 提交当前 step 的状态快照
+            if let Some(ref cp) = checkpoint_manager {
+                let current_state: HashMap<String, serde_json::Value> =
+                    state_map.lock().await.clone();
+                let scope_state: HashMap<ScopeKey, serde_json::Value> = current_state
+                    .into_iter()
+                    .map(|(k, v)| (ScopeKey::private(&k), v))
+                    .collect();
+
+                let state_count = scope_state.len();
+                tracing::debug!(
+                    step = current_step_number,
+                    session_id = %session_id,
+                    state_keys = state_count,
+                    "Checkpoint: commit"
+                );
+
+                if let Err(e) = cp
+                    .commit(
+                        &session_id,
+                        &graph_fingerprint,
+                        scope_state,
+                        HashMap::new(),
+                        Vec::new(),
+                        current_step_number,
+                    )
+                    .await
+                {
+                    tracing::warn!(error = %e, step = current_step_number, "Checkpoint commit failed");
+                }
+            }
+
             step_ctx = next_step_ctx;
         }
 
@@ -314,6 +423,13 @@ impl WorkflowEngine {
             total_nodes,
             total_usage: None,
         });
+
+        tracing::info!(
+            total_steps,
+            total_nodes,
+            session_id = %session_id,
+            "WorkflowEngine::execute_loop completed"
+        );
 
         Ok(())
     }
@@ -345,10 +461,24 @@ fn node_progress_to_chunk(progress: NodeProgress) -> NodeChunk {
     }
 }
 
+/// 计算图结构指纹 — 用于 checkpoint 校验图拓扑一致性
+fn compute_graph_fingerprint(graph: &WorkflowGraph) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let mut node_ids: Vec<&String> = graph.nodes().keys().collect();
+    node_ids.sort();
+    for id in node_ids {
+        id.hash(&mut hasher);
+    }
+    graph.start_node_id().hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
 /// 引擎内部的 WorkContext 实现
 struct EngineWorkContext {
     node_id: String,
     session: Option<Arc<dyn ISession>>,
+    state_map: Arc<tokio::sync::Mutex<HashMap<String, serde_json::Value>>>,
 }
 
 #[async_trait::async_trait]
@@ -369,15 +499,20 @@ impl crate::engine::IWorkflowContext for EngineWorkContext {
         tracing::debug!("Node {} request_halt", self.node_id);
     }
 
-    async fn read_state(&self, _key: &str) -> Result<Option<serde_json::Value>> {
-        Ok(None)
+    async fn read_state(&self, key: &str) -> Result<Option<serde_json::Value>> {
+        let state = self.state_map.lock().await;
+        Ok(state.get(key).cloned())
     }
 
-    async fn write_state(&self, _key: &str, _value: serde_json::Value) -> Result<()> {
+    async fn write_state(&self, key: &str, value: serde_json::Value) -> Result<()> {
+        let mut state = self.state_map.lock().await;
+        state.insert(key.to_string(), value);
         Ok(())
     }
 
-    async fn clear_state(&self, _key: &str) -> Result<()> {
+    async fn clear_state(&self, key: &str) -> Result<()> {
+        let mut state = self.state_map.lock().await;
+        state.remove(key);
         Ok(())
     }
 
@@ -387,5 +522,67 @@ impl crate::engine::IWorkflowContext for EngineWorkContext {
 
     fn session(&self) -> Option<&Arc<dyn ISession>> {
         self.session.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builder::WorkflowBuilder;
+    use crate::checkpoint::CheckpointManager;
+    use crate::checkpoint::store::InMemoryCheckpointStore;
+    use crate::executor::FunctionExecutor;
+    use rust_agent_core::AgentSession;
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+
+    fn init_tracing() {
+        INIT.call_once(|| {
+            let _ = tracing_subscriber::fmt()
+                .with_env_filter("trace")
+                .with_test_writer()
+                .try_init();
+        });
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_create_initial_and_commit_timing() {
+        init_tracing();
+
+        let builder = WorkflowBuilder::new()
+            .add_node("entry", Arc::new(FunctionExecutor::new("entry", |msg: String| {
+                vec![format!("processed: {}", msg)]
+            })))
+            .set_start("entry")
+            .with_output_from("entry");
+
+        let graph = builder.build().expect("should build graph");
+
+        let store = Arc::new(InMemoryCheckpointStore::new());
+        let cp_manager = Arc::new(CheckpointManager::with_default_config(store));
+
+        let engine = WorkflowEngine::new(graph)
+            .with_checkpoint_manager(cp_manager);
+
+        let session: Arc<dyn ISession> = Arc::new(AgentSession::with_id("test-session"));
+
+        let (mut events, _outputs) = engine
+            .run(Box::new("hello".to_string()), Some(session))
+            .await
+            .expect("should start engine");
+
+        // Drain events with timeout (broadcast streams don't close on sender drop)
+        let mut event_count = 0;
+        let timeout = tokio::time::sleep(std::time::Duration::from_secs(2));
+        tokio::pin!(timeout);
+        loop {
+            tokio::select! {
+                Some(_) = events.next() => { event_count += 1; }
+                _ = &mut timeout => { break; }
+            }
+        }
+
+        assert!(event_count > 0, "Should produce workflow events");
     }
 }

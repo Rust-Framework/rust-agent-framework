@@ -164,6 +164,8 @@ pub struct SessionSnapshot {
     pub metadata: SessionMetadata,
     pub messages: Vec<ChatMessage>,
     pub provider_states: ProviderStateStore,
+    /// Last activity timestamp — preserved across serialization for TTL tracking
+    pub last_active_at: Option<DateTime<Utc>>,
 }
 
 /// Default in-memory session implementation
@@ -279,6 +281,7 @@ impl ISession for AgentSession {
             },
             messages: history,
             provider_states: ps,
+            last_active_at: self.last_active_at.try_read().ok().map(|t| *t),
         }
     }
 
@@ -291,13 +294,14 @@ impl ISession for AgentSession {
         let snap: SessionSnapshot = serde_json::from_str(data)
             .map_err(|e| AgentError::Serialize(e.to_string()))?;
         let created_at = snap.metadata.created_at;
+        let last_active = snap.last_active_at.unwrap_or(created_at);
         Ok(Self {
             session_id: snap.session_id,
             history: RwLock::new(snap.messages),
             metadata: RwLock::new(snap.metadata),
             provider_states: RwLock::new(snap.provider_states),
             created_at,
-            last_active_at: RwLock::new(created_at),
+            last_active_at: RwLock::new(last_active),
         })
     }
 

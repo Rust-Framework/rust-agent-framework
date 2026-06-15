@@ -28,10 +28,17 @@ pub trait IAgent: Send + Sync {
     ) -> Result<BoxStream<'static, Result<AgentResponseResult>>>;
 
     /// Get a sub-agent by id.
-    fn get_subagent(&self, id: &AgentId) -> Option<Arc<dyn IAgent>>;
-
-    /// List all sub-agents.
-    fn list_subagents(&self) -> Vec<Arc<dyn IAgent>>;
+    ///
+    /// Sub-agents enable multi-agent orchestration — a parent agent can
+    /// delegate to child agents, and frontends can discover the agent tree
+    /// to provide interactive sub-agent inspection, streaming output, and
+    /// execution status tracking.
+    ///
+    /// Default returns `None`. Override in agents that manage child agents
+    /// (e.g., `GraphFlow`, `WorkflowAgent`).
+    fn get_subagent(&self, _id: &AgentId) -> Option<Arc<dyn IAgent>> {
+        None
+    }
 
     /// Reset the agent's internal state.
     async fn reset(&self) -> Result<()>;

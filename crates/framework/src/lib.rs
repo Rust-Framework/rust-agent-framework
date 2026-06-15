@@ -13,15 +13,12 @@ pub mod tools;
 
 pub use agent_host::AgentHost;
 pub use agent_runtime::AgentRuntime;
-#[allow(deprecated)]
-pub use agents::tool_loop_agent::ToolLoopAgent;
 pub use builder::AgentBuilder;
 pub use chat_client_agent::ChatClientAgent;
 pub use context_providers::history_provider::InMemoryHistoryProvider;
 pub use context_providers::memory_provider::{MemoryContextProvider, MemoryMode};
 pub use chat_client_decorators::FunctionInvokingChatClient;
-// TODO: pending in another task
-// pub use chat_client_decorators::PerServiceCallPersistingChatClient;
+pub use chat_client_decorators::PerServiceCallPersistingChatClient;
 pub use compression::SlidingWindowStrategy;
 pub use compression::TokenBudgetStrategy;
 pub use compression::CompressionPipeline;

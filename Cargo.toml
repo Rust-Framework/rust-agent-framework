@@ -6,6 +6,9 @@ members = [
     "crates/workflow",
     "crates/cli",
     "crates/macros",
+    "crates/rhai",
+    "crates/decl",
+    "crates/workflow-cli",
 ]
 resolver = "2"
 
@@ -23,6 +26,8 @@ rust-agent-client = { path = "crates/client", version = "0.1.0" }
 rust-agent-framework = { path = "crates/framework", version = "0.1.0" }
 rust-agent-workflow = { path = "crates/workflow", version = "0.1.0" }
 rust-agent-macros = { path = "crates/macros", version = "0.1.0" }
+rust-agent-rhai = { path = "crates/rhai", version = "0.1.0" }
+rust-agent-decl = { path = "crates/decl", version = "0.1.0" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
@@ -60,6 +65,9 @@ parking_lot = "0.12"
 
 # UUID generation
 uuid = { version = "1", features = ["v4"] }
+
+# Scripting
+rhai = "~1.19"
 
 # Stream wrappers
 tokio-stream = { version = "0.1", features = ["sync"] }

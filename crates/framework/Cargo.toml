@@ -26,6 +26,9 @@ walkdir = "2"
 reqwest = { workspace = true }
 tarzi = "0.1"
 
+[dev-dependencies]
+tempfile = "3"
+
 [features]
 default = []
 tiktoken = ["dep:tiktoken-rs"]

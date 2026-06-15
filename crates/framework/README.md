@@ -4,7 +4,7 @@ Agent runtime and orchestration layer — the core engine that assembles `IChatC
 
 ## Role
 
-Implements `IAgent` with full lifecycle management including context provider chains, LLM invocation, streaming response conversion, and auto tool-calling loops. Provides 13 built-in tools and a fluent `AgentBuilder`.
+Implements `IAgent` with full lifecycle management including context provider chains, LLM invocation, streaming response conversion, and auto tool-calling via ChatClient pipeline decorators. Provides 13 built-in tools and a fluent `AgentBuilder`.
 
 ## Components
 
@@ -18,22 +18,27 @@ The primary `IAgent` implementation. Orchestrates a 3-phase pipeline:
 
 The converter (`AgentResponseConverter`) maps internal `AgentResponseUpdate` deltas to public `AgentResponseResult` chunks with full tool call lifecycle support.
 
-### [`ToolLoopAgent`](src/agents/tool_loop_agent.rs)
+### [`FunctionInvokingChatClient`](src/chat_client_decorators/function_invoking.rs)
 
-Wraps any inner `IAgent` and implements the auto tool-calling loop:
+ChatClient pipeline decorator implementing the auto tool-calling loop following MAF's `FunctionInvokingChatClient` pattern:
 
-1. Calls inner agent, forwarding text deltas in real time (typing effect)
-2. Buffers tool call chunks until stream ends
+1. Calls inner `IChatClient`, forwarding text deltas in real time (typing effect)
+2. Accumulates `ToolCallStart`/`ToolCallArgs`/`ToolCallEnd` streaming events
 3. Executes all tools **in parallel** via `join_all()`
-4. Persists `assistant(tool_calls)` + `tool(result)` messages to session
-5. Feeds results back as new messages for the next loop iteration
+4. Builds accumulated messages (assistant tool_calls + tool results) for the next iteration
+5. Feeds results back as new messages for the next loop iteration via `msg_tx`/`msg_rx` channel
 6. Capped at `max_rounds` (default: 10)
+7. Filters out internal `Finish(ToolCalls)` signals from consumer output
 
 State machine uses `futures_util::stream::unfold` with `LoopState::{Looping, Streaming, Done}`.
 
+### [`PerServiceCallPersistingChatClient`](src/chat_client_decorators/per_service_call_persisting.rs)
+
+ChatClient pipeline decorator that triggers persistence after each LLM service call, ensuring intermediate state is saved during tool loops.
+
 ### [`AgentBuilder`](src/builder.rs)
 
-Fluent builder that constructs the agent stack:
+Fluent builder that constructs the agent with ChatClient pipeline:
 
 ```rust
 let agent: Arc<dyn IAgent> = AgentBuilder::new("my-agent")
@@ -48,7 +53,7 @@ let agent: Arc<dyn IAgent> = AgentBuilder::new("my-agent")
 
 Build process:
 1. Creates `ChatClientAgent` with instructions, tools, context providers
-2. If tools are present, wraps in `ToolLoopAgent`
+2. If tools are present, wraps `IChatClient` in `FunctionInvokingChatClient` via `ChatClientBuilder` pipeline
 3. Returns `Arc<dyn IAgent>`
 
 Defaults:
@@ -59,6 +64,18 @@ Key methods:
 - `with_history_provider()` — replace the built-in history provider (e.g. with Redis-backed)
 - `add_context_provider()` — append a provider to the chain after history
 - `with_tool()` — add a tool to the registry
+- `with_compression_strategy()` — configure context compression
+- `with_token_counter()` — configure token counting for compression
+
+### [`AgentHost`](src/agent_host.rs)
+
+Session registry and lifecycle management following MAF's `AIHostAgent` pattern:
+
+```rust
+let host = AgentHost::new(agent, session_store);
+let session = host.get_or_create_session("conv-123").await?;
+let stream = host.run(messages, session, None).await?;
+```
 
 ### [`AgentRuntime`](src/agent_runtime.rs)
 
