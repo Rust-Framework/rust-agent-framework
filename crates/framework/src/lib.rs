@@ -1,3 +1,4 @@
+pub mod memory;
 pub mod agent_host;
 pub mod agent_runtime;
 pub mod agents;
@@ -16,9 +17,9 @@ pub use agent_runtime::AgentRuntime;
 pub use builder::AgentBuilder;
 pub use chat_client_agent::ChatClientAgent;
 pub use context_providers::history_provider::InMemoryHistoryProvider;
-pub use context_providers::skills_provider::{
-    AgentSkill, AgentSkillScriptRunner, AgentSkillsProvider, SkillMetadata, SubprocessScriptRunner,
-};
+pub use context_providers::agent_skill::{AgentSkill, SkillMetadata};
+pub use context_providers::script_runner::{AgentSkillScriptRunner, SubprocessScriptRunner};
+pub use context_providers::skills_provider::AgentSkillsProvider;
 pub use chat_client_decorators::FunctionInvokingChatClient;
 pub use chat_client_decorators::PerServiceCallPersistingChatClient;
 pub use compression::SlidingWindowStrategy;

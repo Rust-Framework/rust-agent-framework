@@ -11,8 +11,11 @@ description = "Pure Rust web search library — DuckDuckGo multi-backend, SearXN
 # Async runtime
 tokio = { workspace = true }
 
-# HTTP client
+# HTTP client (for search backends only)
 reqwest = { workspace = true }
+
+# Servo-based browser fetch engine (JS rendering + layout-aware extraction)
+servo-fetch = "0.12"
 
 # Serialization
 serde = { workspace = true }
@@ -24,14 +27,8 @@ tracing = { workspace = true }
 # Async concurrency
 futures-util = { workspace = true }
 
-# HTML parsing (CSS selector based, Servo engine)
+# HTML parsing (CSS selector based, for search result parsing only)
 scraper = "0.22"
-
-# Cookie store for session management
-cookie_store = "0.22"
-
-# Character encoding detection (Firefox's encoding library)
-encoding_rs = "0.8"
 
 # Random number generation (UA rotation, jitter)
 rand = "0.8"

@@ -68,3 +68,29 @@ impl From<url::ParseError> for SearchError {
         SearchError::Parse(format!("URL parse error: {e}"))
     }
 }
+
+impl From<servo_fetch::Error> for SearchError {
+    fn from(e: servo_fetch::Error) -> Self {
+        match &e {
+            servo_fetch::Error::Timeout { url, timeout } => {
+                SearchError::Timeout(format!("Page load timeout for {url} ({timeout:?})"))
+            }
+            servo_fetch::Error::InvalidUrl { url, reason } => {
+                SearchError::Config(format!("Invalid URL {url}: {reason}"))
+            }
+            servo_fetch::Error::AddressNotAllowed { host } => {
+                SearchError::Network(format!("Address not allowed (SSRF protection): {host}"))
+            }
+            servo_fetch::Error::Engine { url, .. } => {
+                SearchError::Network(format!(
+                    "Servo engine error for {}",
+                    url.as_deref().unwrap_or("unknown URL")
+                ))
+            }
+            servo_fetch::Error::Extract(_) => {
+                SearchError::Parse(format!("Content extraction failed: {e}"))
+            }
+            _ => SearchError::Other(format!("servo-fetch error: {e}")),
+        }
+    }
+}

@@ -1,15 +1,11 @@
 //! 反爬检测模块入口。
 //!
 //! 提供构建反爬增强 HTTP 客户端的工具函数，
-//! 以及 User-Agent 池、速率控制、Cookie 管理、代理管理。
+//! 以及 User-Agent 池、速率控制。
 
-pub mod cookie_mgr;
-pub mod proxy;
 pub mod rate_limiter;
 pub mod user_agent;
 
-pub use cookie_mgr::CookieManager;
-pub use proxy::ProxyManager;
 pub use rate_limiter::RateLimiter;
 pub use user_agent::random_user_agent;
 

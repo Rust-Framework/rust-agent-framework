@@ -22,18 +22,21 @@
 //! - **DuckDuckGo HTML** (`html.duckduckgo.com`) — 通用网页搜索
 //! - **SearXNG** — 需自建实例，聚合 70+ 搜索引擎
 //!
+//! ## 网页抓取
+//!
+//! 基于 servo-fetch（内嵌 Servo 浏览器引擎）实现浏览器级网页渲染和内容提取：
+//! - 真实 JS 执行（SpiderMonkey 引擎）
+//! - 布局感知正文提取（自动去除导航/页脚/广告）
+//! - Markdown 格式输出
+//! - SPA 页面水合等待
+//!
 //! ## 反爬机制
 //!
 //! - User-Agent 池轮换
 //! - 速率控制 + 随机抖动
-//! - Cookie / Session 管理
-//! - HTTP / SOCKS5 代理支持
 
 pub mod anti_detection;
 pub mod bing;
-pub mod content_extractor;
-pub mod duckduckgo;
-pub mod encoding;
 pub mod error;
 pub mod fetcher;
 pub mod html_utils;
@@ -42,13 +45,12 @@ pub mod searcher;
 pub mod searxng;
 pub mod types;
 
+pub mod duckduckgo;
+
 // ── 重新导出核心公共 API ──
 
-pub use anti_detection::{CookieManager, ProxyManager, RateLimiter};
+pub use anti_detection::{RateLimiter, random_user_agent};
 pub use bing::search_bing;
-pub use content_extractor::extract_main_content;
-pub use duckduckgo::{search_html, search_instant_answer, search_lite};
-pub use encoding::{decode_bytes, parse_content_type_charset, parse_meta_charset};
 pub use error::SearchError;
 pub use fetcher::fetch_page;
 pub use probe::{clear_cache as clear_probe_cache, BackendKind, Reachability};

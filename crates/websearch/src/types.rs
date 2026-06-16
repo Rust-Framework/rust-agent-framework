@@ -113,23 +113,31 @@ impl SearchConfig {
 /// 网页抓取配置。
 #[derive(Debug, Clone)]
 pub struct FetchConfig {
-    /// 超时时间（秒，默认 15）
+    /// 超时时间（秒，默认 30）
     pub timeout_secs: u64,
     /// 最大内容长度（字节，默认 50KB）
     pub max_content_bytes: usize,
-    /// HTTP/SOCKS5 代理地址
+    /// HTTP/SOCKS5 代理地址（仅搜索后端使用，servo-fetch 通过环境变量处理代理）
     pub proxy_url: Option<String>,
     /// 最小请求间隔（毫秒）
     pub min_interval_ms: u64,
+    /// 自定义 User-Agent（默认使用随机 UA）
+    pub user_agent: Option<String>,
+    /// SPA 水合等待时间（毫秒，默认 0）。
+    ///
+    /// 页面 load 事件后额外等待的时间，用于 SPA/JS 渲染页面。
+    pub settle_ms: u64,
 }
 
 impl Default for FetchConfig {
     fn default() -> Self {
         Self {
-            timeout_secs: 15,
+            timeout_secs: 30,
             max_content_bytes: 50 * 1024,
             proxy_url: None,
             min_interval_ms: 1000,
+            user_agent: None,
+            settle_ms: 0,
         }
     }
 }
