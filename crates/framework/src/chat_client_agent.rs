@@ -308,6 +308,7 @@ impl IAgent for ChatClientAgent {
 
                 let mut text = String::new();
                 let mut tool_calls = Vec::new();
+                let mut tool_results: Vec<(String, Option<String>, Option<String>)> = Vec::new();
                 let mut source_agent_id = None;
                 let mut finish_reason = None;
                 for chunk in collected.iter().flatten() {
@@ -319,6 +320,9 @@ impl IAgent for ChatClientAgent {
                                 id: c.call_id.clone(), name: c.name.clone(), arguments: c.arguments.clone(),
                             });
                             if source_agent_id.is_none() { source_agent_id = c.meta.agent_id.clone(); }
+                        }
+                        if let Content::ToolCalled(c) = content {
+                            tool_results.push((c.call_id.clone(), c.result.clone(), c.error.clone()));
                         }
                     }
                 }
@@ -336,7 +340,32 @@ impl IAgent for ChatClientAgent {
                             tracing::warn!(provider = %provider.name(), error = %e, "on_invoked failed");
                         }
                     }
-                    if !response.text.is_empty() && response.tool_calls.is_empty() {
+
+                    // Persist assistant message and tool interaction to session
+                    if !response.tool_calls.is_empty() {
+                        // Persist assistant message with tool_calls
+                        if let Err(e) = sess.add_message(ChatMessage::assistant_with_tools(
+                            response.text.clone(),
+                            response.tool_calls.clone(),
+                        )).await {
+                            tracing::warn!(error = %e, "Failed to persist assistant+tool_calls message to session");
+                        }
+                        // Persist tool result messages
+                        for tc in &response.tool_calls {
+                            let result_content = tool_results.iter()
+                                .find(|(id, _, _)| id == &tc.id)
+                                .and_then(|(_, result, error)| {
+                                    error.clone().or_else(|| result.clone())
+                                })
+                                .unwrap_or_default();
+                            if let Err(e) = sess.add_message(ChatMessage::tool(
+                                result_content,
+                                &tc.id,
+                            )).await {
+                                tracing::warn!(error = %e, "Failed to persist tool result message to session");
+                            }
+                        }
+                    } else if !response.text.is_empty() {
                         if let Err(e) = sess.add_message(ChatMessage::assistant(response.text.clone())).await {
                             tracing::warn!(error = %e, "Failed to persist assistant message to session");
                         }

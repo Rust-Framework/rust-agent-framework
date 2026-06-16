@@ -1,0 +1,52 @@
+[package]
+name = "rust-agent-wiki"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "File-system based wiki engine with full-text search, typed pages, and concept graphs"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+tokio-util = "0.7"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+toml = "1.1"
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Date/time
+chrono = { workspace = true }
+
+# Regex, file traversal (shared)
+regex = { workspace = true }
+walkdir = { workspace = true }
+
+# Full-text search
+tantivy = "0.22"
+
+# Graph
+petgraph = "0.6"
+
+# JSON Schema validation
+jsonschema = "0.18"
+
+# Hashing
+sha2 = "0.10"
+hex = "0.4"
+
+# File system monitoring
+notify = "8"
+
+[dev-dependencies]
+tempfile = "3"

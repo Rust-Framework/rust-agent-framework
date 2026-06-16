@@ -6,7 +6,7 @@
 use crate::error::SearchError;
 use crate::types::{SearchConfig, SearchResult, SearchResults, SearchSource};
 use serde::Deserialize;
-use tracing::warn;
+use tracing::{debug, warn};
 
 /// 公共 SearXNG 实例列表（需验证可用性）。
 ///
@@ -66,16 +66,30 @@ pub async fn search_searxng(
         match try_searxng_search(query, &url, config).await {
             Ok(results) => return Ok(results),
             Err(e) => {
-                warn!("SearXNG instance {} failed: {}", instance_url, e);
+                debug!("SearXNG instance {} failed, trying next: {}", instance_url, e);
                 last_error = Some(e);
             }
         }
+    }
+
+    if instances.len() > 1 {
+        warn!("All {} SearXNG instances failed for query: {:?}", instances.len(), query);
     }
 
     Err(last_error.unwrap_or(SearchError::NoResults))
 }
 
 async fn try_searxng_search(
+    query: &str,
+    search_url: &str,
+    config: &SearchConfig,
+) -> Result<SearchResults, SearchError> {
+    crate::anti_detection::retry_request("SearXNG", 1, || async {
+        try_searxng_search_inner(query, search_url, config).await
+    }).await
+}
+
+async fn try_searxng_search_inner(
     query: &str,
     search_url: &str,
     config: &SearchConfig,

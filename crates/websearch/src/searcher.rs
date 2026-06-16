@@ -90,7 +90,7 @@ async fn try_duckduckgo(
             debug!("DuckDuckGo Lite succeeded: {} results", results.results.len());
             return Ok(results);
         }
-        Err(e) => warn!("DuckDuckGo Lite failed: {e}"),
+        Err(e) => debug!("DuckDuckGo Lite failed, trying next: {e}"),
     }
 
     // Instant Answer
@@ -102,7 +102,7 @@ async fn try_duckduckgo(
             );
             return Ok(results);
         }
-        Err(e) => warn!("DuckDuckGo Instant Answer failed: {e}"),
+        Err(e) => debug!("DuckDuckGo Instant Answer failed, trying next: {e}"),
     }
 
     // HTML
@@ -111,7 +111,7 @@ async fn try_duckduckgo(
             debug!("DuckDuckGo HTML succeeded: {} results", results.results.len());
             return Ok(results);
         }
-        Err(e) => warn!("DuckDuckGo HTML failed: {e}"),
+        Err(e) => debug!("DuckDuckGo HTML failed: {e}"),
     }
 
     Err(SearchError::NoResults)
@@ -125,7 +125,7 @@ async fn fallback_search(
     // 1. DuckDuckGo
     match try_duckduckgo(query, config).await {
         Ok(results) => return Ok(results),
-        Err(_) => {}
+        Err(_) => debug!("All DuckDuckGo backends failed, trying Bing CN"),
     }
 
     // 2. Bing CN
@@ -134,7 +134,7 @@ async fn fallback_search(
             debug!("Bing CN succeeded: {} results", results.results.len());
             return Ok(results);
         }
-        Err(e) => warn!("Bing CN failed: {e}"),
+        Err(e) => debug!("Bing CN failed, trying SearXNG: {e}"),
     }
 
     // 3. SearXNG
@@ -144,9 +144,10 @@ async fn fallback_search(
                 debug!("SearXNG succeeded: {} results", results.results.len());
                 return Ok(results);
             }
-            Err(e) => warn!("SearXNG failed: {e}"),
+            Err(e) => debug!("SearXNG failed: {e}"),
         }
     }
 
+    warn!("All search backends failed for query: {:?}", query);
     Err(SearchError::NoResults)
 }

@@ -15,6 +15,15 @@ pub async fn search_html(
     query: &str,
     config: &SearchConfig,
 ) -> Result<SearchResults, SearchError> {
+    crate::anti_detection::retry_request("DuckDuckGo HTML", 1, || async {
+        search_html_inner(query, config).await
+    }).await
+}
+
+async fn search_html_inner(
+    query: &str,
+    config: &SearchConfig,
+) -> Result<SearchResults, SearchError> {
     let client = crate::anti_detection::build_client(config)?;
 
     let response = client

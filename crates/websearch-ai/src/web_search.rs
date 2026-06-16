@@ -4,6 +4,23 @@ use std::hash::{Hash, Hasher};
 const DEFAULT_COUNT: i64 = 5;
 const MAX_COUNT: i64 = 10;
 
+/// 从环境变量构建 SearchConfig，支持运行时配置代理和 SearXNG 实例。
+fn build_search_config(count: usize) -> rust_websearch::SearchConfig {
+    let mut config = rust_websearch::SearchConfig::new(count);
+
+    // 从环境变量读取代理配置
+    if let Ok(proxy) = std::env::var("WEBSEARCH_PROXY_URL") {
+        config.proxy_url = Some(proxy);
+    }
+
+    // 从环境变量读取 SearXNG 实例地址
+    if let Ok(searxng) = std::env::var("WEBSEARCH_SEARXNG_URL") {
+        config.searxng_url = Some(searxng);
+    }
+
+    config
+}
+
 #[tool(description = "Searches the web using DuckDuckGo/Bing/SearXNG multi-backend engine and returns a list of results with title, URL, and snippet. No API key required. Use this to find information and URLs, then use web_fetch(url) to get the full content of any result.")]
 async fn web_search(
     #[param(desc = "Search query")] query: String,
@@ -13,10 +30,16 @@ async fn web_search(
         .unwrap_or(DEFAULT_COUNT)
         .clamp(1, MAX_COUNT) as usize;
 
-    let config = rust_websearch::SearchConfig::new(count);
+    let config = build_search_config(count);
 
     match rust_websearch::search(&query, &config).await {
         Ok(search_results) => {
+            tracing::info!(
+                query = %query,
+                count = search_results.results.len(),
+                source = ?search_results.source,
+                "web_search succeeded"
+            );
             let results: Vec<serde_json::Value> = search_results
                 .results
                 .iter()
@@ -52,6 +75,7 @@ async fn web_search(
             result.to_string()
         }
         Err(e) => {
+            tracing::warn!(query = %query, error = %e, "web_search failed");
             let error_str = format!("{e}");
             let suggestion = if error_str.contains("No search results") || error_str.contains("NoResults") {
                 format!("No results found. Try a different query, use simpler keywords, or try searching in English.")

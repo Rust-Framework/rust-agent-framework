@@ -29,7 +29,7 @@ impl RateLimiter {
     /// 注意：锁在 `await` 之前释放，确保 future 是 `Send` 的。
     pub async fn wait(&self, min_interval_ms: u64) {
         let maybe_delay = {
-            let mut last = self.last_request.lock().unwrap();
+            let mut last = self.last_request.lock().unwrap_or_else(|e| e.into_inner());
             let now = Instant::now();
 
             if let Some(last_time) = *last {
@@ -58,7 +58,7 @@ impl RateLimiter {
 
         if let Some(delay) = maybe_delay {
             sleep(delay).await;
-            let mut last = self.last_request.lock().unwrap();
+            let mut last = self.last_request.lock().unwrap_or_else(|e| e.into_inner());
             *last = Some(Instant::now());
         }
     }

@@ -7,7 +7,7 @@ use rust_agent_core::{
     ErrorContent, Event, FinishReason, ReasoningContent, ResponseMetadata,
     StreamingArgsParser, TextContent, ToolCallArgsContent, ToolCallArgsParsedContent,
     ToolCallArgsProgressContent, ToolCallEndContent, ToolCallStartContent,
-    ToolCallingContent, Usage, UsageContent,
+    ToolCalledContent, ToolCallingContent, Usage, UsageContent,
 };
 
 /// Accumulator for streaming tool call deltas, keyed by call_id for parallel tool call support.
@@ -306,6 +306,15 @@ impl AgentResponseConverter {
                 }
             }
 
+            AgentResponseUpdate::ToolCalled { id, result, error } => {
+                contents.push(Content::ToolCalled(ToolCalledContent {
+                    meta: self.build_meta(),
+                    call_id: id,
+                    result,
+                    error,
+                }));
+            }
+
             AgentResponseUpdate::Usage { usage } => {
                 contents.push(Content::Usage(UsageContent {
                     meta: self.build_meta(),
@@ -374,9 +383,13 @@ impl AgentResponseConverter {
             }
         }
 
-        // Flush accumulated tool calls as complete ToolCallingContent when stream
-        // ended with ToolCalls finish_reason.
-        if finish_reason == Some(FinishReason::ToolCalls) {
+        // Flush accumulated tool calls as complete ToolCallingContent.
+        // Flush when the stream ended with ToolCalls (standard case) or Stop
+        // (covers FunctionInvokingChatClient which filters Finish(ToolCalls)
+        // and replaces it with Finish(Stop) after tool execution).
+        if finish_reason == Some(FinishReason::ToolCalls)
+            || finish_reason == Some(FinishReason::Stop)
+        {
             contents.extend(self.flush_tool_calls());
         }
 

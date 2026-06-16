@@ -54,7 +54,13 @@ pub async fn fetch_page(url: &str, config: &FetchConfig) -> Result<FetchedPage, 
     );
 
     // 执行 servo-fetch（async API）
-    let page = servo_fetch::fetch(&opts).await?;
+    let page = match servo_fetch::fetch(&opts).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(url = %url, error = %e, "servo-fetch failed");
+            return Err(SearchError::from(e));
+        }
+    };
 
     // 提取内容：优先 Markdown，降级纯文本
     let content = page
@@ -63,11 +69,11 @@ pub async fn fetch_page(url: &str, config: &FetchConfig) -> Result<FetchedPage, 
 
     let title = page.title.clone().unwrap_or_default();
 
-    tracing::debug!(
+    tracing::info!(
         url = %url,
         title = %title,
         content_len = content.len(),
-        "Page fetched and extracted"
+        "Page fetched successfully"
     );
 
     // 截断处理

@@ -15,6 +15,15 @@ pub async fn search_lite(
     query: &str,
     config: &SearchConfig,
 ) -> Result<SearchResults, SearchError> {
+    crate::anti_detection::retry_request("DuckDuckGo Lite", 1, || async {
+        search_lite_inner(query, config).await
+    }).await
+}
+
+async fn search_lite_inner(
+    query: &str,
+    config: &SearchConfig,
+) -> Result<SearchResults, SearchError> {
     let client = crate::anti_detection::build_client(config)?;
     let form_data = [("q", query), ("kl", "wt-wt")]; // wt-wt = no region redirect
 
@@ -36,6 +45,13 @@ pub async fn search_lite(
     let html = response.text().await.map_err(|e| {
         SearchError::Parse(format!("Failed to read DuckDuckGo Lite response: {e}"))
     })?;
+
+    // 检测 CAPTCHA（Lite 版本也可能触发验证码页面）
+    if html.contains("challenge-form") || html.contains("g-recaptcha") || html.contains("cf-challenge") {
+        return Err(SearchError::Captcha(
+            "DuckDuckGo Lite CAPTCHA detected. Try using a proxy or SearXNG.".into(),
+        ));
+    }
 
     parse_lite_results(&html, query, config.max_results)
 }

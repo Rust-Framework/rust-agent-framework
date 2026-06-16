@@ -386,7 +386,11 @@ impl IChatClient for FunctionInvokingChatClient {
                                 for (i, result) in results.into_iter().enumerate() {
                                     let call_id = tool_calls[i].id.clone();
                                     tracing::trace!(call_id = %call_id, has_error = result.error.is_some(), "Emitting tool result event");
-                                    if tx.send(Ok(AgentResponseUpdate::ToolCallEnd { id: call_id })).await.is_err() {
+                                    if tx.send(Ok(AgentResponseUpdate::ToolCalled {
+                                        id: call_id,
+                                        result: result.result,
+                                        error: result.error,
+                                    })).await.is_err() {
                                         tracing::trace!("Stream consumer dropped during result emission");
                                         return;
                                     }

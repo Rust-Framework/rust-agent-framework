@@ -67,6 +67,8 @@ impl IContextProvider for InMemoryHistoryProvider {
         _response: Option<&AgentResponse>,
         _error: Option<&rust_agent_core::AgentError>,
     ) -> Result<()> {
+        // ChatClientAgent Phase 3 已负责持久化 assistant 消息（含工具调用和工具结果），
+        // 此处只需持久化 user 消息。
         // 使用 session.get_message_count() 实时获取计数（O(1)），
         // 不再在 provider_state 中维护 last_message_count
         let existing_count = session.get_message_count();
@@ -75,12 +77,12 @@ impl IContextProvider for InMemoryHistoryProvider {
             .filter(|m| m.role == MessageRole::System)
             .count();
 
-        // 新增 user/tool 消息（assistant 文本由 ChatClientAgent Phase 3 统一写入）
         let mut new_messages = Vec::new();
         let new_start = system_count.saturating_add(existing_count);
         if new_start < request_messages.len() {
             for msg in &request_messages[new_start..] {
-                if msg.role != MessageRole::System {
+                // Only persist user messages; assistant/tool messages are handled by Phase 3
+                if msg.role == MessageRole::User {
                     new_messages.push(msg.clone());
                 }
             }

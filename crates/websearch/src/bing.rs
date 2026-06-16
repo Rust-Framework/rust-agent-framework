@@ -16,6 +16,15 @@ pub async fn search_bing(
     query: &str,
     config: &SearchConfig,
 ) -> Result<SearchResults, SearchError> {
+    crate::anti_detection::retry_request("Bing CN", 1, || async {
+        search_bing_inner(query, config).await
+    }).await
+}
+
+async fn search_bing_inner(
+    query: &str,
+    config: &SearchConfig,
+) -> Result<SearchResults, SearchError> {
     let client = crate::anti_detection::build_client(config)?;
 
     let response = client
@@ -26,6 +35,21 @@ pub async fn search_bing(
         .await?;
 
     let status = response.status();
+
+    // 检测限流（429 Too Many Requests）
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(SearchError::RateLimited(
+            "Bing CN rate limited (429). Wait a moment and try again.".into(),
+        ));
+    }
+
+    // 检测服务不可用（503）
+    if status == reqwest::StatusCode::SERVICE_UNAVAILABLE {
+        return Err(SearchError::RateLimited(
+            "Bing CN temporarily unavailable (503).".into(),
+        ));
+    }
+
     if status != reqwest::StatusCode::OK {
         return Err(SearchError::HttpStatus {
             code: status.as_u16(),
@@ -36,6 +60,15 @@ pub async fn search_bing(
     let html = response.text().await.map_err(|e| {
         SearchError::Parse(format!("Failed to read Bing CN response: {e}"))
     })?;
+
+    // 检测 CAPTCHA / 验证码页面
+    if html.contains("g-recaptcha") || html.contains("cf-challenge")
+        || html.contains("verifyContainer") || html.contains("bnp_dialog")
+    {
+        return Err(SearchError::Captcha(
+            "Bing CN CAPTCHA or verification detected. Try again later or use a different backend.".into(),
+        ));
+    }
 
     parse_bing_results(&html, query, config.max_results)
 }

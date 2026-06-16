@@ -12,6 +12,7 @@ members = [
     "crates/decl",
     "crates/workflow-cli",
     "crates/rag",
+    "crates/wiki",
 ]
 default-members = [
     "crates/core",
@@ -90,3 +91,12 @@ rhai = "~1.19"
 
 # Stream wrappers
 tokio-stream = { version = "0.1", features = ["sync"] }
+
+# Regex (shared: framework, wiki)
+regex = "1"
+
+# Filesystem traversal (shared: framework, wiki)
+walkdir = "2"
+
+# Testing utilities
+tempfile = "3"

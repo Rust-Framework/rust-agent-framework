@@ -1,12 +1,24 @@
 use rust_agent_macros::tool;
 
+/// 从环境变量构建 FetchConfig，支持运行时配置代理。
+fn build_fetch_config() -> rust_websearch::FetchConfig {
+    let mut config = rust_websearch::FetchConfig::default();
+
+    // 从环境变量读取代理配置
+    if let Ok(proxy) = std::env::var("WEBSEARCH_PROXY_URL") {
+        config.proxy_url = Some(proxy);
+    }
+
+    config
+}
+
 #[tool(description = "Fetches content from a URL and returns it as Markdown. Uses an embedded Servo browser engine for real JavaScript execution and layout-aware content extraction. Automatically strips navigation bars, footers, cookie banners, and ads. Supports Chinese encoding (GBK/GB2312/Big5) and SPA pages. Use settle_ms for JavaScript-heavy sites that need extra time to render.")]
 async fn web_fetch(
     #[param(desc = "The URL to fetch")] url: String,
     #[param(desc = "Maximum content length in bytes (default: 50000)")] max_length: Option<usize>,
     #[param(desc = "Extra wait time in milliseconds after page load for SPA hydration (default: 0, max: 10000)")] settle_ms: Option<u64>,
 ) -> String {
-    let mut config = rust_websearch::FetchConfig::default();
+    let mut config = build_fetch_config();
     if let Some(max_len) = max_length {
         config.max_content_bytes = max_len.clamp(1000, 200_000);
     }
@@ -16,6 +28,12 @@ async fn web_fetch(
 
     match rust_websearch::fetch_page(&url, &config).await {
         Ok(page) => {
+            tracing::info!(
+                url = %url,
+                title = %page.title,
+                content_len = page.content_length,
+                "web_fetch succeeded"
+            );
             let mut result = serde_json::json!({
                 "ok": true,
                 "data": {
@@ -38,6 +56,7 @@ async fn web_fetch(
             result.to_string()
         }
         Err(e) => {
+            tracing::warn!(url = %url, error = %e, "web_fetch failed");
             let error_str = format!("{e}");
             let suggestion = if error_str.contains("Timeout") || error_str.contains("timeout") {
                 format!("The page took too long to load. Try increasing settle_ms or check if the URL is correct.")
@@ -68,7 +87,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_web_fetch_invalid_url() {
-        let result = WebFetch.call("".to_string(), None).await;
+        let result = WebFetch.call("".to_string(), None, None).await;
         assert!(result.contains("\"ok\":false"));
     }
 
