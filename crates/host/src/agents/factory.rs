@@ -1,7 +1,8 @@
 //! Agent factory — create built-in agents from configuration presets.
 
 use std::sync::Arc;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use tracing::warn;
 use rust_agent_core::IAgent;
 use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
 use rust_agent_framework::AgentBuilder;
@@ -19,17 +20,31 @@ impl<'a> AgentFactory<'a> {
     }
 
     /// Create all enabled built-in agents.
+    /// Agents that fail to construct are skipped with a warning.
     pub async fn create_all(&self) -> Result<Vec<Arc<dyn IAgent>>> {
         let mut agents = Vec::new();
 
         if self.config.agents.coding {
-            agents.push(self.create_coding_agent()?);
+            match self.create_coding_agent() {
+                Ok(agent) => agents.push(agent),
+                Err(e) => warn!(error = %e, "Failed to create coding agent, skipping"),
+            }
         }
         if self.config.agents.general {
-            agents.push(self.create_general_agent()?);
+            match self.create_general_agent() {
+                Ok(agent) => agents.push(agent),
+                Err(e) => warn!(error = %e, "Failed to create general agent, skipping"),
+            }
         }
         if self.config.agents.analysis {
-            agents.push(self.create_analysis_agent()?);
+            match self.create_analysis_agent() {
+                Ok(agent) => agents.push(agent),
+                Err(e) => warn!(error = %e, "Failed to create analysis agent, skipping"),
+            }
+        }
+
+        if agents.is_empty() {
+            warn!("No agents were created. Ensure DEEPSEEK_API_KEY (or OPENAI_API_KEY) is set and the provider config is correct.");
         }
 
         Ok(agents)
@@ -40,7 +55,10 @@ impl<'a> AgentFactory<'a> {
         let provider = &self.config.provider;
         let api_key = provider
             .resolve_api_key()
-            .unwrap_or_default();
+            .ok_or_else(|| anyhow!(
+                "No API key configured. Set DEEPSEEK_API_KEY or OPENAI_API_KEY environment variable, \
+                 or configure via CLI: --api-key YOUR_KEY"
+            ))?;
 
         let model = model_override.unwrap_or(&provider.model);
 

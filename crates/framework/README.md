@@ -13,7 +13,7 @@ Agent 运行时与工具层 —— 将 `IChatClient`、`ITool`、`IContextProvid
 - [Agent 技能（Skills）](#agent-技能skills)
 - [上下文压缩](#上下文压缩)
 - [记忆系统（Memory）](#记忆系统memory)
-- [Session 生命周期管理](#session-生命周期管理)
+- [多 Agent 路由](#多-agent-路由)
 - [流式输出处理](#流式输出处理)
 - [内置工具完整说明](#内置工具完整说明)
 - [最佳实践](#最佳实践)
@@ -868,62 +868,9 @@ let agent = AgentBuilder::new("agent")
 
 ---
 
-## Session 生命周期管理
+## 多 Agent 路由
 
-### 设计哲学：与 MAF 一致的原语模式
-
-框架**不提供** `AgentHost` 或 `AgentRuntime` 这样的"托管类"。这是与 MAF 一致的设计决策：
-
-- **何时保存 Session、何时加载、何时清理**是**应用层的编排决策**，不是框架职责。MAF 提供 `Session.SerializeSessionAsync()` / `DeserializeSessionAsync()` 原语，让开发者自行编排
-- **多 Agent 注册与路由**是**服务宿主的职责**。MAF 在 .NET 端通过 DI 容器的 Keyed Service 实现（`builder.AddAIAgent("name", agent)`），本质上是 `HashMap<String, Agent>` 的容器管理版本
-
-框架的职责是提供**接口与类型**：`IAgent`、`AgentId`、`ISession`、`ISessionStore`。应用层用它们自由组合。
-
-### Session 原语：加载、运行、保存
-
-```rust
-use rust_agent_core::{AgentSession, ISession};
-use rust_agent_framework::FileSystemSessionStore;
-use std::sync::Arc;
-
-// 1. 初始化存储后端
-let store = Arc::new(FileSystemSessionStore::new("./sessions".into()));
-
-// 2. 加载或创建 Session
-let session_id = "user-abc-conv-123";
-let session: Arc<dyn ISession> = match store.get_session(session_id).await? {
-    Some(s) => {
-        println!("加载已有 Session: {}", s.session_id());
-        s
-    }
-    None => {
-        let s = Arc::new(AgentSession::with_id(session_id));
-        store.save_session(s.as_ref()).await?;
-        println!("创建新 Session: {}", s.session_id());
-        s
-    }
-};
-
-// 3. 运行 Agent
-let stream = agent.run(
-    vec![ChatMessage::user("你好！")],
-    Some(session.clone()),
-    None,
-).await?;
-
-// 4. 消费流...
-// while let Some(chunk) = stream.next().await { ... }
-
-// 5. 流消费后保存（应用层决定时机）
-store.save_session(session.as_ref()).await?;
-
-// 6. 定期清理过期 Session
-store.cleanup_expired().await?;
-```
-
-### 多 Agent 路由：HashMap 即注册中心
-
-框架不需要专门的注册中心 —— `HashMap` 就是最好的实现：
+注册多个 Agent 并按 ID 路由调用：
 
 ```rust
 use std::collections::HashMap;
@@ -939,24 +886,13 @@ agents.insert(reviewer_agent.id().clone(), reviewer_agent);
 // 查询
 let all_ids: Vec<_> = agents.keys().collect();
 
-// 路由
+// 按 ID 路由
 if let Some(agent) = agents.get(&AgentId::new("coder")) {
     let stream = agent.run(messages, Some(session), None).await?;
 }
 ```
 
-对于更复杂的场景，`crates/host/src/registry/agent_registry.rs` 中的 `AgentRegistry` 提供了完整的多 Agent 注册实现（支持子 Agent 树遍历、默认 Agent、Agent 元数据列表构建），适用于 ACP 协议宿主等场景。
-
-### MAF 等价模式对比
-
-| 本框架做法 | MAF 等价做法 | 谁负责 |
-|---|---|---|
-| `AgentSession::with_id(id)` | `agent.CreateSessionAsync()` | 框架提供原语，应用层调用 |
-| `store.get_session(id)` / `store.save_session(s)` | `agent.SerializeSessionAsync(s)` + 自定义存储 | 应用层编排 |
-| `HashMap<AgentId, Arc<dyn IAgent>>` | DI 容器的 `builder.AddAIAgent("name", agent)` | 服务宿主 |
-| `agent.run(messages, session, options)` | `agent.RunAsync(messages, session)` | 框架提供，调用方式一致 |
-
-这确保了框架的轻量和灵活性，同时与 MAF 的设计哲学保持对齐。
+对于需要子 Agent 树遍历、默认 Agent、Agent 元数据发现等高级功能的场景，`crates/host/src/registry/agent_registry.rs` 中的 `AgentRegistry` 提供了一个更完整的多 Agent 注册实现，适用于 ACP 协议宿主等生产环境。
 
 ---
 

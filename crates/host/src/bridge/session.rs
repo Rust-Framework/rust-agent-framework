@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use rust_agent_core::{AgentId, AgentSession, ChatMessage, ISession};
+use rust_agent_core::{AgentSession};
 use tokio::sync::RwLock;
 
 /// Context stored per ACP session.

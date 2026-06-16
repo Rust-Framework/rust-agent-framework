@@ -1,37 +1,35 @@
-//! Prompt handler — convert ACP prompts to RAF calls and stream results back.
-//!
-//! The core streaming bridge:
-//! `PromptRequest` → `IAgent::run()` → `BoxStream<AgentResponseResult>` → `session/update` notifications
+//! Prompt handler — the core streaming bridge from ACP Prompt to RAF IAgent.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use tracing::{info, debug, warn};
 use futures_util::StreamExt;
+use tracing::{info, debug, warn};
 
 use agent_client_protocol::Client;
 use agent_client_protocol::schema::{
     PromptRequest, PromptResponse, StopReason,
+    SessionNotification, SessionUpdate, ContentChunk, ContentBlock,
+    TextContent as AcpText, MessageId,
+    ToolCall, ToolCallId, ToolCallUpdate, ToolCallUpdateFields,
+    ToolCallStatus,
 };
 use agent_client_protocol::ConnectionTo;
-use rust_agent_core::{AgentRunOptions, Content, FinishReason};
+use rust_agent_core::{AgentRunOptions, ChatMessage, Content, FinishReason};
 
 use crate::registry::agent_registry::AgentRegistry;
 use crate::bridge::session::SessionBridge;
-use crate::bridge::types::convert_prompt_to_chat_messages;
 
-/// Handle a prompt request: convert to RAF, stream, send ACP notifications.
 pub async fn handle_prompt(
     req: PromptRequest,
     responder: agent_client_protocol::Responder<PromptResponse>,
-    _conn: ConnectionTo<Client>,
+    conn: ConnectionTo<Client>,
     registry: &AgentRegistry,
     bridge: &SessionBridge,
 ) -> agent_client_protocol::Result<()> {
     let session_id = req.session_id.clone();
-    let sid_str = format!("{:?}", session_id);
+    let sid_str = session_id.0.as_ref().to_string();
     debug!(session_id = %sid_str, "Handling prompt request");
 
-    // 1. Determine target agent
     let target_agent_id = req.meta.as_ref()
         .and_then(|m| m.get("raf.agent_id"))
         .and_then(|v| v.as_str());
@@ -45,23 +43,10 @@ pub async fn handle_prompt(
         }
     };
 
-    debug!(agent_id = %agent.id(), "Resolved agent for prompt");
-
-    // 2. Get or create RAF session
-    let raf_session = match bridge.get_or_create_raf_session(&sid_str).await {
-        Ok(s) => s,
-        Err(e) => {
-            warn!(error = %e, "Failed to create RAF session");
-            let _ = responder.respond(PromptResponse::new(StopReason::EndTurn));
-            return Ok(());
-        }
-    };
-
-    // 3. Convert ACP prompt → RAF ChatMessage
-    let messages = convert_prompt_to_chat_messages(&[]);
+    let raf_session = bridge.get_or_create_raf_session(&sid_str).await?;
+    let messages = convert_blocks_to_messages(&req.prompt);
     debug!(message_count = messages.len(), "Converted prompt to messages");
 
-    // 4. Cancel token
     let cancelled = Arc::new(AtomicBool::new(false));
     bridge.register_cancel_token(&sid_str, cancelled.clone()).await;
 
@@ -69,9 +54,8 @@ pub async fn handle_prompt(
         .with_cancelled(cancelled)
         .with_thinking(true);
 
-    // 5. Run RAF agent
     let mut raf_stream = match agent.run(messages, Some(raf_session), Some(run_opts)).await {
-        Ok(stream) => stream,
+        Ok(s) => s,
         Err(e) => {
             warn!(error = %e, "Agent run failed");
             let _ = responder.respond(PromptResponse::new(StopReason::EndTurn));
@@ -79,21 +63,21 @@ pub async fn handle_prompt(
         }
     };
 
-    // 6. Background task: consume RAF stream → send ACP notifications
+    // Background streaming
     tokio::spawn(async move {
         let mut stop_reason = StopReason::EndTurn;
-        let mut text_buffer = String::new();
+        let mut msg_id = 0u64;
+        let sid = session_id;
 
         while let Some(chunk_result) = raf_stream.next().await {
             let chunk = match chunk_result {
                 Ok(c) => c,
                 Err(e) => {
-                    warn!(error = %e, "Stream error");
+                    notify_text(&conn, &sid, &mut msg_id, &format!("Error: {}", e));
                     continue;
                 }
             };
 
-            // Check finish reason
             if let Some(ref fr) = chunk.finish_reason {
                 stop_reason = match fr {
                     FinishReason::Stop => StopReason::EndTurn,
@@ -102,18 +86,102 @@ pub async fn handle_prompt(
                 };
             }
 
-            // Accumulate text and send as content chunks
             for content in &chunk.contents {
-                if let Content::Text(tc) = content {
-                    text_buffer.push_str(&tc.delta);
+                match content {
+                    Content::Text(tc) => {
+                        notify_text(&conn, &sid, &mut msg_id, &tc.delta);
+                    }
+                    Content::Reasoning(rc) => {
+                        notify_thought(&conn, &sid, &mut msg_id, &rc.delta);
+                    }
+                    Content::ToolCallStart(ts) => {
+                        notify_tool_start(&conn, &sid, &ts.call_id, &ts.name);
+                    }
+                    Content::ToolCalled(tc) => {
+                        let result_text = tc.result.clone()
+                            .or_else(|| tc.error.clone())
+                            .unwrap_or_default();
+                        notify_tool_done(&conn, &sid, &tc.call_id, tc.error.is_some());
+                        if !result_text.is_empty() {
+                            notify_text(&conn, &sid, &mut msg_id, &result_text);
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
 
-        // Build and respond with collected text
-        info!(session_id = %sid_str, chars = text_buffer.len(), ?stop_reason, "Prompt turn completed");
         let _ = responder.respond(PromptResponse::new(stop_reason));
+        info!(session_id = %sid.0, ?stop_reason, "Prompt turn completed");
     });
 
     Ok(())
+}
+
+// ── Helper notification functions ──
+
+fn notify_text(conn: &ConnectionTo<Client>, sid: &agent_client_protocol::schema::SessionId,
+               msg_id: &mut u64, text: &str) {
+    let chunk = ContentChunk::new(ContentBlock::Text(AcpText::new(text)))
+        .message_id(MessageId::new(format!("msg_{}", msg_id)));
+    *msg_id += 1;
+    let _ = conn.send_notification(SessionNotification::new(
+        sid.clone(),
+        SessionUpdate::AgentMessageChunk(chunk),
+    ));
+}
+
+fn notify_thought(conn: &ConnectionTo<Client>, sid: &agent_client_protocol::schema::SessionId,
+                  msg_id: &mut u64, text: &str) {
+    let chunk = ContentChunk::new(ContentBlock::Text(AcpText::new(text)))
+        .message_id(MessageId::new(format!("msg_think_{}", msg_id)));
+    *msg_id += 1;
+    let _ = conn.send_notification(SessionNotification::new(
+        sid.clone(),
+        SessionUpdate::AgentThoughtChunk(chunk),
+    ));
+}
+
+fn notify_tool_start(conn: &ConnectionTo<Client>, sid: &agent_client_protocol::schema::SessionId,
+                     call_id: &str, name: &str) {
+    let tc = ToolCall::new(ToolCallId::new(call_id), name);
+    let _ = conn.send_notification(SessionNotification::new(
+        sid.clone(),
+        SessionUpdate::ToolCall(tc),
+    ));
+}
+
+fn notify_tool_done(conn: &ConnectionTo<Client>, sid: &agent_client_protocol::schema::SessionId,
+                    call_id: &str, is_error: bool) {
+    let status = if is_error { ToolCallStatus::Failed } else { ToolCallStatus::Completed };
+    let fields = ToolCallUpdateFields::new().status(status);
+    let update = ToolCallUpdate::new(ToolCallId::new(call_id), fields);
+    let _ = conn.send_notification(SessionNotification::new(
+        sid.clone(),
+        SessionUpdate::ToolCallUpdate(update),
+    ));
+}
+
+fn convert_blocks_to_messages(blocks: &[ContentBlock]) -> Vec<ChatMessage> {
+    let mut messages = Vec::new();
+    for block in blocks {
+        match block {
+            ContentBlock::Text(tc) => {
+                if !tc.text.is_empty() {
+                    messages.push(ChatMessage::user(tc.text.as_str()));
+                }
+            }
+            ContentBlock::ResourceLink(rl) => {
+                messages.push(ChatMessage::user(format!("[Reference: {}]", rl.uri)));
+            }
+            ContentBlock::Resource(er) => {
+                use agent_client_protocol::schema::EmbeddedResourceResource;
+                if let EmbeddedResourceResource::TextResourceContents(tc) = &er.resource {
+                    messages.push(ChatMessage::user(format!("[Resource: {}]\n{}", tc.uri, tc.text)));
+                }
+            }
+            _ => {}
+        }
+    }
+    messages
 }

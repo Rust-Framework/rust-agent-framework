@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tracing::{info, debug};
 use serde_json::Value;
 
-use agent_client_protocol::{Client, ConnectionTo, Result};
+use agent_client_protocol::{Client, ConnectionTo};
 use agent_client_protocol::schema::{
     InitializeRequest, InitializeResponse, AgentCapabilities, PromptCapabilities,
     SessionCapabilities, McpCapabilities,
@@ -26,7 +26,7 @@ impl RafAgentHost {
     pub async fn run(
         self,
         transport: impl agent_client_protocol::ConnectTo<agent_client_protocol::Agent>,
-    ) -> Result<()> {
+    ) -> agent_client_protocol::Result<()> {
         let registry = self.registry.clone();
         let bridge = self.session_bridge.clone();
 
@@ -34,6 +34,7 @@ impl RafAgentHost {
 
         let acp_agent = agent_client_protocol::Agent;
         let r1 = registry.clone();
+
         acp_agent.builder()
             .name("rust-agent-host")
             // 1. Initialize
@@ -63,9 +64,8 @@ impl RafAgentHost {
                         .and_then(|v| v.as_str());
                     let sid = uuid::Uuid::new_v4().to_string();
                     let _ = b2.create_session(&sid, target_agent).await;
-                    let session_id = SessionId::new(sid.clone());
                     debug!(session_id = %sid, "Session created");
-                    responder.respond(NewSessionResponse::new(session_id))
+                    responder.respond(NewSessionResponse::new(SessionId::new(sid)))
                 }
             }, agent_client_protocol::on_receive_request!())
             // 3. Prompt handling
@@ -79,9 +79,10 @@ impl RafAgentHost {
             // 4. Cancel notification
             .on_receive_notification({
                 let b4 = bridge.clone();
-                async move |_notif: CancelNotification, _conn| {
-                    info!("Session cancelled");
-                    b4.cancel_session("").await;
+                async move |notif: CancelNotification, _conn| {
+                    let sid = notif.session_id.0.as_ref().to_string();
+                    info!(session_id = %sid, "Session cancelled");
+                    b4.cancel_session(&sid).await;
                     Ok(())
                 }
             }, agent_client_protocol::on_receive_notification!())

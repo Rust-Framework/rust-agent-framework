@@ -8,7 +8,7 @@
 
 ```
 重构前:                              重构后:
-IAgent                                IAgent ← AgentHost
+IAgent                                IAgent
   └─ ToolLoopAgent (已废弃)             └─ ChatClientAgent
        └─ IAgent (ChatClientAgent)           └─ IChatClient 管道
             └─ IChatClient                       ├─ FunctionInvokingChatClient ← 工具循环
@@ -35,23 +35,34 @@ IAgent                                IAgent ← AgentHost
 
 ---
 
-## 二、AgentHost 会话注册中心
+## 二、会话管理（原语模式）
 
-### 核心能力
+Session 生命周期由应用层直接管理，使用 `ISessionStore` + `ISession` 原语：
 
-- `get_or_create_session(id)` — 从 Store 加载或新建，自动 touch
-- `run(messages, session, options)` — 调用前 touch+save，调用后 spawn save
-- `cleanup_expired()` — 委托 Store 清理过期会话
-- `get_subagent(id)` — 透传 IAgent 子代理查找
+```rust
+// 加载或创建
+let session = match store.get_session(id).await? {
+    Some(s) => s,
+    None => {
+        let s = Arc::new(AgentSession::with_id(id));
+        store.save_session(s.as_ref()).await?;
+        s
+    }
+};
+// 运行
+let stream = agent.run(msgs, Some(session.clone()), opts).await?;
+// 保存
+store.save_session(session.as_ref()).await?;
+// 清理
+store.cleanup_expired().await?;
+```
 
 ### 流式输出资源释放审计
 
 ```
-AgentHost.run()
-  ├─ session.touch_last_active()                   ✅ 同步
-  ├─ session_store.save_session()                  ✅ 同步 await
-  ├─ agent.run() → BoxStream<AgentResponseResult>  ✅ 返回给调用方
-  └─ spawn { save_session(session) }              ✅ 后台任务，Arc 共享引用
+agent.run() → BoxStream<AgentResponseResult>
+  ├─ 返回给调用方，由调用方持有
+  └─ 调用方在 Drop stream 时释放底层连接
 
 ChatClientAgent.run()
   ├─ Phase 1: provider.on_invoking()               ✅ 同步 await
@@ -207,7 +218,7 @@ for each file:                  for each file:
                                 batch_remove(to_delete)  ← 批量删除 + 错误日志
 ```
 
-- **mtime 预过滤**: `AgentHost.run()` 每次调用前后写文件，文件 mtime 反映会话活跃度。mtime 在 idle 阈值内的文件直接跳过 JSON 解析，减少 I/O 和 CPU 开销
+- **mtime 预过滤**: `agent.run()` 每次调用前后可选择写文件，文件 mtime 反映会话活跃度。mtime 在 idle 阈值内的文件直接跳过 JSON 解析，减少 I/O 和 CPU 开销
 - **批量删除**: 收集过期路径后统一删除，配合 `tracing::warn!` 记录删除失败
 - **损坏文件清理**: 不可读/不可解析的 JSON 文件主动加入删除队列
 
@@ -244,7 +255,7 @@ pub trait IAgent: Send + Sync {
 | `ChatClientAgent` | 继承默认 → None（无子代理） |
 | `GraphFlow` | HashMap 查找 → 返回实际子代理 |
 | `WorkflowAgent` | Vec 查找 → 返回工作流节点代理 |
-| `AgentHost` | `host.get_subagent(id)` → 透传内部 agent |
+| `IAgent::get_subagent()` | `agent.get_subagent(id)` → 直接查找 |
 
 ### 流式输出场景验证
 
@@ -272,7 +283,7 @@ pub trait IAgent: Send + Sync {
 | 模块 | 测试数 |
 |------|--------|
 | FunctionInvokingChatClient | 5 |
-| AgentHost get_subagent | 3 |
+| IAgent get_subagent | 3 |
 | InMemorySessionStore TTL | 5 |
 | FileSystemSessionStore TTL | 4 |
 | WorkflowEngine checkpoint | 1 |

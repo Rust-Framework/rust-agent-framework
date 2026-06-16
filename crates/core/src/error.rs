@@ -11,9 +11,6 @@ pub enum AgentError {
     #[error("Workflow error: {0}")]
     WorkflowError(String),
 
-    #[error("Session error: {0}")]
-    SessionError(String),
-
     #[error("Configuration error: {0}")]
     ConfigError(String),
 

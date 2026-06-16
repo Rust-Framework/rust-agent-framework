@@ -101,18 +101,6 @@ impl ChatMessage {
             source: None,
         }
     }
-
-    #[deprecated(note = "use ChatMessage::tool(content, tool_call_id) instead")]
-    pub fn tool_with_name(content: impl Into<String>, name: impl Into<String>) -> Self {
-        Self {
-            role: MessageRole::Tool,
-            content: content.into(),
-            name: Some(name.into()),
-            tool_calls: None,
-            tool_call_id: None,
-            source: None,
-        }
-    }
 }
 
 /// Trait to get ResponseMetadata from content/event variants

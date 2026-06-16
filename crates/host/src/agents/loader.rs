@@ -58,16 +58,6 @@ impl<'a> DeclLoader<'a> {
                     let content = std::fs::read_to_string(&path)?;
                     AgentDecl::from_json_str(&content)?
                 }
-                #[cfg(feature = "yaml")]
-                "yaml" | "yml" => {
-                    let content = std::fs::read_to_string(&path)?;
-                    AgentDecl::from_yaml_str(&content)?
-                }
-                #[cfg(feature = "toml")]
-                "toml" => {
-                    let content = std::fs::read_to_string(&path)?;
-                    AgentDecl::from_toml_str(&content)?
-                }
                 _ => {
                     warn!(path = %path.display(), extension, "Unsupported file extension, skipping");
                     continue;

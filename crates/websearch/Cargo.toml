@@ -40,8 +40,6 @@ url = "2"
 default = ["rustls-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
 native-tls = ["reqwest/native-tls"]
-# Optional: TLS stealth via BoringSSL (requires cmake, perl, libclang)
-# tls-stealth = ["wreq"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

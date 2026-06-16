@@ -14,7 +14,7 @@
 //! - `engine` — 执行引擎 + 全链路事件系统
 //! - `state` — 两阶段状态管理（StateStore）
 //! - `checkpoint` — 检查点持久化
-//! - `patterns` — 专业化编排模式（Sequential, Concurrent, Handoff, GroupChat)
+//! - `orchestrations` — 专业化编排模式（Sequential, Concurrent, Handoff）
 
 pub mod builder;
 pub mod checkpoint;
@@ -24,17 +24,9 @@ pub mod graph;
 pub mod workflow_agent;
 
 pub mod orchestrations;
-// backwards compatibility
-pub mod patterns {}
 
 pub use crate::orchestrations::{
     ConcurrentWorkflow, HandoffBuilder, HandoffWorkflow, SequentialWorkflow, WorkflowAsAgent,
-    // legacy aliases
-    ConcurrentWorkflow as ConcurrentPattern,
-    ConcurrentWorkflow as FanOutWorkflow,
-    ConcurrentWorkflow as ParallelWorkflow,
-    HandoffWorkflow as HandoffPattern,
-    SequentialWorkflow as SequentialPattern,
 };
 
 // 旧模块（待迁移到新架构后废弃）

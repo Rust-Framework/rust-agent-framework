@@ -31,12 +31,14 @@ pub struct ChatClientAgent {
 struct AgentProxy {
     id: AgentId,
     metadata: AgentMetadata,
+    chat_client: Arc<dyn IChatClient>,
 }
 
 #[async_trait]
 impl IAgent for AgentProxy {
     fn id(&self) -> &AgentId { &self.id }
     fn metadata(&self) -> &AgentMetadata { &self.metadata }
+    fn chat_client(&self) -> Option<&Arc<dyn IChatClient>> { Some(&self.chat_client) }
     async fn run(&self, _: Vec<ChatMessage>, _: Option<Arc<dyn ISession>>, _: Option<AgentRunOptions>) -> Result<BoxStream<'static, Result<AgentResponseResult>>> {
         Err(rust_agent_core::AgentError::ConfigError("AgentProxy::run not supported".into()))
     }
@@ -305,6 +307,7 @@ impl IAgent for ChatClientAgent {
             let request_messages = original_request_messages;
             let agent_id_proxy = self.id.clone();
             let agent_meta_proxy = self.metadata.clone();
+            let chat_client_proxy = self.chat_client.clone();
 
             tokio::spawn(async move {
                 let mut collected: Vec<Result<AgentResponseResult>> = Vec::new();
@@ -335,7 +338,7 @@ impl IAgent for ChatClientAgent {
                     id: None, model: None, text, reasoning_text: None, tool_calls,
                     finish_reason, usage: None, source_agent_id,
                 };
-                let proxy = AgentProxy { id: agent_id_proxy, metadata: agent_meta_proxy };
+                let proxy = AgentProxy { id: agent_id_proxy, metadata: agent_meta_proxy, chat_client: chat_client_proxy };
 
                 if let Some(ref sess) = session_for_invoked {
                     for provider in providers.iter() {

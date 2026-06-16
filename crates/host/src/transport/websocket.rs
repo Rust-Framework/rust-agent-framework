@@ -6,7 +6,6 @@
 use std::sync::Arc;
 use anyhow::Result;
 use futures_util::StreamExt;
-use tokio::sync::mpsc;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tracing::{info, warn, error};
 
@@ -66,7 +65,7 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
     info!(client = addr, "WebSocket connection established");
 
     // Split the WebSocket into sender and receiver
-    let (mut ws_sender, mut ws_receiver) = socket.split();
+    let (_ws_sender, mut ws_receiver) = socket.split();
 
     // Create a duplex channel pair for ACP byte-stream transport
     let (dup_a, mut dup_b) = tokio::io::duplex(64 * 1024);
@@ -100,16 +99,16 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
                         warn!(error = %e, "Write to duplex failed");
                         break;
                     }
-                    if let Err(e) = dup_b.write_all(b"\n").await {
+                    if let Err(_e) = dup_b.write_all(b"\n").await {
                         break;
                     }
                 }
                 Ok(Message::Binary(data)) => {
                     use tokio::io::AsyncWriteExt;
-                    if let Err(e) = dup_b.write_all(&data).await {
+                    if let Err(_e) = dup_b.write_all(&data).await {
                         break;
                     }
-                    if let Err(e) = dup_b.write_all(b"\n").await {
+                    if let Err(_e) = dup_b.write_all(b"\n").await {
                         break;
                     }
                 }

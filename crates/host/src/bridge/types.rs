@@ -4,7 +4,7 @@
 //! with `_meta` tags carrying sub-agent origin information.
 
 use rust_agent_core::{
-    Content, ToolCall,
+    Content,
 };
 
 /// Convert a RAF `Content` variant into an ACP `SessionUpdate` JSON value.

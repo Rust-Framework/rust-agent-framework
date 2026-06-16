@@ -9,7 +9,6 @@ description = "Workflow orchestration engine — graph-based execution with stre
 
 [dependencies]
 rust-agent-core = { workspace = true }
-rust-agent-framework = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }
 tokio = { workspace = true }

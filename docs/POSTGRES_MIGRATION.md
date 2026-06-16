@@ -169,7 +169,7 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres",
 |--------|------|
 | P0 | 实现 `PostgresSessionStore` 并编写测试（基于 `testcontainers`） |
 | P1 | 保留 `FileSystemSessionStore` 作为 dev/test 替代 |
-| P2 | `AgentHost` 支持 Store 切换（已有 trait 接口，零改动） |
+| P2 | Session Store 切换（已有 trait 接口，零改动） |
 | P3 | 添加 `sqlx::migrate!` 自动化表结构管理 |
 | P4 | 可选：基于 Redis 的 `RedisSessionStore`（更高性能） |
 
@@ -178,12 +178,13 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres",
 `ISessionStore` trait 无需修改——新实现直接满足现有接口：
 
 ```rust
-// AgentHost 中的使用方式完全一致
+// ISessionStore 的使用方式完全一致
 let store: Arc<dyn ISessionStore> = match config {
     StoreConfig::FileSystem { path } =>
         Arc::new(FileSystemSessionStore::new(path).with_ttl(ttl)),
     StoreConfig::Postgres { url, tenant } =>
         Arc::new(PostgresSessionStore::new(&url, tenant).with_ttl(ttl)),
 };
-let host = AgentHost::new(agent, store);
+// 直接使用 store 和 agent.run()，无需中间托管类
+let stream = agent.run(messages, Some(session), None).await?;
 ```

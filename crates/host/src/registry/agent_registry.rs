@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use rust_agent_core::{AgentId, AgentMetadata, IAgent};
+use rust_agent_core::{AgentId, IAgent};
 use serde::Serialize;
 
 /// Information about a registered agent, exposed via `_raf/agent_list` and `initialize._meta`.
