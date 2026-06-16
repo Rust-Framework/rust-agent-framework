@@ -218,34 +218,34 @@ pub fn suggest(
         resolved.graph.min_nodes_for_communities,
     )? {
         if let Some(&my_community) = community_map.get(slug.as_str()) {
-        }
-        let mut peers: Vec<&str> = community_map
-            .keys()
-            .filter(|s| {
-                let ns: &str = s;
-                community_map.get(ns).copied() == Some(my_community)
-                    && ns != slug.as_str()
-                    && !existing_links.contains(ns)
-                    && !candidates.contains_key(ns)
-            })
-            .map(|s| s.as_str())
-            .collect();
-        peers.sort_unstable();
-        for (added, node_slug) in peers.into_iter().enumerate() {
-            if added >= resolved.graph.community_suggestions_limit {
-                break;
+            let mut peers: Vec<&str> = community_map
+                .keys()
+                .filter(|s| {
+                    let ns: &str = s;
+                    community_map.get(ns).copied() == Some(my_community)
+                        && ns != slug.as_str()
+                        && !existing_links.contains(ns)
+                        && !candidates.contains_key(ns)
+                })
+                .map(|s| s.as_str())
+                .collect();
+            peers.sort_unstable();
+            for (added, node_slug) in peers.into_iter().enumerate() {
+                if added >= resolved.graph.community_suggestions_limit {
+                    break;
+                }
+                let doc = find_doc_by_slug(&searcher, is, node_slug)?;
+                candidates.insert(
+                    node_slug.to_string(),
+                    CandidateScore {
+                        slug: node_slug.to_string(),
+                        title: doc.title.clone(),
+                        page_type: doc.page_type.clone(),
+                        score: 0.4,
+                        reason: "same knowledge cluster".to_string(),
+                    },
+                );
             }
-            let doc = find_doc_by_slug(&searcher, is, node_slug)?;
-            candidates.insert(
-                node_slug.to_string(),
-                CandidateScore {
-                    slug: node_slug.to_string(),
-                    title: doc.title.clone(),
-                    page_type: doc.page_type.clone(),
-                    score: 0.4,
-                    reason: "same knowledge cluster".to_string(),
-                },
-            );
         }
     }
 
@@ -313,7 +313,7 @@ fn find_doc_by_slug(
     );
     let results = searcher.search(
         &query,
-        &tantivy::collector::TopDocs::with_limit(1).order_by_score(),
+        &tantivy::collector::TopDocs::with_limit(1),
     )?;
 
     if let Some((_score, addr)) = results.first() {

@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};

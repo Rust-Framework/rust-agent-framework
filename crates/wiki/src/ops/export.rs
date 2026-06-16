@@ -154,7 +154,7 @@ fn collect_pages(
     let f_confidence = is.try_field("confidence");
     let f_summary = is.try_field("summary");
 
-    let top_docs = searcher.search(&AllQuery, &TopDocs::with_limit(100_000).order_by_score())?;
+    let top_docs = searcher.search(&AllQuery, &TopDocs::with_limit(100_000))?;
 
     let mut pages = Vec::new();
     for (_score, doc_addr) in &top_docs {

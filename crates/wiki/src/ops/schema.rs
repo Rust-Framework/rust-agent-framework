@@ -222,20 +222,21 @@ pub fn schema_remove(
     if delete {
         if let Some(schema_path) = space.type_registry.schema_path(type_name) {
             let full_path = space.repo_root.join(schema_path);
-        if full_path.exists() {
-            // Check if other types use this schema
-            let content = std::fs::read_to_string(&full_path).unwrap_or_default();
-            if let Ok(schema) = serde_json::from_str::<serde_json::Value>(&content) {
-                let wiki_types = schema
-                    .get("x-wiki-types")
-                    .and_then(|v| v.as_object())
-                    .map(|obj| obj.len())
-                    .unwrap_or(0);
-                if wiki_types <= 1 {
-                    std::fs::remove_file(&full_path)?;
-                    schema_file_deleted = true;
+            if full_path.exists() {
+                // Check if other types use this schema
+                let content = std::fs::read_to_string(&full_path).unwrap_or_default();
+                if let Ok(schema) = serde_json::from_str::<serde_json::Value>(&content) {
+                    let wiki_types = schema
+                        .get("x-wiki-types")
+                        .and_then(|v| v.as_object())
+                        .map(|obj| obj.len())
+                        .unwrap_or(0);
+                    if wiki_types <= 1 {
+                        std::fs::remove_file(&full_path)?;
+                        schema_file_deleted = true;
+                    }
+                    // If multiple types use this schema, don't delete
                 }
-                // If multiple types use this schema, don't delete
             }
         }
     }

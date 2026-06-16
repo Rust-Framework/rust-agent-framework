@@ -39,7 +39,7 @@ tantivy = "0.22"
 petgraph = "0.6"
 
 # JSON Schema validation
-jsonschema = "0.18"
+jsonschema = "0.26"
 
 # Hashing
 sha2 = "0.10"

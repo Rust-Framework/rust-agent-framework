@@ -26,6 +26,7 @@ default-members = [
     "crates/rhai",
     "crates/decl",
     "crates/rag",
+    "crates/wiki",
 ]
 resolver = "2"
 

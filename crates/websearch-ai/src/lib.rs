@@ -13,9 +13,11 @@
 //! registry.register(WebFetch);
 //! ```
 
+pub mod context_provider;
 pub mod web_search;
 pub mod web_fetch;
 
+pub use context_provider::WebSearchContextProvider;
 pub use web_search::WebSearch;
 pub use web_fetch::WebFetch;
 

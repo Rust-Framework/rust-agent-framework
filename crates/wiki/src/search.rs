@@ -412,9 +412,9 @@ pub fn list(
     let offset = (page - 1) * page_size;
     let limit = offset + page_size;
 
-    let sorted_docs = searcher.search(
+    let sorted_docs: Vec<(u64, tantivy::DocAddress)> = searcher.search(
         &query,
-        &TopDocs::with_limit(limit).order_by_string_fast_field("slug", Order::Asc),
+        &TopDocs::with_limit(limit).order_by_fast_field("slug", Order::Asc),
     )?;
 
     // Extract full fields only for the page window
@@ -425,7 +425,7 @@ pub fn list(
     };
 
     let mut summaries = Vec::with_capacity(window.len());
-    for (_slug_val, doc_addr) in window {
+    for (_score, doc_addr) in window {
         let doc: tantivy::TantivyDocument = searcher.doc(*doc_addr)?;
 
         let slug = doc

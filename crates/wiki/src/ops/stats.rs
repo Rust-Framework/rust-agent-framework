@@ -121,30 +121,13 @@ pub fn stats(engine: &EngineState, wiki_name: &str) -> Result<WikiStats> {
         built: index_status.ok().and_then(|s| s.built),
     };
 
-    // Structural topology fields
-    let local_count = wiki_graph
-        .node_indices()
-        .filter(|&idx| !wiki_graph[idx].external)
-        .count();
-    let max_n = resolved.graph.max_nodes_for_diameter;
-
-    let (diameter, radius, center, structural_note) = if !resolved.graph.structural_algorithms {
-        (None, None, vec![], None)
-    } else if local_count <= max_n {
-        let d = petgraph_live::metrics::diameter(&*wiki_graph);
-        let r = petgraph_live::metrics::radius(&*wiki_graph);
-        let c: Vec<String> = petgraph_live::metrics::center(&*wiki_graph)
-            .into_iter()
-            .filter(|&idx| !wiki_graph[idx].external)
-            .map(|idx| wiki_graph[idx].slug.clone())
-            .collect();
-        (d, r, c, None)
+    // Structural topology fields (petgraph-live unavailable — always skipped)
+    let structural_note = if resolved.graph.structural_algorithms {
+        Some("structural algorithms require petgraph-live (not available in this build)".to_string())
     } else {
-        let note = format!(
-            "graph too large for diameter computation ({local_count} nodes > max_nodes_for_diameter={max_n})"
-        );
-        (None, None, vec![], Some(note))
+        None
     };
+    let (diameter, radius, center) = (None, None, vec![]);
 
     Ok(WikiStats {
         wiki: wiki_name.to_string(),

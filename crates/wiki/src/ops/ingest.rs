@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::Result;
@@ -29,7 +28,7 @@ pub fn ingest_with_redact(
     let space = engine.space(wiki_name)?;
     let resolved = space.resolved_config(&engine.config);
 
-    let changed_paths = None;
+    let _changed_paths: Option<Vec<std::path::PathBuf>> = None;
 
     let redact_cfg = if redact {
         Some(resolved.redact.clone())
@@ -39,7 +38,6 @@ pub fn ingest_with_redact(
 
     let opts = ingest::IngestOptions {
         dry_run,
-        changed_paths,
         redact: redact_cfg,
     };
     let mut report = ingest::ingest(
@@ -51,7 +49,7 @@ pub fn ingest_with_redact(
     )?;
 
     if !dry_run {
-        if let Err(e) = manager.refresh_index(wiki_name) {
+        if let Err(e) = manager.rebuild_index(wiki_name) {
             tracing::warn!(error = %e, "incremental index update failed after ingest");
         }
 
@@ -74,7 +72,7 @@ fn validate_edge_targets(space: &crate::engine::SpaceContext) -> Result<Vec<Stri
     // Build a slug→type map from the index
     let top_docs = searcher.search(
         &tantivy::query::AllQuery,
-        &tantivy::collector::TopDocs::with_limit(100_000).order_by_score(),
+        &tantivy::collector::TopDocs::with_limit(100_000),
     )?;
     let mut slug_types: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
@@ -118,6 +116,7 @@ fn validate_edge_targets(space: &crate::engine::SpaceContext) -> Result<Vec<Stri
                                 ));
                             }
                         }
+                    }
                 }
             }
         }

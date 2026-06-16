@@ -238,7 +238,7 @@ impl SpaceIndexManager {
     pub fn rebuild(
         &self,
         wiki_root: &Path,
-        repo_root: &Path,
+        _repo_root: &Path,
         is: &IndexSchema,
         registry: &SpaceTypeRegistry,
     ) -> Result<IndexReport> {
@@ -315,17 +315,20 @@ impl SpaceIndexManager {
         })
     }
 
-    /// Rescan the wiki directory and update the index (useful as a full-update without git).
-    /// This performs the same operation as `rebuild()`.
+    /// Rescan the wiki directory and update the index.
+    ///
+    /// Without git-based diff tracking, this performs a full rebuild of the
+    /// entire index. For large wikis, prefer calling `rebuild()` directly to
+    /// make the behavior explicit.
     pub fn update(
         &self,
         wiki_root: &Path,
-        repo_root: &Path,
+        _repo_root: &Path,
         is: &IndexSchema,
         registry: &SpaceTypeRegistry,
     ) -> Result<UpdateReport> {
         // Without git, we do a full rebuild and report the result as an update.
-        let report = self.rebuild(wiki_root, repo_root, is, registry)?;
+        let report = self.rebuild(wiki_root, _repo_root, is, registry)?;
         Ok(UpdateReport {
             updated: report.pages_indexed,
             deleted: 0,
@@ -368,7 +371,7 @@ impl SpaceIndexManager {
                         .try_into()
                         .map(|r: IndexReader| {
                             r.searcher()
-                                .search(&AllQuery, &TopDocs::with_limit(1).order_by_score())
+                                .search(&AllQuery, &TopDocs::with_limit(1))
                                 .is_ok()
                         })
                         .unwrap_or(false);
@@ -448,7 +451,7 @@ impl SpaceIndexManager {
         &self,
         types: &[String],
         wiki_root: &Path,
-        repo_root: &Path,
+        _repo_root: &Path,
         is: &IndexSchema,
         registry: &SpaceTypeRegistry,
     ) -> Result<IndexReport> {

@@ -182,53 +182,6 @@ fn default_max_nodes_for_diameter() -> usize {
     2000
 }
 
-fn default_acp_max_sessions() -> usize {
-    20
-}
-
-/// `[serve]` section — HTTP and ACP server configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServeConfig {
-    /// Enable the HTTP transport by default (default: false).
-    #[serde(default)]
-    pub http: bool,
-    /// TCP port for the HTTP server (default: 8080).
-    #[serde(default = "default_http_port")]
-    pub http_port: u16,
-    /// Hostnames accepted by the HTTP server (default: localhost variants).
-    #[serde(default = "default_http_allowed_hosts")]
-    pub http_allowed_hosts: Vec<String>,
-    /// Enable the ACP transport by default (default: false).
-    #[serde(default)]
-    pub acp: bool,
-    /// Maximum automatic restart attempts after a server crash (default: 10).
-    #[serde(default = "default_max_restarts")]
-    pub max_restarts: u32,
-    /// Seconds to wait between restart attempts (default: 1).
-    #[serde(default = "default_restart_backoff")]
-    pub restart_backoff: u32,
-    /// Interval in seconds between ACP heartbeat pings (default: 60).
-    #[serde(default = "default_heartbeat_secs")]
-    pub heartbeat_secs: u32,
-    /// Maximum number of concurrent ACP sessions (default: 20). Rejects NewSession when reached.
-    #[serde(default = "default_acp_max_sessions")]
-    pub acp_max_sessions: usize,
-}
-
-impl Default for ServeConfig {
-    fn default() -> Self {
-        Self {
-            http: false,
-            http_port: 8080,
-            http_allowed_hosts: default_http_allowed_hosts(),
-            acp: false,
-            max_restarts: 10,
-            restart_backoff: 1,
-            heartbeat_secs: 60,
-            acp_max_sessions: default_acp_max_sessions(),
-        }
-    }
-}
 
 /// `[validation]` section — frontmatter validation strictness.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -246,67 +199,6 @@ impl Default for ValidationConfig {
     }
 }
 
-/// `[logging]` section — structured log file configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoggingConfig {
-    /// Directory where log files are written (default: `~/.llm-wiki/logs`).
-    #[serde(default = "default_log_path")]
-    pub log_path: String,
-    /// Log rotation policy: `"daily"` or `"never"` (default: `"daily"`).
-    #[serde(default = "default_log_rotation")]
-    pub log_rotation: String,
-    /// Maximum number of log files to retain before pruning (default: 7).
-    #[serde(default = "default_log_max_files")]
-    pub log_max_files: u32,
-    /// Log line format: `"text"` or `"json"` (default: `"text"`).
-    #[serde(default = "default_log_format")]
-    pub log_format: String,
-}
-
-impl Default for LoggingConfig {
-    fn default() -> Self {
-        Self {
-            log_path: default_log_path(),
-            log_rotation: "daily".into(),
-            log_max_files: 7,
-            log_format: "text".into(),
-        }
-    }
-}
-
-/// `[ingest]` section — controls ingest commit behaviour.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IngestConfig {
-    /// Automatically commit ingested files to git after validation (default: true).
-    #[serde(default = "default_true")]
-    pub auto_commit: bool,
-}
-
-impl Default for IngestConfig {
-    fn default() -> Self {
-        Self { auto_commit: true }
-    }
-}
-
-/// `[history]` section — git log / history command defaults.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HistoryConfig {
-    /// Enable `--follow` rename tracking in git log (default: true).
-    #[serde(default = "default_true")]
-    pub follow: bool,
-    /// Default maximum number of history entries to return (default: 10).
-    #[serde(default = "default_history_limit")]
-    pub default_limit: u32,
-}
-
-impl Default for HistoryConfig {
-    fn default() -> Self {
-        Self {
-            follow: true,
-            default_limit: 10,
-        }
-    }
-}
 
 /// `[watch]` section — filesystem watcher configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -434,18 +326,9 @@ pub struct GlobalConfig {
     /// `[graph]` section.
     #[serde(default)]
     pub graph: GraphConfig,
-    /// `[serve]` section.
-    #[serde(default)]
-    pub serve: ServeConfig,
     /// `[validation]` section.
     #[serde(default)]
     pub validation: ValidationConfig,
-    /// `[ingest]` section.
-    #[serde(default)]
-    pub ingest: IngestConfig,
-    /// `[history]` section.
-    #[serde(default)]
-    pub history: HistoryConfig,
     /// `[suggest]` section.
     #[serde(default)]
     pub suggest: SuggestConfig,
@@ -455,9 +338,6 @@ pub struct GlobalConfig {
     /// `[lint]` section.
     #[serde(default)]
     pub lint: LintConfig,
-    /// `[logging]` section.
-    #[serde(default)]
-    pub logging: LoggingConfig,
     /// `[watch]` section.
     #[serde(default)]
     pub watch: WatchConfig,
@@ -498,15 +378,9 @@ pub struct WikiConfig {
     /// Per-wiki override for `[validation]`.
     #[serde(default)]
     pub validation: Option<ValidationConfig>,
-    /// Per-wiki override for `[ingest]`.
-    #[serde(default)]
-    pub ingest: Option<IngestConfig>,
     /// Per-wiki override for `[graph]`.
     #[serde(default)]
     pub graph: Option<GraphConfig>,
-    /// Per-wiki override for `[history]`.
-    #[serde(default)]
-    pub history: Option<HistoryConfig>,
     /// Per-wiki override for `[suggest]`.
     #[serde(default)]
     pub suggest: Option<SuggestConfig>,
@@ -535,14 +409,8 @@ pub struct ResolvedConfig {
     pub index: IndexConfig,
     /// Resolved graph section.
     pub graph: GraphConfig,
-    /// Resolved serve section (always from global).
-    pub serve: ServeConfig,
-    /// Resolved ingest section.
-    pub ingest: IngestConfig,
     /// Resolved validation section.
     pub validation: ValidationConfig,
-    /// Resolved history section.
-    pub history: HistoryConfig,
     /// Resolved suggest section.
     pub suggest: SuggestConfig,
     /// Resolved search section (merged: per-wiki entries override global entries).
@@ -585,43 +453,8 @@ fn default_graph_format() -> String {
 fn default_graph_depth() -> u32 {
     3
 }
-fn default_http_port() -> u16 {
-    8080
-}
-fn default_http_allowed_hosts() -> Vec<String> {
-    vec!["localhost".into(), "127.0.0.1".into(), "::1".into()]
-}
-fn default_max_restarts() -> u32 {
-    10
-}
-fn default_restart_backoff() -> u32 {
-    1
-}
-fn default_heartbeat_secs() -> u32 {
-    60
-}
 fn default_type_strictness() -> String {
     "loose".into()
-}
-fn default_log_path() -> String {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    std::path::PathBuf::from(home)
-        .join(".llm-wiki")
-        .join("logs")
-        .to_string_lossy()
-        .into()
-}
-fn default_log_rotation() -> String {
-    "daily".into()
-}
-fn default_log_max_files() -> u32 {
-    7
-}
-fn default_log_format() -> String {
-    "text".into()
-}
-fn default_history_limit() -> u32 {
-    10
 }
 fn default_debounce_ms() -> u32 {
     500
@@ -656,19 +489,10 @@ pub fn resolve(global: &GlobalConfig, per_wiki: &WikiConfig) -> ResolvedConfig {
             .graph
             .clone()
             .unwrap_or_else(|| global.graph.clone()),
-        serve: global.serve.clone(),
-        ingest: per_wiki
-            .ingest
-            .clone()
-            .unwrap_or_else(|| global.ingest.clone()),
         validation: per_wiki
             .validation
             .clone()
             .unwrap_or_else(|| global.validation.clone()),
-        history: per_wiki
-            .history
-            .clone()
-            .unwrap_or_else(|| global.history.clone()),
         suggest: per_wiki
             .suggest
             .clone()
@@ -757,27 +581,9 @@ pub fn set_global_config_value(global: &mut GlobalConfig, key: &str, value: &str
         "graph.snapshot_format" => global.graph.snapshot_format = value.into(),
         "graph.structural_algorithms" => global.graph.structural_algorithms = value.parse()?,
         "graph.max_nodes_for_diameter" => global.graph.max_nodes_for_diameter = value.parse()?,
-        "serve.http" => global.serve.http = value.parse()?,
-        "serve.http_port" => global.serve.http_port = value.parse()?,
-        "serve.http_allowed_hosts" => {
-            global.serve.http_allowed_hosts =
-                value.split(',').map(|s| s.trim().to_string()).collect();
-        }
-        "serve.acp" => global.serve.acp = value.parse()?,
-        "serve.max_restarts" => global.serve.max_restarts = value.parse()?,
-        "serve.restart_backoff" => global.serve.restart_backoff = value.parse()?,
-        "serve.heartbeat_secs" => global.serve.heartbeat_secs = value.parse()?,
-        "serve.acp_max_sessions" => global.serve.acp_max_sessions = value.parse()?,
-        "ingest.auto_commit" => global.ingest.auto_commit = value.parse()?,
-        "history.follow" => global.history.follow = value.parse()?,
-        "history.default_limit" => global.history.default_limit = value.parse()?,
         "suggest.default_limit" => global.suggest.default_limit = value.parse()?,
         "suggest.min_score" => global.suggest.min_score = value.parse()?,
         "validation.type_strictness" => global.validation.type_strictness = value.into(),
-        "logging.log_path" => global.logging.log_path = value.into(),
-        "logging.log_rotation" => global.logging.log_rotation = value.into(),
-        "logging.log_max_files" => global.logging.log_max_files = value.parse()?,
-        "logging.log_format" => global.logging.log_format = value.into(),
         "watch.debounce_ms" => global.watch.debounce_ms = value.parse()?,
         _ => anyhow::bail!("unknown key: {key}"),
     }
@@ -808,23 +614,8 @@ pub fn get_config_value(resolved: &ResolvedConfig, global: &GlobalConfig, key: &
         "graph.snapshot_format" => resolved.graph.snapshot_format.clone(),
         "graph.structural_algorithms" => resolved.graph.structural_algorithms.to_string(),
         "graph.max_nodes_for_diameter" => resolved.graph.max_nodes_for_diameter.to_string(),
-        "serve.http" => resolved.serve.http.to_string(),
-        "serve.http_port" => resolved.serve.http_port.to_string(),
-        "serve.http_allowed_hosts" => resolved.serve.http_allowed_hosts.join(","),
-        "serve.acp" => resolved.serve.acp.to_string(),
-        "serve.max_restarts" => global.serve.max_restarts.to_string(),
-        "serve.restart_backoff" => global.serve.restart_backoff.to_string(),
-        "serve.heartbeat_secs" => global.serve.heartbeat_secs.to_string(),
-        "serve.acp_max_sessions" => global.serve.acp_max_sessions.to_string(),
         "validation.type_strictness" => resolved.validation.type_strictness.clone(),
-        "logging.log_path" => global.logging.log_path.clone(),
-        "logging.log_rotation" => global.logging.log_rotation.clone(),
-        "logging.log_max_files" => global.logging.log_max_files.to_string(),
-        "logging.log_format" => global.logging.log_format.clone(),
         "watch.debounce_ms" => global.watch.debounce_ms.to_string(),
-        "ingest.auto_commit" => resolved.ingest.auto_commit.to_string(),
-        "history.follow" => resolved.history.follow.to_string(),
-        "history.default_limit" => resolved.history.default_limit.to_string(),
         "suggest.default_limit" => resolved.suggest.default_limit.to_string(),
         "suggest.min_score" => resolved.suggest.min_score.to_string(),
         _ => format!("unknown key: {key}"),
@@ -887,24 +678,6 @@ pub fn set_wiki_config_value(wiki_cfg: &mut WikiConfig, key: &str, value: &str) 
                 .validation
                 .get_or_insert_with(ValidationConfig::default)
                 .type_strictness = value.into();
-        }
-        "ingest.auto_commit" => {
-            wiki_cfg
-                .ingest
-                .get_or_insert_with(IngestConfig::default)
-                .auto_commit = value.parse()?;
-        }
-        "history.follow" => {
-            wiki_cfg
-                .history
-                .get_or_insert_with(HistoryConfig::default)
-                .follow = value.parse()?;
-        }
-        "history.default_limit" => {
-            wiki_cfg
-                .history
-                .get_or_insert_with(HistoryConfig::default)
-                .default_limit = value.parse()?;
         }
         "suggest.default_limit" => {
             wiki_cfg
@@ -970,19 +743,7 @@ pub fn set_wiki_config_value(wiki_cfg: &mut WikiConfig, key: &str, value: &str) 
         | "index.auto_rebuild"
         | "index.auto_recovery"
         | "index.memory_budget_mb"
-        | "index.tokenizer"
-        | "serve.http"
-        | "serve.http_port"
-        | "serve.http_allowed_hosts"
-        | "serve.acp"
-        | "serve.max_restarts"
-        | "serve.restart_backoff"
-        | "serve.heartbeat_secs"
-        | "serve.acp_max_sessions"
-        | "logging.log_path"
-        | "logging.log_rotation"
-        | "logging.log_max_files"
-        | "logging.log_format" => {
+        | "index.tokenizer" => {
             anyhow::bail!("{key} is a global-only key \u{2014} use --global");
         }
         "watch.debounce_ms" => {

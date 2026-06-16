@@ -7,7 +7,7 @@ use anyhow::Result;
 use crate::cache::{GenerationCache, WikiGraphCache};
 use crate::config::{self, GlobalConfig, ResolvedConfig, WikiEntry};
 use crate::graph::{CommunityData, WikiGraph};
-use crate::index_manager::{IndexReport, SpaceIndexManager, StalenessKind, UpdateReport};
+use crate::index_manager::{IndexReport, SpaceIndexManager, StalenessKind};
 use crate::index_schema::IndexSchema;
 use crate::space_builder;
 use crate::type_registry::SpaceTypeRegistry;
@@ -330,18 +330,14 @@ fn mount_space(entry: &WikiEntry, state_dir: &Path, config: &GlobalConfig) -> Re
             &resolved_cfg.graph,
             move || Ok(im_key.generation().to_string()),
             move || {
-                let searcher = im_build.searcher().map_err(|e| {
-                    petgraph_live::snapshot::SnapshotError::Io(std::io::Error::other(e.to_string()))
-                })?;
+                let searcher = im_build.searcher().map_err(|e| e.to_string())?;
                 crate::graph::build_graph(
                     &searcher,
                     &is,
                     &crate::graph::GraphFilter::default(),
                     &tr,
                 )
-                .map_err(|e| {
-                    petgraph_live::snapshot::SnapshotError::Io(std::io::Error::other(e.to_string()))
-                })
+                .map_err(|e| e.to_string())
             },
         )?
     };
@@ -359,13 +355,27 @@ fn mount_space(entry: &WikiEntry, state_dir: &Path, config: &GlobalConfig) -> Re
 }
 
 fn build_wiki_graph_cache(
-    _wiki_name: &str,
+    wiki_name: &str,
     _state_dir: &Path,
     graph_cfg: &crate::config::GraphConfig,
-    _key_fn: impl Fn() -> Result<String, String> + Send + Sync + 'static,
-    _build_fn: impl Fn() -> Result<WikiGraph, String> + Send + Sync + 'static,
+    key_fn: impl Fn() -> Result<String, String> + Send + Sync + 'static,
+    build_fn: impl Fn() -> Result<WikiGraph, String> + Send + Sync + 'static,
 ) -> Result<WikiGraphCache> {
-    // Always use in-memory cache (no petgraph-live/snapshot dependency)
     let _ = graph_cfg;
-    Ok(WikiGraphCache::new())
+    let cache = WikiGraphCache::new();
+    // Eagerly build and warm the graph cache at mount time
+    match build_fn() {
+        Ok(graph) => {
+            let gen = key_fn().unwrap_or_default().parse::<u64>().unwrap_or(0);
+            let _ = cache.rebuild(gen, || Ok(graph));
+            tracing::debug!(wiki = %wiki_name, "graph cache warmed");
+        }
+        Err(e) => {
+            tracing::warn!(
+                wiki = %wiki_name, error = %e,
+                "failed to build initial graph cache; graph will be built lazily on first access",
+            );
+        }
+    }
+    Ok(cache)
 }
