@@ -25,13 +25,26 @@ pub(crate) async fn run_memory_agent(
     request_messages: Vec<ChatMessage>,
     response: Option<String>,
 ) {
+    // Canonicalize before switching CWD — `memory_dir` may be a relative
+    // path (e.g. "logs/memory").  After set_current_dir() the relative
+    // path would resolve against the NEW cwd, doubling the path segment.
+    let memory_dir = match memory_dir.canonicalize() {
+        Ok(abs) => abs,
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to canonicalize memory_dir");
+            return;
+        }
+    };
+
     // Switch CWD to memory_dir so read_file / write_file paths resolve
     // correctly.  AGENT.md instructs the LLM to use relative paths like
     // `references/USER.md` — without this they would resolve against the
     // process startup CWD (workspace root), writing memory files to the
     // wrong location.
     let prev_cwd = std::env::current_dir().ok();
-    let _ = std::env::set_current_dir(&memory_dir);
+    if std::env::set_current_dir(&memory_dir).is_err() {
+        tracing::warn!("Failed to set CWD to memory_dir");
+    }
     let restore_cwd = || {
         if let Some(d) = &prev_cwd {
             let _ = std::env::set_current_dir(d);

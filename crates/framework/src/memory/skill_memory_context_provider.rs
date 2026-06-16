@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use rust_agent_core::{
     AgentResponse, AgentRunOptions, ChatMessage, ContextInjection, IAgent, IContextProvider,
-    IChatClient, ISession, ITool, Result,
+    IChatClient, ISession, ITool, MessageRole, Result,
 };
 
 use crate::context_providers::agent_skill::AgentSkill;
@@ -119,9 +119,32 @@ impl IContextProvider for SkillMemoryContextProvider {
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
     ) -> Result<ContextInjection> {
+        // Proactively read SOUL.md and USER.md so the agent knows its
+        // identity and the user's identity from the first turn, without
+        // needing to make tool calls.  Only injected when the files
+        // contain user-written data (not just template scaffolding).
+        let mut injected = Vec::new();
+        let soul = read_memory_if_populated(&self.memory_dir, "references/SOUL.md");
+        if let Some(content) = soul {
+            injected.push(ChatMessage {
+                role: MessageRole::System,
+                content: format!("# 人格设定（来自长期记忆）\n\n{}", content),
+                name: None, tool_calls: None, tool_call_id: None, source: None,
+            });
+        }
+        let user = read_memory_if_populated(&self.memory_dir, "references/USER.md");
+        if let Some(content) = user {
+            injected.push(ChatMessage {
+                role: MessageRole::System,
+                content: format!("# 用户信息（来自长期记忆）\n\n{}", content),
+                name: None, tool_calls: None, tool_call_id: None, source: None,
+            });
+        }
+
         Ok(ContextInjection {
             instructions: Some(self.build_advertise()),
             tools: self.build_tools(),
+            messages: injected,
             ..Default::default()
         })
     }
@@ -234,4 +257,28 @@ fn unwrap_to_raw(client: &Arc<dyn IChatClient>) -> &Arc<dyn IChatClient> {
         current = inner;
     }
     current
+}
+
+/// Read a memory file, returning its markdown body iff it contains
+/// user-written data (not just the template scaffolding).
+///
+/// Template files have YAML frontmatter + section headers + `<!-- 暂无... -->`
+/// comments.  Once MemoryAgent writes data the body grows substantively.
+fn read_memory_if_populated(memory_dir: &Path, relative_path: &str) -> Option<String> {
+    let path = memory_dir.join(relative_path);
+    let raw = std::fs::read_to_string(&path).ok()?;
+    let body = AgentSkill::strip_frontmatter(&raw);
+    // Empty sections have HTML comments like `<!-- 暂无记录 -->`.
+    // If every non-whitespace line is either a heading (`#`), table row (`|`),
+    // or HTML comment (`<!--`), the file hasn't been written to yet.
+    let has_content = body
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .any(|l| !l.starts_with('#') && !l.starts_with('|') && !l.starts_with("<!--") && !l.starts_with("->"));
+    if has_content {
+        Some(body.trim().to_string())
+    } else {
+        None
+    }
 }

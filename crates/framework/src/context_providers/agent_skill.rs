@@ -240,7 +240,7 @@ impl AgentSkill {
     }
 
     /// 从内容中移除 YAML frontmatter，返回纯 Markdown 正文。
-    fn strip_frontmatter(content: &str) -> String {
+    pub(crate) fn strip_frontmatter(content: &str) -> String {
         let content = content.trim_start();
         if !content.starts_with("---") {
             return content.to_string();
