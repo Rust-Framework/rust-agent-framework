@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use futures_util::StreamExt;
@@ -9,6 +10,7 @@ use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
 use rust_agent_core::{
     AgentRunOptions, AgentSession, ChatMessage, Content, ISession,
 };
+use rust_agent_framework::memory::SkillMemoryContextProvider;
 use rust_agent_framework::tool;
 use rust_agent_framework::AgentBuilder;
 use rust_agent_websearch::{WebSearch, WebFetch};
@@ -32,6 +34,8 @@ fn print_help() {
     println!("Commands:");
     println!("  /help        Show this help");
     println!("  /clear       Clear conversation history");
+    println!("  /restart     Clear history + reset agent (simulates new session)");
+    println!("  /memory      Show SkillMemory status");
     println!("  /think on    Enable thinking mode");
     println!("  /think off   Disable thinking mode");
     println!("  /model NAME  Switch model (e.g. deepseek-chat, deepseek-reasoner)");
@@ -48,6 +52,23 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    // ── Resolve SkillMemory directory ─────────────────────────
+    let memory_dir = {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let rel = base.join("../framework/src/memory/skill");
+        if rel.exists() {
+            rel.canonicalize().unwrap_or(rel)
+        } else {
+            // Fallback for running from workspace root
+            PathBuf::from("crates/framework/src/memory/skill")
+        }
+    };
+    println!("[SkillMemory dir: {}]", memory_dir.display());
+
+    let skill_memory = SkillMemoryContextProvider::new(&memory_dir);
+    println!("[SkillMemory loaded: SKILL.md found = {}]",
+        memory_dir.join("SKILL.md").exists());
+
     // ── Build client & agent ───────────────────────────────────
     let options = ChatClientOptions::deepseek("deepseek-v4-flash", DEEPSEEK_API_KEY);
     let client = DeepSeekChatClient::new(options)?;
@@ -59,6 +80,7 @@ async fn main() -> anyhow::Result<()> {
         .with_tool(Add)
         .with_tool(WebSearch)
         .with_tool(WebFetch)
+        .add_context_provider(skill_memory)
         .build()?;
 
     let session = Arc::new(AgentSession::new());
@@ -97,6 +119,46 @@ async fn main() -> anyhow::Result<()> {
                     session.clear().await?;
                     agent.reset().await?;
                     println!("[History cleared]\n");
+                    continue;
+                }
+                if trimmed == "/restart" {
+                    session.clear().await?;
+                    agent.reset().await?;
+                    // Rebuild agent to force SkillMemory re-initialization
+                    let opts = ChatClientOptions::deepseek("deepseek-v4-flash", DEEPSEEK_API_KEY);
+                    let new_client = DeepSeekChatClient::new(opts)?;
+                    let skill_memory_new = SkillMemoryContextProvider::new(&memory_dir);
+                    agent = AgentBuilder::new("cli-agent")
+                        .chat_client(new_client)
+                        .instructions("You are a helpful AI assistant. Respond concisely.")
+                        .with_tool(Echo)
+                        .with_tool(Add)
+                        .with_tool(WebSearch)
+                        .with_tool(WebFetch)
+                        .add_context_provider(skill_memory_new)
+                        .build()?;
+                    println!("[Session restarted — history cleared, agent reset]\n");
+                    continue;
+                }
+                if trimmed == "/memory" {
+                    println!("[SkillMemory]");
+                    println!("  dir: {}", memory_dir.display());
+                    println!("  enabled: true");
+                    println!("  SKILL.md: {}", memory_dir.join("SKILL.md").exists());
+                    println!("  AGENT.md: {}", memory_dir.join("AGENT.md").exists());
+                    println!("  references:");
+                    for entry in std::fs::read_dir(memory_dir.join("references")).ok().into_iter().flatten() {
+                        if let Ok(e) = entry {
+                            println!("    - {}", e.file_name().to_string_lossy());
+                        }
+                    }
+                    println!("  assets:");
+                    for entry in std::fs::read_dir(memory_dir.join("assets")).ok().into_iter().flatten() {
+                        if let Ok(e) = entry {
+                            println!("    - {}", e.file_name().to_string_lossy());
+                        }
+                    }
+                    println!();
                     continue;
                 }
                 if let Some(arg) = trimmed.strip_prefix("/think") {
