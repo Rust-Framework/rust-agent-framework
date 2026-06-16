@@ -2,9 +2,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use futures_util::StreamExt;
-use rust_agent_core::{ChatMessage, IAgent, IChatClient, MessageRole, ToolRegistry};
+use rust_agent_core::{ChatMessage, IAgent, IChatClient, ITool, MessageRole, ToolRegistry};
 
 use crate::tools::{ReadFile, WriteFile};
+use crate::chat_client_decorators::FunctionInvokingChatClient;
 use crate::ChatClientAgent;
 
 /// 运行 MemoryAgent 进行记忆沉淀。
@@ -50,11 +51,26 @@ pub(crate) async fn run_memory_agent(
     }
 
     // 构建 MemoryAgent
+    //
+    // IMPORTANT: must wrap the client in FunctionInvokingChatClient so
+    // tool calls (read_file / write_file) from the LLM are auto-invoked.
+    // ChatClientAgent::new().with_tools() only stores tool *definitions*
+    // in the registry; the execution loop comes from the decorator.
     let mut registry = ToolRegistry::new();
     registry.register(ReadFile);
     registry.register(WriteFile);
 
-    let agent = ChatClientAgent::new("memory-agent", client)
+    let tools: Vec<Arc<dyn ITool>> = registry
+        .list()
+        .into_iter()
+        .cloned()
+        .collect();
+    let pipeline_client: Arc<dyn IChatClient> = Arc::new(
+        FunctionInvokingChatClient::new(client, tools.clone())
+            .with_max_rounds(5),
+    );
+
+    let agent = ChatClientAgent::new("memory-agent", pipeline_client)
         .with_instructions(agent_md)
         .with_tools(registry);
 

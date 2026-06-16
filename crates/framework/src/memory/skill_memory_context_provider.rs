@@ -1,5 +1,6 @@
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use rust_agent_core::{
@@ -10,12 +11,20 @@ use rust_agent_core::{
 use crate::context_providers::agent_skill::AgentSkill;
 use crate::context_providers::skills_provider::AgentSkillsProvider;
 use super::memory_agent::run_memory_agent;
+use super::memory_agent_chat_client::MemoryAgentChatClient;
 
 /// SkillMemoryContextProvider — 技能记忆上下文提供器
 ///
 /// 管理一个由 `SKILL.md` 定义的记忆技能，工具复用 `AgentSkillsProvider` 的
 /// `load_skill` 和 `read_skill_resource`。
 /// 在 `on_invoked` 中按配置的间隔调用 MemoryAgent 进行记忆沉淀。
+///
+/// ## MemoryAgent 客户端选择
+///
+/// - **默认**：自动从主代理获取 `IChatClient`，包装为 `MemoryAgentChatClient`
+///   （强制 temperature=0.1、关闭思考），确保记忆写入精准、高效。
+/// - **高级**：通过 `with_memory_agent()` 传入自定义客户端，Provider 直接使用，
+///   不附加任何参数覆盖——调用者自行控制。
 pub struct SkillMemoryContextProvider {
     /// 是否启用记忆功能（默认 true）
     enabled: bool,
@@ -23,15 +32,28 @@ pub struct SkillMemoryContextProvider {
     memory_dir: PathBuf,
     /// 持有 AgentSkillsProvider 复用其工具注册逻辑
     skills_provider: Option<AgentSkillsProvider>,
-    /// MemoryAgent 使用的 LLM chat_client（可选，无则不启用）
+    /// 用户显式指定的 MemoryAgent 客户端（via with_memory_agent()）
+    /// 为 None 时自动从 `agent.chat_client()` 发现并包装。
     memory_agent_client: Option<Arc<dyn IChatClient>>,
+    /// 自动发现 + 包装后的客户端缓存（惰性初始化，线程安全）
+    auto_client: Mutex<Option<Arc<dyn IChatClient>>>,
     /// MemoryAgent 执行间隔（每 N 轮执行一次，默认 3，0 禁用）
     consolidation_interval: usize,
 }
 
+/// Built-in template directory, resolved at compile time.
+/// Contains SKILL.md, AGENT.md, references/*.md, assets/INDEX.md.
+const TEMPLATE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/memory/skill");
+
 impl SkillMemoryContextProvider {
     pub fn new(memory_dir: impl AsRef<Path>) -> Self {
         let memory_dir_buf = memory_dir.as_ref().to_path_buf();
+
+        // Ensure the directory has at least SKILL.md — copy from the
+        // built-in template if this is the first run (directory empty or
+        // doesn't exist).  Never overwrites existing files.
+        Self::ensure_memory_dir(&memory_dir_buf);
+
         let skills_provider = AgentSkill::from_dir(&memory_dir_buf)
             .ok()
             .map(|skill| AgentSkillsProvider::new().with_skill(skill));
@@ -41,6 +63,7 @@ impl SkillMemoryContextProvider {
             memory_dir: memory_dir_buf,
             skills_provider,
             memory_agent_client: None,
+            auto_client: Mutex::new(None),
             consolidation_interval: 3,
         }
     }
@@ -85,6 +108,47 @@ impl SkillMemoryContextProvider {
             None => Vec::new(),
         }
     }
+
+    /// Seed the target memory directory from the built-in template.
+    ///
+    /// Called once during construction.  If `SKILL.md` already exists the
+    /// directory is considered initialized and this is a no-op.  Otherwise
+    /// the entire template tree (SKILL.md, AGENT.md, references/, assets/)
+    /// is copied over.  Existing files are never overwritten.
+    fn ensure_memory_dir(target: &Path) {
+        if target.join("SKILL.md").exists() {
+            return;
+        }
+        let template = Path::new(TEMPLATE_DIR);
+        if !template.exists() {
+            tracing::warn!("Memory template directory not found: {}", template.display());
+            return;
+        }
+        match copy_dir_all(template, target) {
+            Ok(()) => tracing::info!(
+                "Initialized memory directory from template: {}",
+                target.display()
+            ),
+            Err(e) => tracing::warn!("Failed to seed memory directory: {}", e),
+        }
+    }
+}
+
+/// Recursively copy `src` into `dst`, skipping files that already exist.
+fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_all(&src_path, &dst_path)?;
+        } else if !dst_path.exists() {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
 }
 
 // ── IContextProvider 实现 ──
@@ -111,17 +175,22 @@ impl IContextProvider for SkillMemoryContextProvider {
 
     async fn on_invoked(
         &self,
-        _agent: &dyn IAgent,
+        agent: &dyn IAgent,
         session: &dyn ISession,
         request_messages: &[ChatMessage],
         response: Option<&AgentResponse>,
         _error: Option<&rust_agent_core::AgentError>,
     ) -> Result<()> {
-        // 检查是否启用 MemoryAgent
-        let client = match &self.memory_agent_client {
-            Some(c) => c.clone(),
+        // Resolve the MemoryAgent client:
+        //  1. User explicitly provided one via with_memory_agent() → use as-is
+        //  2. No user override → auto-discover from the main agent, wrap with
+        //     MemoryAgentChatClient (low temp, no thinking) and cache it
+        let client = self.resolve_client(agent);
+        let client = match client {
+            Some(c) => c,
             None => return Ok(()),
         };
+
         if self.consolidation_interval == 0 {
             return Ok(());
         }
@@ -158,5 +227,42 @@ impl IContextProvider for SkillMemoryContextProvider {
         }
 
         Ok(())
+    }
+}
+
+impl SkillMemoryContextProvider {
+    /// Resolve the MemoryAgent client, preferring the user's explicit override,
+    /// falling back to auto-discovery from the main agent (wrapped for precision).
+    fn resolve_client(&self, agent: &dyn IAgent) -> Option<Arc<dyn IChatClient>> {
+        // Priority 1: user explicitly set via with_memory_agent()
+        if let Some(c) = &self.memory_agent_client {
+            return Some(Arc::clone(c));
+        }
+
+        // Priority 2: auto-discover from main agent (lazy + cached)
+        {
+            let guard = self.auto_client.lock().unwrap();
+            if let Some(c) = &*guard {
+                return Some(Arc::clone(c));
+            }
+        }
+
+        // First call — discover and wrap.
+        //
+        // SAFETY: MemoryAgentChatClient wraps the *shared* Arc<dyn IChatClient>
+        // without cloning mutable state.  It overrides options in
+        // MemoryAgentChatClient::run() on the per-call ChatClientRunOptions
+        // (passed by value), NOT on the client itself.  The main agent's
+        // calls are completely unaffected.
+        let main_client = agent.chat_client()?;
+        let wrapped: Arc<dyn IChatClient> =
+            Arc::new(MemoryAgentChatClient::new(Arc::clone(main_client)));
+
+        let mut guard = self.auto_client.lock().unwrap();
+        // Double-check: another task may have beaten us
+        if guard.is_none() {
+            *guard = Some(Arc::clone(&wrapped));
+        }
+        Some(wrapped)
     }
 }

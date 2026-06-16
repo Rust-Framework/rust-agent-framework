@@ -388,4 +388,11 @@ impl IAgent for ChatClientAgent {
     }
 
     async fn reset(&self) -> Result<()> { Ok(()) }
+
+    /// Expose the underlying chat client so context providers (e.g.
+    /// `SkillMemoryContextProvider`) can auto-discover it to spawn
+    /// sub-agents like `MemoryAgent`.
+    fn chat_client(&self) -> Option<&Arc<dyn IChatClient>> {
+        Some(&self.chat_client)
+    }
 }

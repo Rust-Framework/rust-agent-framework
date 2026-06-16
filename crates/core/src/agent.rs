@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 
+use crate::chat_client::IChatClient;
 use crate::session::{AgentSession, ISession};
 use crate::{AgentId, AgentMetadata, AgentResponseResult, AgentRunOptions, BoxStream, ChatMessage, Result};
 
@@ -58,5 +59,16 @@ pub trait IAgent: Send + Sync {
     fn deserialize_session(&self, data: &str) -> Result<Arc<dyn ISession>> {
         let session = AgentSession::deserialize(data)?;
         Ok(Arc::new(session))
+    }
+
+    /// Returns the underlying chat client if the agent wraps one.
+    ///
+    /// `ChatClientAgent` returns its inner client.  Proxy/stub agents
+    /// (e.g. `AgentProxy`) return `None`.  Used by context providers
+    /// that need to spawn sub-agents — for example,
+    /// `SkillMemoryContextProvider` auto-discovers the main agent's
+    /// client to run `MemoryAgent` for background memory consolidation.
+    fn chat_client(&self) -> Option<&Arc<dyn IChatClient>> {
+        None
     }
 }

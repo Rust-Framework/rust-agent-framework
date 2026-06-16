@@ -53,19 +53,15 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     // ── Resolve SkillMemory directory ─────────────────────────
-    let memory_dir = {
-        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let rel = base.join("../framework/src/memory/skill");
-        if rel.exists() {
-            rel.canonicalize().unwrap_or(rel)
-        } else {
-            // Fallback for running from workspace root
-            PathBuf::from("crates/framework/src/memory/skill")
-        }
-    };
-    println!("[SkillMemory dir: {}]", memory_dir.display());
+    // Runtime memory lives under logs/memory/ — never write into the
+    // source tree.  SkillMemoryContextProvider seeds it from the
+    // built-in template on first run.
+    let memory_dir = PathBuf::from("logs/memory");
+    std::fs::create_dir_all(&memory_dir).ok();
+    println!("[SkillMemory dir: {}]", memory_dir.canonicalize().unwrap_or_else(|_| memory_dir.clone()).display());
 
-    let skill_memory = SkillMemoryContextProvider::new(&memory_dir);
+    let skill_memory = SkillMemoryContextProvider::new(&memory_dir)
+        .with_consolidation_interval(1); // 开发环境：每轮都触发，便于测试验证
     println!("[SkillMemory loaded: SKILL.md found = {}]",
         memory_dir.join("SKILL.md").exists());
 
@@ -127,7 +123,8 @@ async fn main() -> anyhow::Result<()> {
                     // Rebuild agent to force SkillMemory re-initialization
                     let opts = ChatClientOptions::deepseek("deepseek-v4-flash", DEEPSEEK_API_KEY);
                     let new_client = DeepSeekChatClient::new(opts)?;
-                    let skill_memory_new = SkillMemoryContextProvider::new(&memory_dir);
+                    let skill_memory_new = SkillMemoryContextProvider::new(&memory_dir)
+                        .with_consolidation_interval(1);
                     agent = AgentBuilder::new("cli-agent")
                         .chat_client(new_client)
                         .instructions("You are a helpful AI assistant. Respond concisely.")
