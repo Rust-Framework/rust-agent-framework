@@ -157,7 +157,7 @@ pub enum ToolRef {
         script_path: String,
         /// JSON Schema 格式的参数定义
         #[serde(default)]
-        parameters_schema: serde_json::Value,
+        parameters: serde_json::Value,
     },
     /// 自定义工具（需在 Resolver 注册工厂）
     Custom {

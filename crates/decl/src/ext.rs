@@ -136,8 +136,8 @@ impl ITool for ToolWrapper {
         self.0.description()
     }
 
-    fn parameters_schema(&self) -> serde_json::Value {
-        self.0.parameters_schema()
+    fn parameters(&self) -> serde_json::Value {
+        self.0.parameters()
     }
 
     async fn execute(&self, arguments: serde_json::Value) -> rust_agent_core::Result<String> {

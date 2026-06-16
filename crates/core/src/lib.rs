@@ -29,7 +29,7 @@ pub use session::{AgentSession, ISession, ProviderState, ProviderStateStore, Ses
 pub use session_store::ISessionStore;
 pub use stream::{BoxStream, collect_agent_response};
 pub use token_counter::ITokenCounter;
-pub use tool::{ITool, ToolRegistry};
+pub use tool::{ApprovalRequiredTool, ITool, ToolApprovalResponse, ToolRegistry};
 
 // Re-export core types
 pub use error::{AgentError, Result};

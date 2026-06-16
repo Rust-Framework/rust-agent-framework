@@ -30,7 +30,7 @@
 
 ### 现有 Tool 模式（core crate）
 
-- **`ITool` trait**（[tool.rs](file:///d:/GitCode/RF/rust-agent-framework/crates/core/src/tool.rs)）：`name()`、`description()`、`parameters_schema()`、`execute(arguments) -> Result<String>`
+- **`ITool` trait**（[tool.rs](file:///d:/GitCode/RF/rust-agent-framework/crates/core/src/tool.rs)）：`name()`、`description()`、`parameters()`、`execute(arguments) -> Result<String>`
 - **`ToolRegistry`**：HashMap 管理工具注册与查询
 
 ### 现有错误处理
@@ -169,7 +169,7 @@ pub struct RhaiExecutor {
 pub struct RhaiTool {
     name: String,
     description: String,
-    parameters_schema: serde_json::Value,
+    parameters: serde_json::Value,
     runtime: Arc<RhaiRuntime>,
     script_source: String,
 }

@@ -209,6 +209,8 @@ async fn main() -> anyhow::Result<()> {
                         // Track active parallel tool calls for friendly progress display
                         let mut active_tools: std::collections::HashMap<String, String> =
                             std::collections::HashMap::new();
+                        // Accumulate token usage for end-of-round summary
+                        let mut accumulated_usage: Option<rust_agent_core::Usage> = None;
 
                         while let Some(item) = stream.next().await {
                             match item {
@@ -319,27 +321,7 @@ async fn main() -> anyhow::Result<()> {
                                                 }
                                             }
                                             Content::Usage(c) => {
-                                                let cache = if let Some(hit) = c.usage.prompt_cache_hit_tokens {
-                                                    let miss = c.usage.prompt_cache_miss_tokens.unwrap_or(0);
-                                                    let total_cache = hit + miss;
-                                                    if total_cache > 0 {
-                                                        let ratio = c.usage.cache_hit_ratio();
-                                                        format!(" cache:{}/{}({:.0}%)", hit, total_cache, ratio * 100.0)
-                                                    } else {
-                                                        format!(" cache:{}h", hit)
-                                                    }
-                                                } else {
-                                                    String::new()
-                                                };
-                                                let reasoning = if let Some(rt) = c.usage.reasoning_tokens {
-                                                    if rt > 0 { format!(" reasoning:{}", rt) } else { String::new() }
-                                                } else { String::new() };
-                                                eprintln!(
-                                                    "\n\x1b[90m[用量] prompt={}{} completion={}{} total={}\x1b[0m",
-                                                    c.usage.prompt_tokens, cache,
-                                                    c.usage.completion_tokens, reasoning,
-                                                    c.usage.total_tokens,
-                                                );
+                                                accumulated_usage = Some(c.usage.clone());
                                             }
                                             Content::Error(c) => {
                                                 if in_reasoning {
@@ -396,6 +378,30 @@ async fn main() -> anyhow::Result<()> {
                         }
                         if in_reasoning {
                             println!("\x1b[0m");
+                        }
+                        // ── End-of-round token usage summary ──
+                        if let Some(ref usage) = accumulated_usage {
+                            let cache = if let Some(hit) = usage.prompt_cache_hit_tokens {
+                                let miss = usage.prompt_cache_miss_tokens.unwrap_or(0);
+                                let total_cache = hit + miss;
+                                if total_cache > 0 {
+                                    let ratio = usage.cache_hit_ratio();
+                                    format!(" cache:{}/{}({:.0}%)", hit, total_cache, ratio * 100.0)
+                                } else {
+                                    format!(" cache:{}h", hit)
+                                }
+                            } else {
+                                String::new()
+                            };
+                            let reasoning = if let Some(rt) = usage.reasoning_tokens {
+                                if rt > 0 { format!(" reasoning:{}", rt) } else { String::new() }
+                            } else { String::new() };
+                            eprintln!(
+                                "\x1b[90m[用量] prompt={}{} completion={}{} total={}\x1b[0m",
+                                usage.prompt_tokens, cache,
+                                usage.completion_tokens, reasoning,
+                                usage.total_tokens,
+                            );
                         }
                         println!("\n");
                     }

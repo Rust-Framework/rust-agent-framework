@@ -1,0 +1,56 @@
+[package]
+name = "rust-agent-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "ACP server host for the Rust Agent Framework — serves multiple agent systems to ACP-compatible clients (e.g. GPUI-based AI products)"
+
+[[bin]]
+name = "rust-agent-host"
+path = "src/main.rs"
+
+[dependencies]
+# RAF internal
+rust-agent-core = { workspace = true }
+rust-agent-framework = { workspace = true }
+rust-agent-client = { workspace = true }
+rust-agent-decl = { workspace = true }
+rust-agent-workflow = { workspace = true }
+
+# ACP protocol
+agent-client-protocol = "0.14"
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+futures-core = { workspace = true }
+futures-util = { workspace = true }
+
+# WebSocket transport (axum)
+axum = { version = "0.8", features = ["ws"] }
+tower = "0.5"
+
+# Configuration
+figment = { version = "0.10", features = ["toml", "env"] }
+clap = { version = "4", features = ["derive"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+
+# UUID
+uuid = { workspace = true }
+
+# Concurrency
+tokio-stream = { workspace = true }
+
+# Signal handling
+tokio-util = { version = "0.7", features = ["rt", "compat", "io"] }

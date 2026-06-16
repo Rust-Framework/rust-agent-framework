@@ -438,6 +438,14 @@ pub enum AgentResponseUpdate {
     ToolCallEnd { id: String },
     /// A tool call has been executed, carrying the result or error.
     ToolCalled { id: String, result: Option<String>, error: Option<String> },
+    /// A tool call requires human approval before execution.
+    /// Corresponds to MAF's `FunctionApprovalRequestContent`.
+    ToolApprovalRequest {
+        call_id: String,
+        name: String,
+        arguments: serde_json::Value,
+        description: String,
+    },
     Usage { usage: Usage },
     Finish {
         finish_reason: FinishReason,

@@ -77,7 +77,7 @@ impl ISessionStore for IsolationScopedSessionStore {
     async fn save_session(&self, session: &dyn ISession) -> Result<()> {
         // Save with the original session ID — the scoping is handled
         // by the session ID itself being already scoped when created
-        // via AgentHost.get_or_create_session()
+        // (application layer manages session lifecycle)
         self.inner.save_session(session).await
     }
 

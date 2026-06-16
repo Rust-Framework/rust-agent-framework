@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "id": "general-decl",
+  "description": "通用 AI 助手 — 回答问题、写作、分析、创意（声明式）",
+  "instructions": "你是通用 AI 助手，擅长回答问题、写作、分析和创意工作。\n\n回复原则：\n1. 先给出直接答案，再展开解释\n2. 遇到不确定的问题，明确说明不确定性\n3. 使用 markdown 格式组织长回复\n4. 用中文回复",
+  "model": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "api_key": "$DEEPSEEK_API_KEY"
+  },
+  "tools": [
+    { "type": "builtin", "name": "web_search" },
+    { "type": "builtin", "name": "web_fetch" }
+  ],
+  "max_tool_rounds": 5
+}

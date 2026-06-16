@@ -145,7 +145,7 @@ fn test_agent_decl_tool_ref_rhai() {
                 "name": "my_tool",
                 "description": "A Rhai script tool",
                 "script_path": "./tools/my_tool.rhai",
-                "parameters_schema": { "type": "object", "properties": {} }
+                "parameters": { "type": "object", "properties": {} }
             }
         ]
     }"#;

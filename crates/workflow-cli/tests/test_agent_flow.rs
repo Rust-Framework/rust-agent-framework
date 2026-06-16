@@ -83,7 +83,7 @@ impl MockTool {
 impl ITool for MockTool {
     fn name(&self) -> &str { self.name }
     fn description(&self) -> &str { self.description }
-    fn parameters_schema(&self) -> serde_json::Value {
+    fn parameters(&self) -> serde_json::Value {
         serde_json::json!({"type": "object", "properties": {}})
     }
     async fn execute(&self, _args: serde_json::Value) -> Result<String> {

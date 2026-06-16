@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
 use crate::chat_client::ChatClientRunOptions;
+use crate::tool::ToolApprovalResponse;
 
 /// Options passed to `IAgent::run()`, following MAF's RunOptions pattern.
 ///
@@ -31,6 +34,15 @@ pub struct AgentRunOptions {
     /// Allow parallel tool calls. When `Some(true)`, the LLM may emit multiple
     /// tool calls in a single response. Maps to OpenAI's `parallel_tool_calls` parameter.
     pub parallel_tool_calls: Option<bool>,
+    /// Tool approval responses for resuming after `FinishReason::AwaitingApproval`.
+    /// Caller fills this with user decisions before calling `run()` again.
+    /// The session already holds the assistant(tool_calls) message from the
+    /// paused run, so no messages need to be passed.
+    pub tool_approval_responses: Vec<ToolApprovalResponse>,
+    /// Cancel flag. The caller holds a clone and sets it to `true` to interrupt
+    /// the agent at the next tool-loop iteration. Zero external dependencies.
+    #[serde(skip)]
+    pub cancelled: Option<Arc<AtomicBool>>,
 }
 
 impl AgentRunOptions {
@@ -79,6 +91,21 @@ impl AgentRunOptions {
         self
     }
 
+    /// Set tool approval responses for resuming after an approval pause.
+    pub fn with_tool_approval_responses(
+        mut self,
+        responses: Vec<ToolApprovalResponse>,
+    ) -> Self {
+        self.tool_approval_responses = responses;
+        self
+    }
+
+    /// Set the cancellation flag for this run.
+    pub fn with_cancelled(mut self, flag: Arc<AtomicBool>) -> Self {
+        self.cancelled = Some(flag);
+        self
+    }
+
     /// Set the reasoning effort level for this run.
     ///
     /// Maps to `reasoning_effort: "high"/"max"` in the request body.
@@ -104,6 +131,8 @@ impl AgentRunOptions {
             tools: Vec::new(), // tools are injected by the agent, not from options
             parallel_tool_calls: self.parallel_tool_calls,
             provider_tools: Vec::new(), // injected on_invoking(), not from AgentRunOptions
+            tool_approval_responses: self.tool_approval_responses.clone(),
+            cancelled: self.cancelled.clone(),
         }
     }
 }

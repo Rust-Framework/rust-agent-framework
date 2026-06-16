@@ -332,12 +332,12 @@ impl AgentResolver for DefaultAgentResolver {
                 name,
                 description,
                 script_path,
-                parameters_schema,
+                parameters,
             } => {
                 let tool = RhaiTool::from_script_file(
                     name,
                     description,
-                    parameters_schema.clone(),
+                    parameters.clone(),
                     script_path,
                 )
                 .map_err(|e| DeclError::Resolution(format!("Rhai tool error: {}", e)))?;
@@ -531,8 +531,8 @@ impl ITool for ToolWrapper {
         self.0.description()
     }
 
-    fn parameters_schema(&self) -> serde_json::Value {
-        self.0.parameters_schema()
+    fn parameters(&self) -> serde_json::Value {
+        self.0.parameters()
     }
 
     async fn execute(&self, arguments: serde_json::Value) -> rust_agent_core::Result<String> {

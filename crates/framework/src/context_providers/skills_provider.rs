@@ -18,7 +18,7 @@ use super::script_runner::AgentSkillScriptRunner;
 struct FnTool {
     name: String,
     description: String,
-    parameters_schema: serde_json::Value,
+    parameters: serde_json::Value,
     handler: Arc<
         dyn Fn(serde_json::Value) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
             + Send
@@ -30,7 +30,7 @@ impl FnTool {
     fn new(
         name: impl Into<String>,
         description: impl Into<String>,
-        parameters_schema: serde_json::Value,
+        parameters: serde_json::Value,
         handler: impl Fn(serde_json::Value) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
             + Send
             + Sync
@@ -39,7 +39,7 @@ impl FnTool {
         Self {
             name: name.into(),
             description: description.into(),
-            parameters_schema,
+            parameters,
             handler: Arc::new(handler),
         }
     }
@@ -55,8 +55,8 @@ impl ITool for FnTool {
         &self.description
     }
 
-    fn parameters_schema(&self) -> serde_json::Value {
-        self.parameters_schema.clone()
+    fn parameters(&self) -> serde_json::Value {
+        self.parameters.clone()
     }
 
     async fn execute(&self, arguments: serde_json::Value) -> Result<String> {

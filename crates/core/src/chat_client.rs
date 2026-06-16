@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::{AgentError, AgentResponseUpdate, BoxStream, ChatMessage, ITool, ModelMetadata, Result};
+use crate::tool::ToolApprovalResponse;
 
 /// Per-call run options for `IChatClient::run()`, following MAF's pattern.
 ///
@@ -45,6 +46,13 @@ pub struct ChatClientRunOptions {
     /// carries the actual `Arc<dyn ITool>` instances for invocation.
     #[serde(skip)]
     pub provider_tools: Vec<Arc<dyn ITool>>,
+    /// Tool approval responses propagated from `AgentRunOptions` for
+    /// resuming after an approval pause.
+    #[serde(skip)]
+    pub tool_approval_responses: Vec<ToolApprovalResponse>,
+    /// Cancel flag propagated from `AgentRunOptions`.
+    #[serde(skip)]
+    pub cancelled: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
 // Manual Debug impl — `dyn ITool` doesn't impl Debug, so we skip provider_tools.
@@ -59,6 +67,7 @@ impl std::fmt::Debug for ChatClientRunOptions {
             .field("tools", &self.tools)
             .field("parallel_tool_calls", &self.parallel_tool_calls)
             .field("provider_tools", &format_args!("[{} tools]", self.provider_tools.len()))
+            .field("tool_approval_responses", &self.tool_approval_responses.len())
             .finish()
     }
 }

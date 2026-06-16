@@ -225,7 +225,7 @@ impl IAgent for ChatClientAgent {
                         "function": {
                             "name": tool.name(),
                             "description": tool.description(),
-                            "parameters": tool.parameters_schema(),
+                            "parameters": tool.parameters(),
                         }
                     })
                 }).collect()
@@ -248,7 +248,7 @@ impl IAgent for ChatClientAgent {
                         "function": {
                             "name": tool.name(),
                             "description": tool.description(),
-                            "parameters": tool.parameters_schema(),
+                            "parameters": tool.parameters(),
                         }
                     }));
                 }

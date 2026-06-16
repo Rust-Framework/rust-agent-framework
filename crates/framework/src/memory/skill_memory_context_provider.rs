@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -12,6 +11,7 @@ use crate::context_providers::agent_skill::AgentSkill;
 use crate::context_providers::skills_provider::AgentSkillsProvider;
 use super::memory_agent::run_memory_agent;
 use super::memory_agent_chat_client::MemoryAgentChatClient;
+use super::memory_seed;
 
 /// SkillMemoryContextProvider — 技能记忆上下文提供器
 ///
@@ -41,18 +41,12 @@ pub struct SkillMemoryContextProvider {
     consolidation_interval: usize,
 }
 
-/// Built-in template directory, resolved at compile time.
-/// Contains SKILL.md, AGENT.md, references/*.md, assets/INDEX.md.
-const TEMPLATE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/memory/skill");
-
 impl SkillMemoryContextProvider {
     pub fn new(memory_dir: impl AsRef<Path>) -> Self {
         let memory_dir_buf = memory_dir.as_ref().to_path_buf();
 
-        // Ensure the directory has at least SKILL.md — copy from the
-        // built-in template if this is the first run (directory empty or
-        // doesn't exist).  Never overwrites existing files.
-        Self::ensure_memory_dir(&memory_dir_buf);
+        // Seed from the built-in template — idempotent, preserves user data.
+        memory_seed::seed_memory_dir(&memory_dir_buf);
 
         let skills_provider = AgentSkill::from_dir(&memory_dir_buf)
             .ok()
@@ -108,47 +102,6 @@ impl SkillMemoryContextProvider {
             None => Vec::new(),
         }
     }
-
-    /// Seed the target memory directory from the built-in template.
-    ///
-    /// Called once during construction.  If `SKILL.md` already exists the
-    /// directory is considered initialized and this is a no-op.  Otherwise
-    /// the entire template tree (SKILL.md, AGENT.md, references/, assets/)
-    /// is copied over.  Existing files are never overwritten.
-    fn ensure_memory_dir(target: &Path) {
-        if target.join("SKILL.md").exists() {
-            return;
-        }
-        let template = Path::new(TEMPLATE_DIR);
-        if !template.exists() {
-            tracing::warn!("Memory template directory not found: {}", template.display());
-            return;
-        }
-        match copy_dir_all(template, target) {
-            Ok(()) => tracing::info!(
-                "Initialized memory directory from template: {}",
-                target.display()
-            ),
-            Err(e) => tracing::warn!("Failed to seed memory directory: {}", e),
-        }
-    }
-}
-
-/// Recursively copy `src` into `dst`, skipping files that already exist.
-fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
-    fs::create_dir_all(dst)?;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-        if ty.is_dir() {
-            copy_dir_all(&src_path, &dst_path)?;
-        } else if !dst_path.exists() {
-            fs::copy(&src_path, &dst_path)?;
-        }
-    }
-    Ok(())
 }
 
 // ── IContextProvider 实现 ──

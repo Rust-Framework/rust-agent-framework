@@ -95,6 +95,10 @@ pub enum FinishReason {
     Length,
     ToolCalls,
     ContentFilter,
+    /// Agent paused because a tool requires human approval.
+    /// The session retains full context (including the assistant(tool_calls) message).
+    /// Caller should collect approval decisions and resume via `AgentRunOptions.tool_approval_responses`.
+    AwaitingApproval,
     #[serde(untagged)]
     Other(String),
 }

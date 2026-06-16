@@ -48,7 +48,7 @@ impl MockReadFileTool {
 impl ITool for MockReadFileTool {
     fn name(&self) -> &str { "read_file" }
     fn description(&self) -> &str { "Reads a file" }
-    fn parameters_schema(&self) -> serde_json::Value {
+    fn parameters(&self) -> serde_json::Value {
         serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}}})
     }
     async fn execute(&self, args: serde_json::Value) -> Result<String> {

@@ -31,7 +31,7 @@ impl ITool for WeatherTool {
         "Get current weather for a city. Returns temperature, wind speed, and conditions."
     }
 
-    fn parameters_schema(&self) -> serde_json::Value {
+    fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {

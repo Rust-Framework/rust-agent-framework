@@ -359,6 +359,16 @@ impl AgentResponseConverter {
                     self.model_id = Some(model);
                 }
             }
+            AgentResponseUpdate::ToolApprovalRequest { name, arguments, .. } => {
+                contents.push(Content::Text(TextContent {
+                    meta: self.build_meta(),
+                    delta: format!(
+                        "\n[Approval required: {}({})]\n",
+                        name,
+                        serde_json::to_string(&arguments).unwrap_or_default()
+                    ),
+                }));
+            }
         }
 
         ConvertOutput { contents, events }

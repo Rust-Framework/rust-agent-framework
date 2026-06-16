@@ -39,7 +39,7 @@ use crate::runtime::RhaiRuntime;
 pub struct RhaiTool {
     name: String,
     description: String,
-    parameters_schema: serde_json::Value,
+    parameters: serde_json::Value,
     runtime: Arc<Mutex<RhaiRuntime>>,
 }
 
@@ -49,12 +49,12 @@ impl RhaiTool {
     /// # 参数
     /// - `name`: 工具名称（Agent 通过此名称匹配）
     /// - `description`: 工具描述（用于 Agent function calling）
-    /// - `parameters_schema`: JSON Schema 格式的参数定义
+    /// - `parameters`: JSON Schema 格式的参数定义
     /// - `script`: Rhai 脚本内容
     pub fn new(
         name: impl Into<String>,
         description: impl Into<String>,
-        parameters_schema: serde_json::Value,
+        parameters: serde_json::Value,
         script: impl Into<String>,
     ) -> Self {
         let script_str = script.into();
@@ -64,7 +64,7 @@ impl RhaiTool {
         Self {
             name: name.into(),
             description: description.into(),
-            parameters_schema,
+            parameters,
             runtime: Arc::new(Mutex::new(runtime)),
         }
     }
@@ -75,7 +75,7 @@ impl RhaiTool {
     pub fn with_runtime(
         name: impl Into<String>,
         description: impl Into<String>,
-        parameters_schema: serde_json::Value,
+        parameters: serde_json::Value,
         mut runtime: RhaiRuntime,
         script: impl Into<String>,
     ) -> Self {
@@ -85,7 +85,7 @@ impl RhaiTool {
         Self {
             name: name.into(),
             description: description.into(),
-            parameters_schema,
+            parameters,
             runtime: Arc::new(Mutex::new(runtime)),
         }
     }
@@ -97,12 +97,12 @@ impl RhaiTool {
     pub fn from_script_file(
         name: impl Into<String>,
         description: impl Into<String>,
-        parameters_schema: serde_json::Value,
+        parameters: serde_json::Value,
         script_path: impl AsRef<std::path::Path>,
     ) -> std::result::Result<Self, String> {
         let script = std::fs::read_to_string(script_path.as_ref())
             .map_err(|e| format!("读取脚本文件失败: {}", e))?;
-        Ok(Self::new(name, description, parameters_schema, script))
+        Ok(Self::new(name, description, parameters, script))
     }
 }
 
@@ -116,8 +116,8 @@ impl ITool for RhaiTool {
         &self.description
     }
 
-    fn parameters_schema(&self) -> serde_json::Value {
-        self.parameters_schema.clone()
+    fn parameters(&self) -> serde_json::Value {
+        self.parameters.clone()
     }
 
     async fn execute(&self, arguments: serde_json::Value) -> Result<String> {

@@ -178,7 +178,7 @@ fn expand_tool_fn(description: &str, func: syn::ItemFn) -> TokenStream {
                 #description
             }
 
-            fn parameters_schema(&self) -> serde_json::Value {
+            fn parameters(&self) -> serde_json::Value {
                 let mut props = serde_json::Map::new();
                 #(#schema_props)*
                 let mut schema = serde_json::json!({
@@ -224,7 +224,7 @@ fn expand_tool_struct(description: &str, input: DeriveInput) -> TokenStream {
                 #description
             }
 
-            fn parameters_schema(&self) -> serde_json::Value {
+            fn parameters(&self) -> serde_json::Value {
                 serde_json::json!({"type": "object", "properties": {}})
             }
 

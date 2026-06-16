@@ -1,7 +1,7 @@
 //! Workflow 流程编排 CLI 测试程序
 //!
 //! 功能覆盖：
-//! 1. AgentHost + Session 注册中心
+//! 1. Session 直接管理（MAF 一致的原语模式）
 //! 2. ChatClient 管道模式 (FunctionInvokingChatClient)
 //! 3. WorkflowEngine + Checkpoint 集成
 //! 4. Session TTL cleanup 验证
@@ -23,7 +23,7 @@ use rust_agent_core::{
     IAgent,
 };
 use rust_agent_framework::{
-    AgentBuilder, AgentHost, InMemorySessionStore,
+    AgentBuilder, InMemorySessionStore,
     tools::ReadFile,
 };
 use rust_agent_workflow::orchestrations::{
@@ -41,9 +41,9 @@ const DEFAULT_MODEL: &str = "deepseek-v4-flash";
 // 测试场景
 // ============================================================
 
-/// 场景 1：AgentHost 注册中心 + ChatClient 管道模式 + 流式输出
+/// 场景 1：Session 直接管理 + ChatClient 管道模式 + 流式输出（MAF 一致的原语模式）
 async fn scenario_1_agent_host_pipeline() -> Result<()> {
-    println!("\n=== 场景 1：AgentHost + FunctionInvokingChatClient 管道 ===");
+    println!("\n=== 场景 1：Session 直接管理 + FunctionInvokingChatClient 管道 ===");
 
     let store: Arc<dyn ISessionStore> = Arc::new(
         InMemorySessionStore::new()
@@ -57,22 +57,28 @@ async fn scenario_1_agent_host_pipeline() -> Result<()> {
         .instructions("你是 AI 助手。回复用中文，一句话介绍自己。")
         .build()?;
 
-    let host = AgentHost::new(agent, store.clone());
-
-    // get_subagent 验证
-    let found = host.get_subagent(&AgentId::new("pipeline-agent"));
+    // get_subagent 验证（直接通过 IAgent）
+    let found = agent.get_subagent(&AgentId::new("pipeline-agent"));
     println!("  [get_subagent] pipeline-agent: found={}", found.is_some());
-    let none = host.get_subagent(&AgentId::new("nonexistent"));
+    let none = agent.get_subagent(&AgentId::new("nonexistent"));
     println!("  [get_subagent] nonexistent: found={}", none.is_some());
 
-    // Session 管理
-    let session = host.get_or_create_session("test-session-1").await?;
+    // Session 管理（MAF 一致的原语模式：加载或创建）
+    let session_id = "test-session-1";
+    let session: Arc<dyn ISession> = match store.get_session(session_id).await? {
+        Some(s) => s,
+        None => {
+            let s = Arc::new(AgentSession::with_id(session_id));
+            store.save_session(s.as_ref()).await?;
+            s
+        }
+    };
     println!("  [session] created: {}", session.session_id());
 
-    // 发送消息并消费流
-    let stream = host.run(
+    // 直接调用 agent.run()（应用层决定何时保存）
+    let stream = agent.run(
         vec![ChatMessage::user("你好！请用一句话介绍自己。")],
-        session.clone(),
+        Some(session.clone()),
         None,
     ).await?;
 
@@ -93,11 +99,13 @@ async fn scenario_1_agent_host_pipeline() -> Result<()> {
         }
     }
     println!();
+
+    // 流消费后保存（应用层决定时机）
+    store.save_session(session.as_ref()).await?;
     println!("  [response] {} chars", text.len());
 
-    // 验证 agent 引用可达
-    let agent_ref = host.agent();
-    println!("  [agent] id={} type={}", agent_ref.id(), agent_ref.metadata().agent_type);
+    // 验证 agent 信息
+    println!("  [agent] id={} type={}", agent.id(), agent.metadata().agent_type);
 
     Ok(())
 }
@@ -574,7 +582,7 @@ async fn main() -> Result<()> {
         };
     }
 
-    run_scenario!("场景1: AgentHost 管道", scenario_1_agent_host_pipeline());
+    run_scenario!("场景1: Session直接管理", scenario_1_agent_host_pipeline());
     run_scenario!("场景2: WorkflowEngine+Checkpoint", scenario_2_workflow_engine_checkpoint());
     run_scenario!("场景3: Session TTL cleanup", scenario_3_session_cleanup());
     run_scenario!("场景4: 工具调用管道", scenario_4_tool_call_pipeline());

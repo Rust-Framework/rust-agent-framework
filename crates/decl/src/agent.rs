@@ -80,7 +80,7 @@ pub enum ToolRef {
         script_path: String,
         /// JSON Schema describing the tool's parameters.
         #[serde(default)]
-        parameters_schema: serde_json::Value,
+        parameters: serde_json::Value,
     },
     /// A custom tool registered via factory.
     Custom {

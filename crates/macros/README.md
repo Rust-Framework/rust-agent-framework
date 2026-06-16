@@ -31,7 +31,7 @@ What the macro generates:
 - `ITool` implementation with:
   - `name()` → original function name (`"add"`)
   - `description()` → from `description = "..."` attribute
-  - `parameters_schema()` → auto-generated JSON Schema from parameter types and `#[param(desc = "...")]` annotations
+  - `parameters()` → auto-generated JSON Schema from parameter types and `#[param(desc = "...")]` annotations
   - `execute()` → deserializes args, calls `call()`, returns `Result<String>`
 - A public `call()` method on the struct that delegates to the original function
 

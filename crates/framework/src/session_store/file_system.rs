@@ -84,8 +84,8 @@ impl ISessionStore for FileSystemSessionStore {
     ///
     /// 阶段 1 — mtime 预过滤（快速路径）：
     ///   读取文件的系统修改时间 `mtime`。
-    ///   AgentHost.run() 在每次调用前后都会执行 save_session() 写入文件，
-    ///   因此文件的 mtime 与最后一次 Agent.run() 调用强相关。
+    ///   agent.run() 每次调用前后应用层可选择执行 save_session() 写入文件，
+    ///   因此文件的 mtime 与最后一次 agent.run() 调用强相关。
     ///   如果 `now - mtime < max_idle_secs`，则该会话在空闲超时窗口内
     ///   肯定有活动记录，直接跳过 JSON 反序列化（O(1) 文件元数据 vs O(n) JSON 解析）。
     ///
@@ -115,7 +115,7 @@ impl ISessionStore for FileSystemSessionStore {
     ///     生产环境多实例部署建议使用数据库后端或引入分布式锁。
     ///   - `std::fs::read_dir` 在超大目录（10w+ 文件）存在性能瓶颈，
     ///     可考虑按时间分片存储或使用对象存储。
-    ///   - cleanup 期间如果恰好有 AgentHost.run() 正在写入该会话文件，
+    ///   - cleanup 期间如果恰好有 agent.run() 正在写入该会话文件，
     ///     remove_file 和 write 操作可能交错（POSIX 允许），建议
     ///     在低流量窗口执行或使用 advisory lock。
     async fn cleanup_expired(&self) -> Result<usize> {
@@ -144,7 +144,7 @@ impl ISessionStore for FileSystemSessionStore {
             }
 
             // ── 阶段 1：mtime 预过滤 ──────────────────────────
-            // 原理：AgentHost.run() → session_store.save_session()
+            // 原理：agent.run() → session_store.save_session()
             // → fs::write(path, json) 更新文件 mtime。
             // 因此文件 mtime ≈ 最后一次 agent.run() 时间。
             //

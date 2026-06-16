@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use rust_agent_core::{
     AgentResponseUpdate, BoxStream, ChatClientRunOptions, ChatMessage, FinishReason,
     IChatClient, ITool, MessageRole, ModelMetadata, ResponseMetadata, Result,
-    ToolCalledContent, ToolCall,
+    ToolApprovalResponse, ToolCalledContent, ToolCall,
 };
 
 /// 工具调用循环 ChatClient 装饰器
@@ -166,6 +166,107 @@ impl IChatClient for FunctionInvokingChatClient {
                             round,
                             options,
                         } => {
+                            // ── Cancel check (before anything else) ──
+                            if let Some(ref flag) = options.cancelled {
+                                use std::sync::atomic::Ordering;
+                                if flag.load(Ordering::Relaxed) {
+                                    tracing::info!(round, "Agent run cancelled");
+                                    let err_update = AgentResponseUpdate::Error {
+                                        message: "Agent run cancelled".into(),
+                                    };
+                                    return Some((Ok(err_update), LoopState::Done));
+                                }
+                            }
+
+                            // ── Approval resume: process pending approval responses ──
+                            if !options.tool_approval_responses.is_empty() {
+                                tracing::info!(
+                                    response_count = options.tool_approval_responses.len(),
+                                    "Resuming after approval pause"
+                                );
+
+                                let approval_map: std::collections::HashMap<&str, &ToolApprovalResponse> =
+                                    options
+                                        .tool_approval_responses
+                                        .iter()
+                                        .map(|r| (r.call_id.as_str(), r))
+                                        .collect();
+
+                                // Find pending tool_calls from the last assistant message
+                                let pending: Vec<ToolCall> = messages
+                                    .iter()
+                                    .rev()
+                                    .find(|m| {
+                                        m.role == MessageRole::Assistant && m.tool_calls.is_some()
+                                    })
+                                    .and_then(|m| m.tool_calls.clone())
+                                    .unwrap_or_default();
+
+                                let mut next_messages = messages.clone();
+                                for tc in &pending {
+                                    let approved = approval_map
+                                        .get(tc.id.as_str())
+                                        .map(|r| r.approved)
+                                        .unwrap_or(false);
+
+                                    if approved {
+                                        let args = match &tc.arguments {
+                                            serde_json::Value::String(s) => {
+                                                serde_json::from_str(s)
+                                                    .unwrap_or(serde_json::Value::Null)
+                                            }
+                                            other => other.clone(),
+                                        };
+                                        let result = match tools
+                                            .iter()
+                                            .find(|t| t.name() == tc.name)
+                                        {
+                                            Some(tool) => match tool.execute(args).await {
+                                                Ok(output) => output,
+                                                Err(e) => format!("Error: {}", e),
+                                            },
+                                            None => {
+                                                format!("Tool '{}' not found", tc.name)
+                                            }
+                                        };
+                                        next_messages.push(ChatMessage {
+                                            role: MessageRole::Tool,
+                                            content: result,
+                                            name: Some(tc.name.clone()),
+                                            tool_calls: None,
+                                            tool_call_id: Some(tc.id.clone()),
+                                            source: None,
+                                        });
+                                    } else {
+                                        let reason = approval_map
+                                            .get(tc.id.as_str())
+                                            .and_then(|r| r.reason.as_deref())
+                                            .unwrap_or("User denied");
+                                        next_messages.push(ChatMessage {
+                                            role: MessageRole::Tool,
+                                            content: format!("Rejected: {}", reason),
+                                            name: Some(tc.name.clone()),
+                                            tool_calls: None,
+                                            tool_call_id: Some(tc.id.clone()),
+                                            source: None,
+                                        });
+                                    }
+                                }
+
+                                let mut opts = options.clone();
+                                opts.tool_approval_responses.clear();
+                                return Some((
+                                    Ok(AgentResponseUpdate::TextDelta {
+                                        delta: String::new(),
+                                    }),
+                                    LoopState::Looping {
+                                        messages: next_messages,
+                                        round: round + 1,
+                                        options: opts,
+                                    },
+                                ));
+                            }
+
                             if round >= max_rounds {
                                 tracing::warn!(
                                     round,
@@ -205,20 +306,32 @@ impl IChatClient for FunctionInvokingChatClient {
                             // tools injected by ContextProviders (e.g. load_skill) are
                             // executable, not just sent as schemas to the LLM.
                             //
-                            // Dedup by name: statically-registered tools take priority;
-                            // provider-injected tools with the same name are skipped.
+                            // Dedup by name: statically-registered tools take priority,
+                            // except ApprovalRequiredTool wrappers which replace
+                            // their non-approval counterparts.
                             let mut combined: Vec<Arc<dyn ITool>> = (*tools).clone();
-                            let seen: std::collections::HashSet<String> = combined
+                            let mut seen: std::collections::HashSet<String> = combined
                                 .iter()
                                 .map(|t| t.name().to_string())
                                 .collect();
                             for pt in &options.provider_tools {
                                 if seen.contains(pt.name()) {
-                                    tracing::debug!(
-                                        provider_tool = pt.name(),
-                                        "Provider tool skipped — already registered statically"
-                                    );
+                                    // ApprovalRequiredTool replaces existing non-approval tool
+                                    if pt.requires_approval() {
+                                        combined.retain(|t| t.name() != pt.name());
+                                        combined.push(Arc::clone(pt));
+                                        tracing::debug!(
+                                            provider_tool = pt.name(),
+                                            "ApprovalRequiredTool replaces existing tool"
+                                        );
+                                    } else {
+                                        tracing::debug!(
+                                            provider_tool = pt.name(),
+                                            "Provider tool skipped — already registered"
+                                        );
+                                    }
                                 } else {
+                                    seen.insert(pt.name().to_string());
                                     combined.push(Arc::clone(pt));
                                 }
                             }
@@ -324,6 +437,78 @@ impl IChatClient for FunctionInvokingChatClient {
                                     return;
                                 }
 
+                                // ── Approval gate: if any tool requires approval, pause and wait ──
+                                let any_requires_approval = tool_calls.iter().any(|tc| {
+                                    tools_for_execution
+                                        .iter()
+                                        .any(|t| t.name() == tc.name && t.requires_approval())
+                                });
+
+                                if any_requires_approval {
+                                    tracing::info!(
+                                        tool_count = tool_calls.len(),
+                                        "Tool requires approval — emitting ToolApprovalRequest events"
+                                    );
+
+                                    for tc in &tool_calls {
+                                        let tool = tools_for_execution
+                                            .iter()
+                                            .find(|t| t.name() == tc.name);
+                                        let desc = tool
+                                            .map(|t| t.description().to_string())
+                                            .unwrap_or_default();
+                                        let args: serde_json::Value =
+                                            serde_json::from_str(&tc.arguments)
+                                                .unwrap_or(serde_json::Value::Null);
+
+                                        if tx
+                                            .send(Ok(AgentResponseUpdate::ToolApprovalRequest {
+                                                call_id: tc.id.clone(),
+                                                name: tc.name.clone(),
+                                                arguments: args,
+                                                description: desc,
+                                            }))
+                                            .await
+                                            .is_err()
+                                        {
+                                            return;
+                                        }
+                                    }
+
+                                    // Persist assistant(tool_calls) to accumulated messages
+                                    let mut next_messages = Vec::new();
+                                    let assistant_tool_msg = ChatMessage {
+                                        role: MessageRole::Assistant,
+                                        content: text_delta.clone(),
+                                        name: None,
+                                        tool_calls: Some(
+                                            tool_calls
+                                                .iter()
+                                                .map(|tc| ToolCall {
+                                                    id: tc.id.clone(),
+                                                    name: tc.name.clone(),
+                                                    arguments: serde_json::Value::String(
+                                                        tc.arguments.clone(),
+                                                    ),
+                                                })
+                                                .collect(),
+                                        ),
+                                        tool_call_id: None,
+                                        source: None,
+                                    };
+                                    next_messages.push(assistant_tool_msg);
+                                    let _ = msg_tx.send(next_messages).await;
+
+                                    // End stream — wait for caller to approve before resuming
+                                    let _ = tx
+                                        .send(Ok(AgentResponseUpdate::Finish {
+                                            finish_reason: FinishReason::AwaitingApproval,
+                                            usage: None,
+                                        }))
+                                        .await;
+                                    return;
+                                }
+
                                 tracing::info!(tool_count = tool_calls.len(), "Executing tools");
 
                                 let meta = ResponseMetadata {
@@ -342,7 +527,7 @@ impl IChatClient for FunctionInvokingChatClient {
                                         let args_trimmed = tc.arguments.trim();
                                         if args_trimmed.is_empty() {
                                             if let Some(tool) = tools.iter().find(|t| t.name() == tc.name) {
-                                                let schema = tool.parameters_schema();
+                                                let schema = tool.parameters();
                                                 let msg = format!(
                                                     "Tool '{}' was called without any arguments. Expected schema: {}. Please provide all required fields.",
                                                     tc.name, schema
@@ -363,7 +548,7 @@ impl IChatClient for FunctionInvokingChatClient {
                                                 }
                                                 Err(e) => {
                                                     tracing::warn!(tool_name = %tc.name, call_id = %tc.id, error = %e, "Tool execution failed");
-                                                    let schema = tool.parameters_schema();
+                                                    let schema = tool.parameters();
                                                     let msg = format!(
                                                         "Tool '{}' execution failed: {}. Expected schema: {}. Please check your parameters and retry.",
                                                         tc.name, e, schema
@@ -532,7 +717,7 @@ mod tests {
     impl ITool for EchoTool {
         fn name(&self) -> &str { "echo" }
         fn description(&self) -> &str { "Echoes back the input arguments" }
-        fn parameters_schema(&self) -> serde_json::Value {
+        fn parameters(&self) -> serde_json::Value {
             serde_json::json!({"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]})
         }
         async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
@@ -553,7 +738,7 @@ mod tests {
     impl ITool for CountTool {
         fn name(&self) -> &str { "count" }
         fn description(&self) -> &str { "Returns the current count" }
-        fn parameters_schema(&self) -> serde_json::Value { serde_json::json!({"type": "object", "properties": {}}) }
+        fn parameters(&self) -> serde_json::Value { serde_json::json!({"type": "object", "properties": {}}) }
         async fn execute(&self, _arguments: serde_json::Value) -> Result<String> {
             let val = 1 + self.counter.fetch_add(1, Ordering::Relaxed);
             Ok(val.to_string())

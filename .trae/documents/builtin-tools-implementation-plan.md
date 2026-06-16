@@ -37,7 +37,7 @@
 
 ### 3.1 已就绪
 
-- **`ITool` trait**（`crates/core/src/tool.rs`）：`name()` / `description()` / `parameters_schema()` / `execute(arguments) -> Result<String>`
+- **`ITool` trait**（`crates/core/src/tool.rs`）：`name()` / `description()` / `parameters()` / `execute(arguments) -> Result<String>`
 - **`#[tool]` 宏**（`crates/macros/src/lib.rs`）：标注 `async fn` 自动生成 ITool 实现 + JSON Schema
 - **`ToolRegistry`**：`HashMap<String, Arc<dyn ITool>>`，支持注册/查找/列表
 - **`ToolLoopAgent`**：自动 tool-calling 循环，并行执行

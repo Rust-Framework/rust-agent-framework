@@ -165,7 +165,7 @@ let agent = resolver.resolve(&decl).await?;
   "name": "calculate",
   "description": "执行数学计算",
   "script_path": "./tools/calc.rhai",
-  "parameters_schema": {
+  "parameters": {
     "type": "object",
     "properties": {
       "expression": { "type": "string", "description": "数学表达式" }
@@ -296,7 +296,7 @@ struct WeatherTool;
 impl ITool for WeatherTool {
     fn name(&self) -> &str { "weather_lookup" }
     fn description(&self) -> &str { "Get current weather for a city." }
-    fn parameters_schema(&self) -> serde_json::Value {
+    fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {

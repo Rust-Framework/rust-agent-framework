@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "id": "coding-decl",
+  "description": "代码专家智能体 — 代码生成、审查、调试、重构（声明式）",
+  "instructions": "你是资深软件工程师，专注于代码生成、代码审查、Bug 定位和代码重构。\n\n工作原则：\n1. 先理解需求，再动手写代码\n2. 代码风格清晰，注释精炼\n3. 优先使用标准库，避免不必要的依赖\n4. 代码块使用 markdown 格式并标注语言\n5. 修改文件前先读取文件内容\n6. 用中文回复",
+  "model": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "api_key": "$DEEPSEEK_API_KEY"
+  },
+  "tools": [
+    { "type": "builtin", "name": "read_file" },
+    { "type": "builtin", "name": "write_file" },
+    { "type": "builtin", "name": "edit_file" },
+    { "type": "builtin", "name": "search_file" },
+    { "type": "builtin", "name": "find_files" },
+    { "type": "builtin", "name": "list_files" },
+    { "type": "builtin", "name": "run_command" },
+    { "type": "builtin", "name": "web_search" },
+    { "type": "builtin", "name": "web_fetch" }
+  ],
+  "max_tool_rounds": 15
+}
