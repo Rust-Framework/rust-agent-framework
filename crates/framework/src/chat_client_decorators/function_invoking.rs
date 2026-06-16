@@ -673,6 +673,7 @@ impl IChatClient for FunctionInvokingChatClient {
 
     fn model_id(&self) -> &str { self.inner.model_id() }
     fn model_metadata(&self) -> Option<&ModelMetadata> { self.inner.model_metadata() }
+    fn inner_client(&self) -> Option<&Arc<dyn IChatClient>> { Some(&self.inner) }
 }
 
 #[cfg(test)]

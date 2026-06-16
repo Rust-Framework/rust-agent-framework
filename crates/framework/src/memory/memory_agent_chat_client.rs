@@ -57,4 +57,8 @@ impl IChatClient for MemoryAgentChatClient {
     fn model_id(&self) -> &str {
         self.inner.model_id()
     }
+
+    fn inner_client(&self) -> Option<&Arc<dyn IChatClient>> {
+        Some(&self.inner)
+    }
 }

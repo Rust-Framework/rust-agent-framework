@@ -202,14 +202,17 @@ impl SkillMemoryContextProvider {
 
         // First call — discover and wrap.
         //
-        // SAFETY: MemoryAgentChatClient wraps the *shared* Arc<dyn IChatClient>
-        // without cloning mutable state.  It overrides options in
-        // MemoryAgentChatClient::run() on the per-call ChatClientRunOptions
-        // (passed by value), NOT on the client itself.  The main agent's
-        // calls are completely unaffected.
+        // CRITICAL: recursively unwrap the decorator chain to reach the raw
+        // API client.  MemoryAgent creates its own FunctionInvokingChatClient
+        // on top.  If we pass a decorated client (the main agent's
+        // FunctionInvokingChatClient) as the inner, nested
+        // FunctionInvokingChatClients intercept each other's tool calls —
+        // the inner one only has the main agent's tools and can't execute
+        // ReadFile/WriteFile, causing every tool call to fail.
         let main_client = agent.chat_client()?;
+        let raw = unwrap_to_raw(main_client);
         let wrapped: Arc<dyn IChatClient> =
-            Arc::new(MemoryAgentChatClient::new(Arc::clone(main_client)));
+            Arc::new(MemoryAgentChatClient::new(Arc::clone(raw)));
 
         let mut guard = self.auto_client.lock().unwrap();
         // Double-check: another task may have beaten us
@@ -218,4 +221,17 @@ impl SkillMemoryContextProvider {
         }
         Some(wrapped)
     }
+}
+
+/// Recursively unwrap a decorator chain to reach the raw API client.
+///
+/// Decorators (`FunctionInvokingChatClient`, `MemoryAgentChatClient`,
+/// `DelegatingChatClient`) implement `inner_client() -> Some(inner)`.
+/// Leaf clients (e.g. `DeepSeekChatClient`) return `None`.
+fn unwrap_to_raw(client: &Arc<dyn IChatClient>) -> &Arc<dyn IChatClient> {
+    let mut current = client;
+    while let Some(inner) = current.inner_client() {
+        current = inner;
+    }
+    current
 }

@@ -126,6 +126,15 @@ pub trait IChatClient: Send + Sync {
     fn model_metadata(&self) -> Option<&ModelMetadata> {
         None
     }
+
+    /// The inner client in a decorator chain, or `None` for leaf (API) clients.
+    ///
+    /// Used by context providers (e.g. SkillMemory) to unwrap decorator layers
+    /// and reach the raw API client.  Decorators like `FunctionInvokingChatClient`
+    /// override this; leaf clients keep the default `None`.
+    fn inner_client(&self) -> Option<&Arc<dyn IChatClient>> {
+        None
+    }
 }
 
 /// ChatClient 装饰器基类，参照 MAF 的 DelegatingChatClient
@@ -162,6 +171,10 @@ impl IChatClient for DelegatingChatClient {
 
     fn model_metadata(&self) -> Option<&ModelMetadata> {
         self.inner.model_metadata()
+    }
+
+    fn inner_client(&self) -> Option<&Arc<dyn IChatClient>> {
+        Some(&self.inner)
     }
 }
 
