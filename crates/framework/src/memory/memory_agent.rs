@@ -12,17 +12,38 @@ use crate::ChatClientAgent;
 ///
 /// 读取 `AGENT.md` 作为 system prompt，构建一个带有 `ReadFile` 和 `WriteFile`
 /// 工具的子代理，分析对话上下文并将有价值的信息写入持久记忆文件。
+///
+/// ## Working directory
+///
+/// Switches the process CWD to `memory_dir` before executing so that
+/// relative paths (e.g. `references/USER.md`) in the LLM's tool calls
+/// resolve against the correct memory directory.  The original CWD is
+/// restored before returning.
 pub(crate) async fn run_memory_agent(
     memory_dir: PathBuf,
     client: Arc<dyn IChatClient>,
     request_messages: Vec<ChatMessage>,
     response: Option<String>,
 ) {
+    // Switch CWD to memory_dir so read_file / write_file paths resolve
+    // correctly.  AGENT.md instructs the LLM to use relative paths like
+    // `references/USER.md` — without this they would resolve against the
+    // process startup CWD (workspace root), writing memory files to the
+    // wrong location.
+    let prev_cwd = std::env::current_dir().ok();
+    let _ = std::env::set_current_dir(&memory_dir);
+    let restore_cwd = || {
+        if let Some(d) = &prev_cwd {
+            let _ = std::env::set_current_dir(d);
+        }
+    };
+
     // 读取 AGENT.md 作为 system prompt
     let agent_md = match std::fs::read_to_string(memory_dir.join("AGENT.md")) {
         Ok(c) => c,
         Err(e) => {
             tracing::warn!(error = %e, "Failed to read AGENT.md");
+            restore_cwd();
             return;
         }
     };
@@ -79,6 +100,7 @@ pub(crate) async fn run_memory_agent(
         Ok(s) => s,
         Err(e) => {
             tracing::warn!(error = %e, "MemoryAgent failed to start");
+            restore_cwd();
             return;
         }
     };
@@ -98,6 +120,7 @@ pub(crate) async fn run_memory_agent(
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, "MemoryAgent stream error");
+                    restore_cwd();
                     return;
                 }
             }
@@ -108,4 +131,5 @@ pub(crate) async fn run_memory_agent(
     if !trimmed.is_empty() && trimmed != "OK" {
         tracing::info!(result = %trimmed, "MemoryAgent consolidation completed");
     }
+    restore_cwd();
 }
