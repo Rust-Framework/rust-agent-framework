@@ -3,13 +3,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{AgentError, AgentResponseUpdate, BoxStream, ChatMessage, ModelMetadata, Result};
+use crate::{AgentError, AgentResponseUpdate, BoxStream, ChatMessage, ITool, ModelMetadata, Result};
 
 /// Per-call run options for `IChatClient::run()`, following MAF's pattern.
 ///
 /// Overrides the client's defaults for a single call.
 /// All fields are `Option` — `None` means "use the client's default".
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct ChatClientRunOptions {
     /// Override max_tokens for this call.
     pub max_tokens: Option<u32>,
@@ -33,6 +33,34 @@ pub struct ChatClientRunOptions {
     /// serialized. `None` means use the provider default (typically enabled).
     /// Maps to OpenAI's `parallel_tool_calls` parameter.
     pub parallel_tool_calls: Option<bool>,
+    /// Provider-injected tool instances for execution.
+    ///
+    /// Follows MAF's pattern where context providers inject tools into
+    /// `ChatOptions.Tools`, and `FunctionInvokingChatClient` reads them
+    /// at execution time. These tools supplement the statically-registered
+    /// tools in `FunctionInvokingChatClient` and are resolved by name
+    /// during the tool-calling loop.
+    ///
+    /// Unlike `self.tools` (JSON schemas sent to the LLM), this field
+    /// carries the actual `Arc<dyn ITool>` instances for invocation.
+    #[serde(skip)]
+    pub provider_tools: Vec<Arc<dyn ITool>>,
+}
+
+// Manual Debug impl — `dyn ITool` doesn't impl Debug, so we skip provider_tools.
+impl std::fmt::Debug for ChatClientRunOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChatClientRunOptions")
+            .field("max_tokens", &self.max_tokens)
+            .field("temperature", &self.temperature)
+            .field("top_p", &self.top_p)
+            .field("stop", &self.stop)
+            .field("extra_body", &self.extra_body)
+            .field("tools", &self.tools)
+            .field("parallel_tool_calls", &self.parallel_tool_calls)
+            .field("provider_tools", &format_args!("[{} tools]", self.provider_tools.len()))
+            .finish()
+    }
 }
 
 impl ChatClientRunOptions {

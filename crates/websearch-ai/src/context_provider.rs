@@ -1,66 +1,12 @@
-use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures_util::Future;
 use rust_agent_core::{
     AgentResponse, AgentRunOptions, ChatMessage, ContextInjection, IAgent, IContextProvider,
     ISession, ITool, MessageRole, Result,
 };
 
-// ── Internal Tool Wrapper ──────────────────────────────────────────────
-//
-// 函数式 ITool 实现，与 framework::AgentSkillsProvider 中的 FnTool 模式一致。
-// 避免引入 pub(crate) 类型的跨 crate 访问问题。
-
-struct FnTool {
-    name: String,
-    description: String,
-    parameters_schema: serde_json::Value,
-    handler: Arc<
-        dyn Fn(serde_json::Value) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
-            + Send
-            + Sync,
-    >,
-}
-
-impl FnTool {
-    fn new(
-        name: impl Into<String>,
-        description: impl Into<String>,
-        parameters_schema: serde_json::Value,
-        handler: impl Fn(serde_json::Value) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
-            + Send
-            + Sync
-            + 'static,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            description: description.into(),
-            parameters_schema,
-            handler: Arc::new(handler),
-        }
-    }
-}
-
-#[async_trait]
-impl ITool for FnTool {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn description(&self) -> &str {
-        &self.description
-    }
-
-    fn parameters_schema(&self) -> serde_json::Value {
-        self.parameters_schema.clone()
-    }
-
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
-        (self.handler)(arguments).await
-    }
-}
+use crate::{web_search, WebFetch, WebSearch, WebSearchSharedConfig};
 
 // ── WebSearchContextProvider ───────────────────────────────────────────
 
@@ -156,305 +102,9 @@ impl WebSearchContextProvider {
         self
     }
 
-    // ── 配置构建 ──
-
-    fn build_search_config(&self, count: usize) -> rust_websearch::SearchConfig {
-        let mut config = rust_websearch::SearchConfig::new(count);
-
-        // 实例方法配置优先级高于环境变量
-        if let Some(ref proxy) = self.proxy_url {
-            config.proxy_url = Some(proxy.clone());
-        } else if let Ok(proxy) = std::env::var("WEBSEARCH_PROXY_URL") {
-            config.proxy_url = Some(proxy);
-        }
-
-        if let Some(ref searxng) = self.searxng_url {
-            config.searxng_url = Some(searxng.clone());
-        } else if let Ok(searxng) = std::env::var("WEBSEARCH_SEARXNG_URL") {
-            config.searxng_url = Some(searxng);
-        }
-
-        if let Some(ref lang) = self.language {
-            config.language = Some(lang.clone());
-        }
-
-        config
-    }
-
-    fn build_fetch_config(&self) -> rust_websearch::FetchConfig {
-        let mut config = rust_websearch::FetchConfig::default();
-
-        if let Some(ref proxy) = self.proxy_url {
-            config.proxy_url = Some(proxy.clone());
-        } else if let Ok(proxy) = std::env::var("WEBSEARCH_PROXY_URL") {
-            config.proxy_url = Some(proxy);
-        }
-
-        config
-    }
-
-    // ── 工具构建 ──
-
-    /// 创建 web_search 工具。
-    pub fn create_web_search_tool(&self) -> Arc<dyn ITool> {
-        let provider_config = Self {
-            auto_search: self.auto_search,
-            max_results: self.max_results,
-            proxy_url: self.proxy_url.clone(),
-            searxng_url: self.searxng_url.clone(),
-            language: self.language.clone(),
-        };
-
-        Arc::new(FnTool::new(
-            "web_search",
-            "Searches the web using DuckDuckGo/Bing/SearXNG multi-backend engine and returns a list of results with title, URL, and snippet. No API key required. Use this to find information and URLs, then use web_fetch(url) to get the full content of any result.",
-            serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query"
-                    },
-                    "count": {
-                        "type": "integer",
-                        "description": "Maximum number of results to return (default: 5, max: 10)",
-                        "default": 5
-                    }
-                },
-                "required": ["query"]
-            }),
-            move |args: serde_json::Value| {
-                let config = provider_config.build_search_config(
-                    args["count"]
-                        .as_i64()
-                        .unwrap_or(DEFAULT_MAX_RESULTS as i64)
-                        .clamp(1, MAX_RESULTS_LIMIT as i64) as usize,
-                );
-
-                Box::pin(async move {
-                    let query = args["query"]
-                        .as_str()
-                        .ok_or_else(|| {
-                            rust_agent_core::AgentError::ToolError(
-                                "Missing 'query' argument".into(),
-                            )
-                        })?;
-
-                    if query.trim().is_empty() {
-                        return Ok(serde_json::json!({
-                            "ok": false,
-                            "data": null,
-                            "error": "Search query cannot be empty",
-                            "suggestion": "Provide a non-empty search query."
-                        })
-                        .to_string());
-                    }
-
-                    match rust_websearch::search(query, &config).await {
-                        Ok(search_results) => {
-                            tracing::info!(
-                                query = %query,
-                                count = search_results.results.len(),
-                                source = ?search_results.source,
-                                "web_search succeeded"
-                            );
-
-                            let results: Vec<serde_json::Value> = search_results
-                                .results
-                                .iter()
-                                .map(|r| {
-                                    serde_json::json!({
-                                        "title": r.title,
-                                        "url": r.url,
-                                        "snippet": r.snippet,
-                                        "rank": r.rank,
-                                    })
-                                })
-                                .collect();
-
-                            use std::hash::{Hash, Hasher};
-                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                            for r in &search_results.results {
-                                r.url.hash(&mut hasher);
-                            }
-                            let fingerprint = hasher.finish();
-
-                            Ok(serde_json::json!({
-                                "ok": true,
-                                "data": {
-                                    "query": query,
-                                    "results": results,
-                                    "count": results.len(),
-                                    "_source": format!("{:?}", search_results.source),
-                                    "_fingerprint": fingerprint,
-                                    "_tip": "Use web_fetch(url) to get full content from any URL above. If results don't change across calls (_fingerprint is same), try a more specific query or fetch a URL directly.",
-                                }
-                            }).to_string())
-                        }
-                        Err(e) => {
-                            tracing::warn!(query = %query, error = %e, "web_search failed");
-                            let error_str = format!("{e}");
-                            let suggestion = if error_str.contains("No search results")
-                                || error_str.contains("NoResults")
-                            {
-                                "No results found. Try a different query, use simpler keywords, or try searching in English."
-                            } else if error_str.contains("CAPTCHA")
-                                || error_str.contains("Rate limited")
-                            {
-                                "Search rate limited. Wait a moment and try again, or use a different query phrasing."
-                            } else if error_str.contains("Timeout")
-                                || error_str.contains("Network")
-                            {
-                                "Search service temporarily unavailable. Try again in a moment, or use a more specific search query."
-                            } else {
-                                "Search failed. Try a different query or check your network connection."
-                            };
-
-                            Ok(serde_json::json!({
-                                "ok": false,
-                                "data": null,
-                                "error": format!("Search failed: {error_str}"),
-                                "suggestion": suggestion,
-                            })
-                            .to_string())
-                        }
-                    }
-                })
-            },
-        ))
-    }
-
-    /// 创建 web_fetch 工具。
-    pub fn create_web_fetch_tool(&self) -> Arc<dyn ITool> {
-        let provider_config = Self {
-            auto_search: self.auto_search,
-            max_results: self.max_results,
-            proxy_url: self.proxy_url.clone(),
-            searxng_url: self.searxng_url.clone(),
-            language: self.language.clone(),
-        };
-
-        Arc::new(FnTool::new(
-            "web_fetch",
-            "Fetches content from a URL and returns it as Markdown. Uses an embedded Servo browser engine for real JavaScript execution and layout-aware content extraction. Automatically strips navigation bars, footers, cookie banners, and ads. Supports Chinese encoding (GBK/GB2312/Big5) and SPA pages. Use settle_ms for JavaScript-heavy sites that need extra time to render.",
-            serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The URL to fetch"
-                    },
-                    "max_length": {
-                        "type": "integer",
-                        "description": "Maximum content length in bytes (default: 50000, max: 200000)",
-                        "default": 50000
-                    },
-                    "settle_ms": {
-                        "type": "integer",
-                        "description": "Extra wait time in milliseconds after page load for SPA hydration (default: 0, max: 10000)",
-                        "default": 0
-                    }
-                },
-                "required": ["url"]
-            }),
-            move |args: serde_json::Value| {
-                let mut config = provider_config.build_fetch_config();
-
-                if let Some(max_len) = args["max_length"].as_u64() {
-                    config.max_content_bytes = (max_len as usize).clamp(1000, 200_000);
-                }
-                if let Some(ms) = args["settle_ms"].as_u64() {
-                    config.settle_ms = ms.min(10_000);
-                }
-
-                Box::pin(async move {
-                    let url = args["url"]
-                        .as_str()
-                        .ok_or_else(|| {
-                            rust_agent_core::AgentError::ToolError(
-                                "Missing 'url' argument".into(),
-                            )
-                        })?;
-
-                    if url.trim().is_empty() {
-                        return Ok(serde_json::json!({
-                            "ok": false,
-                            "data": null,
-                            "error": "URL cannot be empty",
-                            "suggestion": "Provide a valid URL to fetch."
-                        })
-                        .to_string());
-                    }
-
-                    match rust_websearch::fetch_page(url, &config).await {
-                        Ok(page) => {
-                            tracing::info!(
-                                url = %url,
-                                title = %page.title,
-                                content_len = page.content_length,
-                                "web_fetch succeeded"
-                            );
-
-                            let mut result = serde_json::json!({
-                                "ok": true,
-                                "data": {
-                                    "url": page.url,
-                                    "final_url": page.final_url,
-                                    "title": page.title,
-                                    "content": page.content,
-                                    "content_length": page.content_length,
-                                    "truncated": page.truncated,
-                                    "status_code": page.status_code,
-                                }
-                            });
-
-                            if page.truncated {
-                                result["_suggestion"] = serde_json::Value::String(
-                                    "Content was truncated. Try fetching a more specific sub-page or use a smaller max_length."
-                                        .into(),
-                                );
-                            }
-
-                            Ok(result.to_string())
-                        }
-                        Err(e) => {
-                            tracing::warn!(url = %url, error = %e, "web_fetch failed");
-                            let error_str = format!("{e}");
-                            let suggestion = if error_str.contains("Timeout")
-                                || error_str.contains("timeout")
-                            {
-                                "The page took too long to load. Try increasing settle_ms or check if the URL is correct."
-                            } else if error_str.contains("Invalid URL") {
-                                "The URL is invalid. Check the URL format and try again."
-                            } else if error_str.contains("not allowed")
-                                || error_str.contains("SSRF")
-                            {
-                                "The URL points to a private or reserved address that is blocked for security reasons."
-                            } else if error_str.contains("Connection")
-                                || error_str.contains("unreachable")
-                            {
-                                "The URL is unreachable. Check the URL and try again."
-                            } else {
-                                "Fetch failed. Check the URL and try again, or use web_search to find alternative sources."
-                            };
-
-                            Ok(serde_json::json!({
-                                "ok": false,
-                                "data": null,
-                                "error": format!("Fetch failed: {error_str}"),
-                                "suggestion": suggestion,
-                            })
-                            .to_string())
-                        }
-                    }
-                })
-            },
-        ))
-    }
-
-    /// 构建所有工具。
+    /// 构建所有工具，复用 `WebSearch` / `WebFetch`（配置通过共享静态对象传递）。
     pub fn build_tools(&self) -> Vec<Arc<dyn ITool>> {
-        vec![self.create_web_search_tool(), self.create_web_fetch_tool()]
+        vec![Arc::new(WebSearch), Arc::new(WebFetch)]
     }
 
     // ── advertise 文本 ──
@@ -483,7 +133,7 @@ impl WebSearchContextProvider {
     /// 执行自动搜索并返回格式化的结果文本。
     async fn auto_search_context(&self, messages: &[ChatMessage]) -> Option<String> {
         let query = self.extract_latest_user_query(messages)?;
-        let config = self.build_search_config(self.max_results);
+        let config = web_search::build_search_config(self.max_results);
 
         tracing::debug!(
             query = %query,
@@ -568,6 +218,13 @@ impl IContextProvider for WebSearchContextProvider {
         messages: &[ChatMessage],
         _options: &AgentRunOptions,
     ) -> Result<ContextInjection> {
+        // 将当前 provider 的配置写入共享静态对象，供 WebSearch / WebFetch 工具读取
+        crate::set_shared_config(WebSearchSharedConfig {
+            proxy_url: self.proxy_url.clone(),
+            searxng_url: self.searxng_url.clone(),
+            language: self.language.clone(),
+        });
+
         let mut injection = ContextInjection {
             instructions: Some(self.build_advertise()),
             tools: self.build_tools(),
@@ -682,27 +339,26 @@ mod tests {
     }
 
     #[test]
-    fn test_build_search_config() {
-        let provider = WebSearchContextProvider::new()
-            .with_proxy("http://proxy:8080")
-            .with_searxng("https://searx.example.com")
-            .with_language("zh-CN");
+    fn test_shared_config_propagation() {
+        // 通过共享静态对象传递配置
+        crate::set_shared_config(WebSearchSharedConfig {
+            proxy_url: Some("http://proxy:8080".into()),
+            searxng_url: Some("https://searx.example.com".into()),
+            language: Some("zh-CN".into()),
+        });
 
-        let config = provider.build_search_config(5);
-        assert_eq!(config.max_results, 5);
-        assert_eq!(config.proxy_url, Some("http://proxy:8080".into()));
-        assert_eq!(config.searxng_url, Some("https://searx.example.com".into()));
-        assert_eq!(config.language, Some("zh-CN".into()));
-    }
+        let search_cfg = crate::web_search::build_search_config(5);
+        assert_eq!(search_cfg.max_results, 5);
+        assert_eq!(search_cfg.proxy_url, Some("http://proxy:8080".into()));
+        assert_eq!(
+            search_cfg.searxng_url,
+            Some("https://searx.example.com".into())
+        );
+        assert_eq!(search_cfg.language, Some("zh-CN".into()));
 
-    #[test]
-    fn test_build_fetch_config() {
-        let provider = WebSearchContextProvider::new()
-            .with_proxy("http://proxy:8080");
-
-        let config = provider.build_fetch_config();
-        assert_eq!(config.proxy_url, Some("http://proxy:8080".into()));
-        assert_eq!(config.max_content_bytes, 50 * 1024);
+        let fetch_cfg = crate::web_fetch::build_fetch_config();
+        assert_eq!(fetch_cfg.proxy_url, Some("http://proxy:8080".into()));
+        assert_eq!(fetch_cfg.max_content_bytes, 50 * 1024);
     }
 
     #[test]

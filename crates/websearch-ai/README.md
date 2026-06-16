@@ -106,7 +106,8 @@ let agent = AgentBuilder::new("research-agent")
 
 1. `on_invoking()` 阶段自动向 Agent 注入：
    - **Instructions**: 工具使用说明（`## Web Search Capability` 块），引导 LLM 理解何时及如何使用搜索和抓取
-   - **Tools**: `web_search` 和 `web_fetch` 两个工具（通过 `FnTool` 闭包实现，自包含无依赖）
+   - **配置**: 通过 `set_shared_config()` 将 provider 的代理/语言等配置写入静态对象，供 `WebSearch` / `WebFetch` 工具读取
+   - **Tools**: `web_search` 和 `web_fetch` 两个工具，直接复用 `#[tool]` 宏生成的 `WebSearch` / `WebFetch` 结构体
 
 2. `on_invoked()` 阶段无操作（错误容忍设计，不影响主流程）。
 
@@ -300,6 +301,21 @@ let provider = WebSearchContextProvider::new()
     .with_language("zh-CN");
 ```
 
+**共享配置传递机制：**
+
+当 `on_invoking()` 被调用时，provider 会通过 `set_shared_config()` 将配置写入一个 `OnceLock<WebSearchSharedConfig>` 静态对象。`WebSearch` 和 `WebFetch` 工具在构建请求配置时会优先读取此共享对象，回退到环境变量。这使得 provider 和工具之间零耦合复用，无需重复实现搜索逻辑。
+
+```rust
+// 也可在外部手动设置共享配置（如测试场景）
+rust_agent_websearch::set_shared_config(
+    rust_agent_websearch::WebSearchSharedConfig {
+        proxy_url: Some("http://proxy:8080".into()),
+        searxng_url: None,
+        language: Some("zh-CN".into()),
+    }
+);
+```
+
 **IContextProvider 生命周期：**
 
 ```
@@ -328,10 +344,11 @@ Agent.run() 调用
 配置项的优先级从高到低：
 
 1. **Builder 方法** — `WebSearchContextProvider::new().with_proxy(...)` 等
-2. **环境变量** — `WEBSEARCH_PROXY_URL`、`WEBSEARCH_SEARXNG_URL`
-3. **框架默认值** — 如 `max_results = 5`
+2. **共享静态配置** — 由 `WebSearchContextProvider.on_invoking()` 通过 `set_shared_config()` 自动写入，供 `WebSearch` / `WebFetch` 工具读取
+3. **环境变量** — `WEBSEARCH_PROXY_URL`、`WEBSEARCH_SEARXNG_URL`
+4. **框架默认值** — 如 `max_results = 5`
 
-这一设计允许你在代码中硬编码生产环境配置，同时通过环境变量在不同部署环境中灵活覆盖。
+这一设计通过 `OnceLock<WebSearchSharedConfig>` 静态对象实现配置传递，消除了 `WebSearchContextProvider` 与 `web_search` / `web_fetch` 工具间的代码重复：工具逻辑只存在于 `web_search.rs` 和 `web_fetch.rs` 中，`context_provider.rs` 直接复用 `WebSearch` / `WebFetch`。
 
 ## 错误处理与智能建议
 
@@ -369,35 +386,41 @@ Agent.run() 调用
 ## 架构与设计
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  rust-agent-websearch                │
-├─────────────────────────────────────────────────────┤
-│  ┌──────────────────┐  ┌─────────────────────────┐  │
-│  │   WebSearch       │  │  WebSearchContextProvider │  │
-│  │   (#[tool])       │  │  (IContextProvider)       │  │
-│  │                   │  │                           │  │
-│  │  • web_search()   │  │  • with_auto_search()     │  │
-│  │    query, count   │  │  • with_max_results()     │  │
-│  │                   │  │  • with_proxy()           │  │
-│  ├──────────────────┤  │  • with_searxng()         │  │
-│  │   WebFetch        │  │  • with_language()        │  │
-│  │   (#[tool])       │  │                           │  │
-│  │                   │  │  on_invoking() ──────────►│  │
-│  │  • web_fetch()    │  │    → instructions (ad)    │  │
-│  │    url, max_len,  │  │    → tools (2)            │  │
-│  │    settle_ms      │  │    → auto_search results  │  │
-│  └──────────────────┘  └──────────┬────────────────┘  │
-├───────────────────────────────────┼───────────────────┤
-│                                   ▼                    │
-│                        rust-websearch                  │
-│              (多后端搜索引擎 + Servo 抓取)              │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                  rust-agent-websearch                        │
+├─────────────────────────────────────────────────────────────┤
+│  ┌──────────────────┐  ┌─────────────────────────────────┐  │
+│  │   WebSearch       │  │  WebSearchContextProvider        │  │
+│  │   (#[tool])       │  │  (IContextProvider)              │  │
+│  │                   │  │                                  │  │
+│  │  • web_search()   │  │  • with_auto_search()            │  │
+│  │    query, count   │  │  • with_max_results()            │  │
+│  │                   │  │  • with_proxy()                  │  │
+│  ├──────────────────┤  │  • with_searxng()                │  │
+│  │   WebFetch        │  │  • with_language()               │  │
+│  │   (#[tool])       │  │                                  │  │
+│  │                   │  │  on_invoking() ──────────────────►│  │
+│  │  • web_fetch()    │  │    → set_shared_config(config)   │  │
+│  │    url, max_len,  │  │    → instructions (advertise)    │  │
+│  │    settle_ms      │  │    → tools (WebSearch/WebFetch)  │  │
+│  └────────┬──────────┘  │    → auto_search results         │  │
+│           │              └────────────────┬────────────────┘  │
+│           │  ◄── 读取共享配置 ──────────  │                    │
+│           │                               │                    │
+│  ┌────────┴───────────────────────────────┴────────────────┐  │
+│  │           OnceLock<WebSearchSharedConfig>                │  │
+│  │     proxy_url / searxng_url / language                   │  │
+│  └──────────────────────────────────────────────────────────┘  │
+├──────────────────────────────────────────────────────────────┤
+│                        rust-websearch                         │
+│              (多后端搜索引擎 + Servo 抓取)                     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 **设计原则：**
 
 - **零 API Key**：所有搜索后端和网页抓取均无需注册 API Key
-- **自包含工具**：`WebSearchContextProvider` 通过内部 `FnTool` 实现工具，不依赖 `#[tool]` 宏生成的 `WebSearch`/`WebFetch` 结构体，避免循环依赖
+- **统一代码路径**：`WebSearchContextProvider` 直接复用 `#[tool]` 宏生成的 `WebSearch` / `WebFetch`，通过 `OnceLock<WebSearchSharedConfig>` 静态对象传递配置，消除代码重复
 - **分层注入**：遵循 RAF 的 ContextProvider 分层设计（Agent 层一次性注入），保证 KV Cache 前缀稳定性
 - **静默降级**：网络失败、搜索无结果等均不影响 Agent 主流程，LLM 根据结构化错误信息自行决策
 

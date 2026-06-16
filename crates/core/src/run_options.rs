@@ -103,6 +103,7 @@ impl AgentRunOptions {
             extra_body: self.extra_body.clone(),
             tools: Vec::new(), // tools are injected by the agent, not from options
             parallel_tool_calls: self.parallel_tool_calls,
+            provider_tools: Vec::new(), // injected on_invoking(), not from AgentRunOptions
         }
     }
 }

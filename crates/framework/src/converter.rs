@@ -307,6 +307,14 @@ impl AgentResponseConverter {
             }
 
             AgentResponseUpdate::ToolCalled { id, result, error } => {
+                // Clean up accumulators — the tool has been executed and its
+                // result reported.  Removing from the accumulator prevents stale
+                // ToolCallingContent re-emission in finalize() when subsequent
+                // loop iterations end with Finish(Stop).
+                self.tool_accumulators.remove(&id);
+                self.args_parsers.remove(&id);
+                self.ended_calls.remove(&id);
+
                 contents.push(Content::ToolCalled(ToolCalledContent {
                     meta: self.build_meta(),
                     call_id: id,

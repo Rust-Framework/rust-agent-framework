@@ -4,18 +4,28 @@ use std::hash::{Hash, Hasher};
 const DEFAULT_COUNT: i64 = 5;
 const MAX_COUNT: i64 = 10;
 
-/// 从环境变量构建 SearchConfig，支持运行时配置代理和 SearXNG 实例。
-fn build_search_config(count: usize) -> rust_websearch::SearchConfig {
+/// 从共享配置或环境变量构建 SearchConfig，支持运行时配置代理和 SearXNG 实例。
+/// 优先级：共享配置 > 环境变量。
+pub(crate) fn build_search_config(count: usize) -> rust_websearch::SearchConfig {
     let mut config = rust_websearch::SearchConfig::new(count);
 
-    // 从环境变量读取代理配置
-    if let Ok(proxy) = std::env::var("WEBSEARCH_PROXY_URL") {
-        config.proxy_url = Some(proxy);
+    // 优先从共享配置读取
+    if let Some(shared) = crate::get_shared_config() {
+        config.proxy_url.clone_from(&shared.proxy_url);
+        config.searxng_url.clone_from(&shared.searxng_url);
+        config.language.clone_from(&shared.language);
     }
 
-    // 从环境变量读取 SearXNG 实例地址
-    if let Ok(searxng) = std::env::var("WEBSEARCH_SEARXNG_URL") {
-        config.searxng_url = Some(searxng);
+    // 回退到环境变量
+    if config.proxy_url.is_none() {
+        if let Ok(proxy) = std::env::var("WEBSEARCH_PROXY_URL") {
+            config.proxy_url = Some(proxy);
+        }
+    }
+    if config.searxng_url.is_none() {
+        if let Ok(searxng) = std::env::var("WEBSEARCH_SEARXNG_URL") {
+            config.searxng_url = Some(searxng);
+        }
     }
 
     config

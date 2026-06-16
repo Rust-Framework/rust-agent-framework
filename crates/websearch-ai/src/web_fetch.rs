@@ -1,12 +1,20 @@
 use rust_agent_macros::tool;
 
-/// 从环境变量构建 FetchConfig，支持运行时配置代理。
-fn build_fetch_config() -> rust_websearch::FetchConfig {
+/// 从共享配置或环境变量构建 FetchConfig，支持运行时配置代理。
+/// 优先级：共享配置 > 环境变量。
+pub(crate) fn build_fetch_config() -> rust_websearch::FetchConfig {
     let mut config = rust_websearch::FetchConfig::default();
 
-    // 从环境变量读取代理配置
-    if let Ok(proxy) = std::env::var("WEBSEARCH_PROXY_URL") {
-        config.proxy_url = Some(proxy);
+    // 优先从共享配置读取
+    if let Some(shared) = crate::get_shared_config() {
+        config.proxy_url.clone_from(&shared.proxy_url);
+    }
+
+    // 回退到环境变量
+    if config.proxy_url.is_none() {
+        if let Ok(proxy) = std::env::var("WEBSEARCH_PROXY_URL") {
+            config.proxy_url = Some(proxy);
+        }
     }
 
     config

@@ -258,6 +258,11 @@ impl IAgent for ChatClientAgent {
             }
         }
 
+        // Carry provider-injected tools through ChatClientRunOptions so
+        // FunctionInvokingChatClient can execute them — not just send
+        // their schemas to the LLM.  Follows MAF's ChatOptions.Tools pattern.
+        client_opts.provider_tools = merged_provider_tools;
+
         let stream = self.chat_client.run(&full_messages, client_opts).await?;
         let agent_id = self.id.clone();
         let executor_id = self.id.to_string();

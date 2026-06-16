@@ -198,7 +198,31 @@ impl IChatClient for FunctionInvokingChatClient {
 
                             let (tx, mut rx) = mpsc::channel::<Result<AgentResponseUpdate>>(256);
                             let (msg_tx, mut msg_rx) = mpsc::channel::<Vec<ChatMessage>>(1);
-                            let tools_clone = Arc::clone(&tools);
+
+                            // Merge provider-injected tools with statically-registered tools.
+                            // Follows MAF's pattern where FunctionInvokingChatClient resolves
+                            // tools from ChatOptions.Tools at execution time, ensuring that
+                            // tools injected by ContextProviders (e.g. load_skill) are
+                            // executable, not just sent as schemas to the LLM.
+                            //
+                            // Dedup by name: statically-registered tools take priority;
+                            // provider-injected tools with the same name are skipped.
+                            let mut combined: Vec<Arc<dyn ITool>> = (*tools).clone();
+                            let seen: std::collections::HashSet<String> = combined
+                                .iter()
+                                .map(|t| t.name().to_string())
+                                .collect();
+                            for pt in &options.provider_tools {
+                                if seen.contains(pt.name()) {
+                                    tracing::debug!(
+                                        provider_tool = pt.name(),
+                                        "Provider tool skipped — already registered statically"
+                                    );
+                                } else {
+                                    combined.push(Arc::clone(pt));
+                                }
+                            }
+                            let tools_for_execution = Arc::new(combined);
 
                             tokio::spawn(async move {
                                 let mut s = stream;
@@ -309,7 +333,7 @@ impl IChatClient for FunctionInvokingChatClient {
 
                                 let tool_futures: Vec<_> = tool_calls.iter().map(|tc| {
                                     let tc = tc.clone();
-                                    let tools = Arc::clone(&tools_clone);
+                                    let tools = Arc::clone(&tools_for_execution);
                                     let meta = meta.clone();
                                     async move {
                                         tracing::trace!(tool_name = %tc.name, call_id = %tc.id, args = %tc.arguments, "Executing tool");
