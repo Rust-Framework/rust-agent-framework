@@ -4,11 +4,14 @@ Core abstractions layer — the foundation of the rust-agent-framework ecosystem
 
 ## Role
 
-- Defines framework-level traits (`IAgent`, `IChatClient`, `ITool`, `ISession`, `IContextProvider`)
-- Defines shared data structures (`ChatMessage`, `AgentResponse`, `AgentResponseResult`, `ToolCall`, `Usage`, etc.)
+- Defines framework-level traits (`IAgent`, `IChatClient`, `ITool`, `ISession`, `IContextProvider`, `ITokenCounter`, `ICompressionStrategy`, `ISessionStore`)
+- Defines shared data structures (`ChatMessage`, `AgentResponse`, `AgentResponseResult`, `ToolCall`, `Usage`, `AgentMetadata`, `ModelMetadata`, etc.)
 - Provides streaming primitives (`BoxStream<T>`, `collect_agent_response`)
 - Provides default implementations (`AgentSession`, `ToolRegistry`)
+- Provides chat client infrastructure (`ChatClientBuilder`, `DelegatingChatClient`, `ChatClientRunOptions`)
 - Defines the unified error type (`AgentError`)
+- Provides incremental JSON parsing (`StreamingArgsParser`)
+- Provides tool approval mechanism (`ApprovalRequiredTool`, `ToolApprovalResponse`)
 
 ## Public API
 
@@ -30,16 +33,49 @@ Core abstractions layer — the foundation of the rust-agent-framework ecosystem
 | `AgentResponse` | Aggregated response: `text`, `reasoning_text`, `tool_calls`, `usage`, `source_agent_id`. |
 | `AgentResponseResult` | Streamed chunk: `contents: Vec<Content>`, `events: Vec<Event>`, `finish_reason`. |
 | `AgentResponseUpdate` | Internal SSE-level delta enum (12 variants). |
-| `Content` | 12-variant enum covering text, reasoning, tool call lifecycle (5 stages), usage, errors. |
+| `Content` | 12-variant enum covering text, reasoning, tool call lifecycle (5 stages), usage, errors, and URI links. |
 | `Event` | Executor lifecycle events (`ExecutorInvoking`, `ExecutorInvoked`, `Custom`). |
 | `ToolCall` | A tool invocation: `id`, `name`, `arguments`. |
+| `ToolApprovalResponse` | Approval decision for a tool call: `call_id`, `approved`, `reason`. |
 | `ToolRegistry` | In-memory tool registry with `register()`, `get()`, `list()`. |
 | `AgentSession` | Default `ISession` implementation using `RwLock<Vec<ChatMessage>>` with serialization. |
+| `AgentId` | Newtype wrapper around `String` for agent identification. |
+| `AgentMetadata` | Agent metadata: `agent_type`, `description`, `model_id`, `tool_names`, `capability_tags`. |
+| `ModelMetadata` | LLM model metadata: `context_window`, `max_output_tokens`, `supports_reasoning`. |
 | `ResponseMetadata` | Per-chunk metadata: `agent_id`, `model_id`, `executor_id`, `timestamp`, `properties`. |
 | `Usage` | Token usage with KV cache statistics and `cache_hit_ratio()` helper. |
-| `FinishReason` | `Stop`, `Length`, `ToolCalls`, `ContentFilter`, or custom. |
+| `FinishReason` | `Stop`, `Length`, `ToolCalls`, `ContentFilter`, `AwaitingApproval`, or custom. |
 | `AgentError` | Unified error enum: `ChatClientError`, `ToolError`, `WorkflowError`, `SessionError`, `ConfigError`, `AgentNotFound`, `StreamError`, `Serialize`, `Other(anyhow)`. |
 | `ReasoningEffort` | `High` / `Max` — controls model reasoning depth. |
+
+### Chat Client Infrastructure
+
+| Type | Description |
+|---|---|
+| `IChatClient` | Thin wrapper over LLM provider APIs. Streaming-only. |
+| `ChatClientBuilder` | Builder pattern for composing chat client decorators (function invoking, per-call persistence). |
+| `DelegatingChatClient` | Decorator base that delegates to an inner `IChatClient`, enabling composable wrappers. |
+| `ChatClientRunOptions` | Per-call options passed to chat clients (temperature, max_tokens, tools, extra_body). |
+
+### Session Management
+
+| Type | Description |
+|---|---|
+| `ISession` | Multi-turn conversation state manager with KV cache tracking and serialization. |
+| `SessionMetadata` | Session metadata (`id`, `created_at`, `last_active_at`, `message_count`). |
+| `SessionSnapshot` | Full session snapshot for serialization. |
+| `ProviderState` | Per-provider KV cache state. |
+| `ProviderStateStore` | Map of provider states keyed by provider name. |
+| `SessionTTLOptions` | TTL configuration: `max_idle_secs`, `max_lifetime_secs`, `cleanup_interval_secs`. |
+| `ISessionStore` | Persistence trait for sessions: `save_session()`, `get_session()`, `remove_session()`, `list_sessions()`. |
+
+### Additional Traits
+
+| Trait | Purpose |
+|---|---|
+| `ITokenCounter` | Estimates token counts for messages. Used by compression strategies. |
+| `ICompressionStrategy` | Strategy trait for compressing message history to fit within context windows. |
+| `ApprovalRequiredTool` | Wrapper that marks a tool as requiring human approval before execution. |
 
 ### Streaming Infrastructure
 

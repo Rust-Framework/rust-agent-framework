@@ -67,13 +67,25 @@ pub fn resolve_safe_new(base_dir: &Path, path: &str) -> Result<PathBuf, AgentErr
             return Err(AgentError::ToolError("Path traversal denied".into()));
         }
     } else {
-        // Path doesn't exist yet — verify parent exists and is within base_dir
-        if let Some(parent) = normalized.parent() {
-            let canonical_parent = parent.canonicalize().map_err(|e| {
-                AgentError::ToolError(format!("Parent path cannot be resolved: {}", e))
-            })?;
-            if !canonical_parent.starts_with(&canonical_base) {
-                return Err(AgentError::ToolError("Path traversal denied".into()));
+        // Path doesn't exist yet — walk up the ancestor chain until we find
+        // one that exists, then verify it's within base_dir.
+        let mut current = normalized.as_path();
+        loop {
+            match current.canonicalize() {
+                Ok(canon) => {
+                    if !canon.starts_with(&canonical_base) {
+                        return Err(AgentError::ToolError("Path traversal denied".into()));
+                    }
+                    break;
+                }
+                Err(_) => match current.parent() {
+                    Some(parent) => current = parent,
+                    None => {
+                        return Err(AgentError::ToolError(
+                            "Path resolution failed: no existing ancestor found".into(),
+                        ));
+                    }
+                },
             }
         }
     }

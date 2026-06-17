@@ -38,9 +38,18 @@ impl RemovePath {
             dirs_next::home_dir().unwrap_or_default(),
         ];
         for dangerous in &dangerous_dirs {
+            // For the base_dir itself, only block exact matches (don't block
+            // legitimate files/dirs that live inside the working directory).
+            // For system paths (/, C:\, home), also block direct children as
+            // an extra safety measure.
+            let max_components = if dangerous == &canonical_base {
+                dangerous.components().count()
+            } else {
+                dangerous.components().count() + 1
+            };
             if resolved == *dangerous
                 || (resolved.starts_with(dangerous)
-                    && resolved.components().count() <= dangerous.components().count() + 1)
+                    && resolved.components().count() <= max_components)
             {
                 return err_response("Refusing to delete critical path");
             }

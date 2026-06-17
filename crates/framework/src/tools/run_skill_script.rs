@@ -50,6 +50,10 @@ impl ITool for RunSkillScriptTool {
                     "type": "array",
                     "items": { "type": "string" },
                     "description": "Optional command-line arguments to pass to the script"
+                },
+                "timeout_secs": {
+                    "type": "integer",
+                    "description": "Timeout in seconds for the script (optional; defaults to 30). Increase for long-running scripts."
                 }
             },
             "required": ["skill_name", "script_path"]
@@ -108,7 +112,13 @@ impl ITool for RunSkillScriptTool {
             )
         })?;
 
-        let output = runner.run(skill_name, &full_path, script_args).await?;
+        let timeout_secs = arguments
+            .get("timeout_secs")
+            .and_then(|v| v.as_u64());
+
+        let output = runner
+            .run(skill_name, &full_path, script_args, timeout_secs)
+            .await?;
         Ok(serde_json::json!({
             "ok": true,
             "data": {

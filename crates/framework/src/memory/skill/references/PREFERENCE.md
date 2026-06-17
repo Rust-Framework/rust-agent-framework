@@ -1,6 +1,6 @@
 ---
 type: preference
-description: 偏好配置定义文件。记录用户明确设定的偏好（回复格式、专业方向等）。
+description: 用户明确设定的回复格式、风格偏好和专业方向。
 ---
 
 # PREFERENCE — 偏好配置

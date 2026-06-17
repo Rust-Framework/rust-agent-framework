@@ -136,31 +136,3 @@ pub(crate) fn prepare_consolidation_messages(
     build_consolidation_context(memory_projection, turn_transcript)
 }
 
-/// Legacy entry point — kept for tests; prefer `run_memory_agent` with projected messages.
-#[allow(dead_code)]
-pub(crate) async fn run_memory_agent_legacy(
-    memory_dir: PathBuf,
-    client: Arc<dyn IChatClient>,
-    request_messages: Vec<ChatMessage>,
-    response: Option<AgentResponse>,
-) {
-    let mut turn = request_messages
-        .into_iter()
-        .filter(|m| m.role != MessageRole::System)
-        .collect::<Vec<_>>();
-    if let Some(resp) = response {
-        if !resp.turn_transcript.is_empty() {
-            turn = resp.turn_transcript.clone();
-        } else if !resp.tool_calls.is_empty() {
-            turn.push(ChatMessage::assistant_with_tools(
-                resp.text.clone(),
-                resp.tool_calls.clone(),
-            ));
-            turn.extend(resp.tool_messages.clone());
-        } else if !resp.text.is_empty() {
-            turn.push(ChatMessage::assistant(resp.text));
-        }
-    }
-    let ctx = ConsolidationRunContext::new(None, turn.len(), 0);
-    run_memory_agent(memory_dir, client, turn, ctx).await;
-}

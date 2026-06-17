@@ -407,6 +407,7 @@ let workflow = ConcurrentWorkflow::from_agents(vec![a1, a2, a3, a4, a5]);
 | `engine.run(initial_msg, session) → (events, outputs)` | 双通道执行 |
 | `FunctionExecutor::new(id, handler)` | 纯函数节点 |
 | `AgentExecutor::new(agent)` → `IExecutor` | Agent 节点包装 |
+| `WorkflowAgent` | 独立的 workflow-as-agent 实现（`workflow_agent.rs`） |
 
 ### 向后兼容别名
 

@@ -53,10 +53,12 @@ Type mapping to JSON Schema:
 #[tool(description = "My custom tool")]
 struct MyTool;
 
-// You must implement call() manually:
+// You must implement call() manually.
+// IMPORTANT: call() must return Result<String> to match ITool::execute's signature.
 impl MyTool {
-    pub async fn call(&self, arguments: serde_json::Value) -> String {
+    pub async fn call(&self, arguments: serde_json::Value) -> rust_agent_core::Result<String> {
         // custom logic
+        Ok(format!("Processed: {}", arguments))
     }
 }
 

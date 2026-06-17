@@ -637,14 +637,30 @@ agent.run(
 
 ### 持久化到文件系统
 
-框架内置 `FileSystemSessionStore`：
+框架内置 `InMemorySessionStore` 和 `FileSystemSessionStore`：
 
 ```rust
-use rust_agent_framework::session_store::FileSystemSessionStore;
+use rust_agent_framework::InMemorySessionStore;
+
+let store = InMemorySessionStore::new()
+    .with_ttl(SessionTTLOptions { max_idle_secs: Some(3600), max_lifetime_secs: None, cleanup_interval_secs: 60 });
+
+use rust_agent_framework::FileSystemSessionStore;
 use std::path::PathBuf;
 
 let store = FileSystemSessionStore::new(PathBuf::from("./sessions"));
 store.save(session.id(), &session.serialize().await?).await?;
+```
+
+对于多租户场景，使用 `IsolationScopedSessionStore` 配合 `FixedIsolationKeyProvider`：
+
+```rust
+use rust_agent_framework::{IsolationScopedSessionStore, FixedIsolationKeyProvider};
+use std::sync::Arc;
+
+let inner = Arc::new(InMemorySessionStore::new());
+let key_provider = Arc::new(FixedIsolationKeyProvider::new("tenant-1".into()));
+let scoped_store = IsolationScopedSessionStore::new(inner, key_provider);
 ```
 
 ### 自定义持久化（实现 ISessionStore）
@@ -816,7 +832,7 @@ let provider = AgentSkillsProvider::scan("./skills")?
 
 ```rust
 use rust_agent_framework::compression::SlidingWindowStrategy;
-use rust_agent_core::SimpleTokenCounter;
+use rust_agent_framework::EstimateCounter;
 use std::sync::Arc;
 
 let agent = AgentBuilder::new("agent")
@@ -824,7 +840,7 @@ let agent = AgentBuilder::new("agent")
     .with_compression_strategy(Arc::new(
         SlidingWindowStrategy::new(4096)  // 保留最近 4096 token 的消息
     ))
-    .with_token_counter(Arc::new(SimpleTokenCounter))
+    .with_token_counter(Arc::new(EstimateCounter))
     .build()?;
 ```
 
@@ -1200,18 +1216,35 @@ A: 当前内置支持：
 
 ---
 
+## 其他导出类型
+
+| 类型 | 位置 | 说明 |
+|---|---|---|
+| `ChatClientAgent` | `chat_client_agent.rs` | 核心 Agent 实现，组合 ChatClient + Tools + ContextProviders |
+| `PerServiceCallPersistingChatClient` | `chat_client_decorators` | ChatClient 装饰器，每次 LLM 调用后自动持久化 Session |
+| `AgentResponseConverter` | `converter.rs` | 将内部 `AgentResponseUpdate` 流转换为 `AgentResponseResult` 流 |
+| `InMemorySessionStore` | `session_store` | 基于 `HashMap` 的内存 Session 存储，支持 TTL 自动清理 |
+| `FileSystemSessionStore` | `session_store` | 基于文件系统的 Session 持久化存储 |
+| `IsolationScopedSessionStore` | `session_store` | 基于租户/隔离键的 Session 存储包装器 |
+| `IIsolationKeyProvider` | `session_store` | 隔离键提供者 trait |
+| `FixedIsolationKeyProvider` | `session_store` | 固定隔离键的实现 |
+| `EstimateCounter` | `token_counter` | 基于字符数的简易 Token 计数器（默认） |
+
+---
+
 ## 依赖关系
 
 ```
 rust-agent-framework
 ├── rust-agent-core       (traits, types, streaming)
-├── rust-agent-client     (LLM provider clients)
 ├── rust-agent-macros     (#[tool] proc-macro, re-exported)
 ├── regex / glob / walkdir (file search tools)
-├── reqwest               (web fetch tool)
+├── dirs-next             (config directory resolution)
 ├── chrono                (timestamps)
 ├── tokio / futures       (async runtime)
-└── serde / serde_json    (serialization)
+├── tracing               (structured logging)
+├── serde / serde_json    (serialization)
+└── tiktoken-rs           (optional: accurate token counting)
 
 被依赖:
 ├── rust-agent-cli        (交互式 CLI)

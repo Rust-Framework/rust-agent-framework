@@ -1,6 +1,6 @@
 ---
 type: rules
-description: 行事准则定义文件。记录针对特定场景的固定处理规则和执行规范。
+description: 针对特定场景的固定处理规则和执行规范。
 ---
 
 # RULES — 行事准则

@@ -1,6 +1,6 @@
 ---
 type: user
-description: 用户信息定义文件。记录用户的基本信息、背景和使用场景。
+description: 用户的基本身份信息、背景和使用场景。
 ---
 
 # USER — 用户信息

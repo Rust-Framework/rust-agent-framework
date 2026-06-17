@@ -41,7 +41,12 @@ impl RunCommand {
         else { self.base_dir.join(p) }
     }
 
-    async fn call(&self, command: String, working_dir: Option<String>) -> String {
+    async fn call(
+        &self,
+        command: String,
+        working_dir: Option<String>,
+        timeout_secs: Option<u64>,
+    ) -> String {
         let (program, args) = if cfg!(windows) {
             ("cmd", vec!["/c".to_string(), command.clone()])
         } else {
@@ -59,7 +64,11 @@ impl RunCommand {
         };
         cmd.current_dir(&cwd);
 
-        let timeout_dur = Duration::from_secs(self.timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS));
+        let timeout_dur = Duration::from_secs(
+            timeout_secs
+                .or(self.timeout_secs)
+                .unwrap_or(DEFAULT_TIMEOUT_SECS),
+        );
 
         match tokio::time::timeout(
             timeout_dur,
@@ -127,6 +136,10 @@ impl ITool for RunCommand {
                 "working_dir": {
                     "type": "string",
                     "description": "Working directory for the command (optional; absolute, or relative to the agent's working directory; defaults to agent's working directory)"
+                },
+                "timeout_secs": {
+                    "type": "integer",
+                    "description": "Timeout in seconds for the command (optional; defaults to 30). Increase for long-running commands like builds."
                 }
             },
             "required": ["command"]
@@ -138,6 +151,7 @@ impl ITool for RunCommand {
         struct Args {
             command: String,
             working_dir: Option<String>,
+            timeout_secs: Option<u64>,
         }
         let args: Args = serde_json::from_value(arguments).map_err(|e| {
             rust_agent_core::AgentError::ToolError(format!(
@@ -145,7 +159,9 @@ impl ITool for RunCommand {
                 e
             ))
         })?;
-        Ok(self.call(args.command, args.working_dir).await)
+        Ok(self
+            .call(args.command, args.working_dir, args.timeout_secs)
+            .await)
     }
 }
 

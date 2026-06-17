@@ -21,10 +21,20 @@ Assembles all framework crates into a runnable chat application with:
 | Command | Description |
 |---|---|
 | `/help` | Show available commands |
-| `/clear` | Clear conversation history and reset agent |
+| `/clear` | Clear conversation history |
+| `/restart` | Clear history and reset agent (simulates new session) |
+| `/memory` | Show SkillMemory status and index gaps |
 | `/think on` / `/think off` | Enable/disable DeepSeek thinking (reasoning) mode |
 | `/model <name>` | Switch model at runtime (e.g. `deepseek-chat`, `deepseek-reasoner`) |
 | `/quit`, `/exit`, `quit`, `exit` | Exit the application |
+
+### Agent Capabilities
+
+The CLI agent is equipped with:
+
+- **Web search** (`WebSearch`) and **web fetch** (`WebFetch`) tools from `rust-agent-websearch`
+- **Echo** and **Add** example tools defined with `#[tool]`
+- **SkillMemory** via `SkillMemoryContextProvider` for long-term memory integration
 
 ### Streaming Display
 
@@ -83,7 +93,9 @@ User Input (REPL)
 AgentBuilder::new("cli-agent")
     ├── DeepSeekChatClient (deepseek-v4-flash)
     ├── instructions: "You are a helpful AI assistant..."
-    └── tools: [Echo, Add]
+    ├── tools: [Echo, Add, WebSearch, WebFetch]
+    ├── context_providers: [SkillMemoryContextProvider]
+    └── max_tool_rounds: 8
     │
     ▼
 agent.run(messages, session, run_options)
@@ -108,9 +120,9 @@ The API key is hardcoded for development purposes. Replace `DEEPSEEK_API_KEY` in
 ## Dependencies
 
 - `rust-agent-core` — types and session
-- `rust-agent-framework` — `AgentBuilder`, `tool` macro
+- `rust-agent-framework` — `AgentBuilder`, `tool` macro, memory
 - `rust-agent-client` — `DeepSeekChatClient`
-- `rust-agent-workflow` — workflow crate (available for import)
+- `rust-agent-websearch` — `WebSearch`, `WebFetch` tools
 - `tokio` — async runtime
 - `tracing-subscriber` — logging (warn level in chat mode)
 - `rustyline` — readline-style line editing with history

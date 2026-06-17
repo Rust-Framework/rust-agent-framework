@@ -12,11 +12,13 @@ const DEFAULT_TIMEOUT_SECS: u64 = 30;
 #[async_trait]
 pub trait AgentSkillScriptRunner: Send + Sync {
     /// 执行脚本，返回 stdout。
+    /// `timeout_secs` overrides the runner's configured default per-call when provided.
     async fn run(
         &self,
         skill_name: &str,
         script_path: &Path,
         args: Option<Vec<String>>,
+        timeout_secs: Option<u64>,
     ) -> Result<String>;
 }
 
@@ -49,6 +51,7 @@ impl AgentSkillScriptRunner for SubprocessScriptRunner {
         _skill_name: &str,
         script_path: &Path,
         args: Option<Vec<String>>,
+        timeout_secs: Option<u64>,
     ) -> Result<String> {
         // 根据扩展名选择解释器
         let ext = script_path
@@ -93,7 +96,11 @@ impl AgentSkillScriptRunner for SubprocessScriptRunner {
             cmd_parts.extend(a.iter().cloned());
         }
 
-        let timeout_dur = Duration::from_secs(self.timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS));
+        let timeout_dur = Duration::from_secs(
+            timeout_secs
+                .or(self.timeout_secs)
+                .unwrap_or(DEFAULT_TIMEOUT_SECS),
+        );
 
         let output = tokio::time::timeout(
             timeout_dur,

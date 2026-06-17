@@ -100,42 +100,6 @@ fn generic_content_selectors() -> Vec<&'static str> {
     ]
 }
 
-/// 需要移除的元素选择器（导航、侧边栏、页脚等）。
-#[allow(dead_code)]
-fn elements_to_remove() -> Vec<&'static str> {
-    vec![
-        "nav",
-        "header",
-        "footer",
-        "aside",
-        ".sidebar",
-        ".nav",
-        ".navbar",
-        ".navigation",
-        ".menu",
-        ".footer",
-        ".header",
-        ".comments",
-        "#comments",
-        ".related-posts",
-        ".recommended",
-        ".advertisement",
-        ".ad",
-        ".ads",
-        ".social-share",
-        ".share-buttons",
-        ".cookie-banner",
-        ".cookie-notice",
-        ".newsletter-signup",
-        "script",
-        "style",
-        "noscript",
-        "iframe",
-        ".toc",
-        "#toc",
-        ".table-of-contents",
-    ]
-}
 
 // ── 主要提取逻辑 ──
 

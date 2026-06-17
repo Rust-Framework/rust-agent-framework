@@ -244,7 +244,7 @@ impl WorkflowEngine {
                         tracing::warn!("Event channel closed (NodeInvoking)");
                     }
 
-                    for env in messages {
+                    if let Some(env) = messages.into_iter().next() {
                         let (progress_tx, mut progress_rx) =
                             tokio::sync::mpsc::unbounded_channel::<NodeProgress>();
 

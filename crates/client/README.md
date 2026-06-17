@@ -18,6 +18,18 @@ The shared HTTP/SSE transport engine used by all provider clients. Features:
 - Per-call option overrides (temperature, max_tokens, extra_body, tools)
 - Error handling for HTTP errors and parse failures
 
+### [`ModelListEntry`](src/types.rs)
+
+Returned by provider-specific `list_models()` calls:
+
+```rust
+pub struct ModelListEntry {
+    pub id: String,
+    pub created: Option<i64>,
+    pub owned_by: Option<String>,
+}
+```
+
 ### [`OpenAiChatClient`](src/openai_client.rs)
 
 OpenAI API wrapper. Composes `ChatClient` with `UsageFormat::OpenAI` for usage parsing.

@@ -1,6 +1,6 @@
 ---
 type: lesson
-description: 经验教训定义文件。记录过往对话中总结的经验、踩过的坑、用户纠正过的错误。
+description: 过往对话中积累的经验、教训与用户纠正记录。
 ---
 
 # LESSON — 经验教训
