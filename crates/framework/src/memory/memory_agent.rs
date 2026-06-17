@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use futures_util::StreamExt;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, IAgent, IChatClient, ITool, MessageRole,
+    AgentRunOptions, ChatMessage, IAgent, IChatClient, ITool, MessageRole,
     ToolRegistry,
 };
 
