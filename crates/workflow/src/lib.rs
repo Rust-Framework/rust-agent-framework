@@ -31,7 +31,15 @@ pub use crate::orchestrations::{
 
 pub use builder::WorkflowBuilder;
 pub use checkpoint::{Checkpoint, CheckpointConfig, CheckpointInfo, CheckpointManager, FileCheckpointStore, ICheckpointStore, InMemoryCheckpointStore, ScopeKey, SerializableMessageEnvelope, deserialize_envelopes, serialize_envelopes};
-pub use engine::{IWorkflowContext, MessageEnvelope, NodeChunk, UsageInfo, WorkflowEngine, WorkflowEvent, WorkflowOutput};
-pub use executor::{AgentExecutor, FunctionExecutor, HandlerResult, IExecutor, NodeProgress, TypeTag};
+pub use engine::{
+    ExhaustedAction, IWorkflowContext, MessageEnvelope, NodeChunk, ResumeCommand, RetryBackoff,
+    RetryCondition, RetryConfig, UsageInfo, WorkflowConfig, WorkflowEngine, WorkflowEvent,
+    WorkflowOutput, WorkflowRuntime, get_typed_variable, run_resumable, set_typed_variable,
+};
+pub use executor::{
+    AgentExecutor, CompensableExecutor, FunctionExecutor, HandlerResult, HumanTaskExecutor,
+    ICompensable, IExecutor, NodeProgress, SubFlowExecutor, TypeTag,
+};
+pub use graph::{ComparisonOp, ExpressionCondition, VariableCondition, VariableEdgeCondition};
 pub use graph::{Edge, Node, RequestPort, WorkflowGraph};
 pub use workflow_agent::WorkflowAgent;

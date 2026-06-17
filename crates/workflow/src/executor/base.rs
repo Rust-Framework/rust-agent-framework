@@ -101,6 +101,16 @@ pub trait IExecutor: Send + Sync {
         Ok(())
     }
 
+    /// 定时器触发钩子（由引擎在 TimerFired 后调用）
+    async fn on_timer(&self, _timer_name: &str, _ctx: &dyn IWorkflowContext) -> Result<()> {
+        Ok(())
+    }
+
+    /// 补偿操作（Saga 回滚，默认无操作）
+    async fn compensate(&self, _ctx: &dyn IWorkflowContext) -> Result<()> {
+        Ok(())
+    }
+
     /// 核心执行方法。message 使用 Arc 共享引用，FanOut 等场景下零拷贝传递。
     async fn handle(
         &self,

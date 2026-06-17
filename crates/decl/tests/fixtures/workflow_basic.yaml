@@ -1,0 +1,19 @@
+# MAF-compatible Workflow definition
+# This uses the action-list DSL for sequential execution.
+kind: workflow
+name: greeting-workflow
+displayName: Greeting Workflow
+trigger:
+  kind: OnConversationStart
+  id: greeting_workflow
+  actions:
+    - kind: SetVariable
+      variable: Local.userName
+      value: =System.LastMessage.Text
+    - kind: SetVariable
+      variable: Local.greeting
+      value: Hello
+    - kind: SendActivity
+      id: send_greeting
+      activity:
+        text: =Concat(Local.greeting, ", ", Local.userName, "!")

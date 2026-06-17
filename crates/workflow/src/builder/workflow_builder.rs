@@ -3,11 +3,13 @@ use std::sync::Arc;
 
 use rust_agent_core::{IAgent, Result};
 
+use crate::engine::retry::RetryConfig;
 use crate::executor::{AgentExecutor, IExecutor};
 use crate::graph::edge::{DirectEdgeData, Edge, EdgeId, FanInEdgeData, FanOutEdgeData, IEdgeCondition, IFanOutAssigner};
 use crate::graph::node::Node;
 use crate::graph::port::RequestPort;
 use crate::graph::WorkflowGraph;
+use std::time::Duration;
 
 /// 工作流图构建器 — 对应 MAF 的 WorkflowBuilder
 ///
@@ -51,6 +53,22 @@ impl WorkflowBuilder {
         let executor = Arc::new(AgentExecutor::new(id.clone(), agent));
         let node = Node::new(id.clone(), executor);
         self.nodes.insert(id, node);
+        self
+    }
+
+    /// 为最后一次 add_node 添加的节点设置重试策略
+    pub fn with_retry(mut self, config: RetryConfig) -> Self {
+        if let Some((_, node)) = self.nodes.iter_mut().last() {
+            node.retry = Some(config);
+        }
+        self
+    }
+
+    /// 为最后一次 add_node 添加的节点设置超时
+    pub fn with_node_timeout(mut self, timeout: Duration) -> Self {
+        if let Some((_, node)) = self.nodes.iter_mut().last() {
+            node.timeout = Some(timeout);
+        }
         self
     }
 

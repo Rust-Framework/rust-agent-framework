@@ -5,15 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Declarative agent and workflow definitions via JSON/YAML/TOML — build agents and workflows from data files"
-
-[[example]]
-name = "custom_tool_agent"
-path = "examples/custom_tool_agent.rs"
-
-[[example]]
-name = "test_console"
-path = "examples/test_console.rs"
+description = "Declarative agent and workflow definitions via JSON/YAML/TOML — MAF AgentSchema v1.0 aligned"
 
 [dependencies]
 rust-agent-core = { workspace = true }
@@ -30,13 +22,14 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-futures-core = { workspace = true }
-reqwest = { workspace = true }
-rustyline = "15"
+uuid = { workspace = true }
+powerfx = { version = "0.1", optional = true }
+mustache = { version = "0.9", optional = true }
 
 [features]
 default = ["json"]
 json = []
 yaml = ["dep:serde_yaml"]
 toml = ["dep:toml"]
+powerfx = ["dep:powerfx"]
+mustache = ["dep:mustache"]

@@ -1,0 +1,18 @@
+# MAF-compatible Agent Manifest
+name: my-agent-manifest
+displayName: My Agent Manifest
+description: A deployment manifest for a prompt agent.
+template:
+  kind: prompt
+  name: MyAgent
+  displayName: My Agent
+  model:
+    id: gpt-4o
+    provider: openai
+  instructions: You are a helpful assistant.
+parameters:
+  properties: []
+resources:
+  - name: chat
+    kind: model
+    id: gpt-4o

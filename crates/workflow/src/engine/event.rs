@@ -69,6 +69,34 @@ pub enum WorkflowEvent {
         error: String,
         node_id: Option<String>,
     },
+
+    // ── 暂停 / 恢复 ──
+    /// 工作流因 halt 请求暂停
+    WorkflowHalted {
+        step_number: i32,
+        reason: Option<String>,
+    },
+    /// 工作流从暂停中恢复
+    WorkflowResumed {
+        step_number: i32,
+    },
+
+    // ── 超时 / 定时器 ──
+    /// 整体工作流超时
+    WorkflowTimeout {
+        elapsed: std::time::Duration,
+    },
+    /// 定时器触发
+    TimerFired {
+        node_id: String,
+        timer_name: String,
+    },
+
+    // ── 自定义事件 ──
+    Custom {
+        key: String,
+        data: serde_json::Value,
+    },
 }
 
 /// 节点流式块 — 映射 NodeProgress → 可序列化事件

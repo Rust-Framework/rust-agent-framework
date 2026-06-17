@@ -1,0 +1,18 @@
+//! Resolver module — converts MAF-aligned declaration data into runnable
+//! agent and workflow instances.
+//!
+//! ## Module structure
+//!
+//! - `agent_resolver` — AgentDefinition → Arc\<dyn IAgent\>
+//! - `workflow_resolver` — WorkflowAgentData → WorkflowGraph
+//! - `tool_resolver` — ToolDecl (7 variants) → Arc\<dyn ITool\>
+//! - `connection_resolver` — Connection + Model → IChatClient credentials
+
+pub mod agent_resolver;
+pub mod connection_resolver;
+pub mod tool_resolver;
+pub mod workflow_resolver;
+
+pub use agent_resolver::{quick_agent, AgentResolver};
+pub use tool_resolver::{ToolFactoryFn, ToolResolver};
+pub use workflow_resolver::{quick_workflow, WorkflowResolver};

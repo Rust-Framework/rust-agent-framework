@@ -1,0 +1,14 @@
+# MAF-compatible Container Agent definition
+kind: hosted
+name: my-hosted-agent
+displayName: My Hosted Agent
+protocols:
+  - protocol: responses
+    version: v0.1.1
+image: myregistry.azurecr.io/my-agent
+resources:
+  cpu: "1"
+  memory: 2Gi
+environmentVariables:
+  - name: MY_ENV_VAR
+    value: my-value

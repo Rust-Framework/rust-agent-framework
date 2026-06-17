@@ -1,7 +1,6 @@
-use rust_agent_core::AgentError;
 use thiserror::Error;
 
-/// Errors that can occur during declaration parsing or resolution.
+/// Errors that can occur during declaration parsing, validation, or resolution.
 #[derive(Debug, Error)]
 pub enum DeclError {
     /// I/O error while reading a declaration file.
@@ -39,13 +38,17 @@ pub enum DeclError {
     #[error("Validation error: {0}")]
     Validation(String),
 
-    /// Wraps a core AgentError.
+    /// Wraps a core error.
     #[error("Agent error: {0}")]
-    Agent(#[from] AgentError),
+    Agent(#[from] rust_agent_core::AgentError),
 
-    /// Missing required field or reference.
+    /// Required field or reference is missing.
     #[error("Missing: {0}")]
     Missing(String),
+
+    /// Expression evaluation error (PowerFx or template).
+    #[error("Expression error: {0}")]
+    Expression(String),
 }
 
 /// Convenience alias for results in this crate.

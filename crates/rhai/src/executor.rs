@@ -108,7 +108,7 @@ impl IExecutor for RhaiExecutor {
 
     async fn handle(
         &self,
-        message: Box<dyn std::any::Any + Send + Sync>,
+        message: Arc<dyn std::any::Any + Send + Sync>,
         ctx: &dyn IWorkflowContext,
         progress: UnboundedSender<NodeProgress>,
     ) -> Result<HandlerResult> {
@@ -171,7 +171,7 @@ impl IExecutor for RhaiExecutor {
         }
 
         // 5. 包装输出
-        Ok(HandlerResult::Messages(vec![Box::new(result)]))
+        Ok(HandlerResult::Messages(vec![Arc::new(result)]))
     }
 }
 
@@ -194,7 +194,7 @@ async fn load_context_snapshot(ctx: &dyn IWorkflowContext) -> Result<serde_json:
 }
 
 /// 从 message 中提取 serde_json::Value
-fn extract_input(message: Box<dyn std::any::Any + Send + Sync>) -> serde_json::Value {
+fn extract_input(message: Arc<dyn std::any::Any + Send + Sync>) -> serde_json::Value {
     if let Some(val) = message.downcast_ref::<serde_json::Value>() {
         return val.clone();
     }

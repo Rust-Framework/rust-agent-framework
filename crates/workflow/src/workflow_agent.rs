@@ -13,29 +13,27 @@ use crate::graph::WorkflowGraph;
 
 /// WorkflowAgent — 将 WorkflowEngine 包装为 IAgent
 ///
-/// 对应 MAF 的 `Workflow.as_agent()` 模式：
-/// 工作流作为一个整体暴露为 Agent。调用 `workflow_agent.run()` 即可启动
-/// 整个工作流图执行，获得流式 + 可观测的双通道输出。
-///
 /// # 流式全链路
 ///
 /// 每个 NodeStreaming 事件被实时转换为 AgentResponseResult 帧，
-/// NodeInvoking/NodeCompleted 作为 Event 嵌入，
-/// 前端可实时感知每个子代理的执行状态（打字机输出、工具调用、完成/失败）。
+/// NodeInvoking/NodeCompleted 作为 Event 嵌入。
+///
+/// # Checkpoint 支持
+///
+/// 通过 `WorkflowAgent::new_with_checkpoint(graph, checkpoint_manager)`
+/// 创建带故障恢复能力的 WorkflowAgent。
 pub struct WorkflowAgent {
     id: AgentId,
     metadata: AgentMetadata,
     graph: Arc<WorkflowGraph>,
-    /// 子 agent 列表（从 graph 节点中提取的 IAgent 引用）
     sub_agents: Vec<Arc<dyn IAgent>>,
+    checkpoint_manager: Option<Arc<crate::checkpoint::CheckpointManager>>,
 }
 
 impl WorkflowAgent {
-    /// 从 WorkflowGraph 创建 Agent
+    /// 从 WorkflowGraph 创建 Agent（无 checkpoint）
     pub fn new(graph: WorkflowGraph) -> Self {
-        // 提取子 agent
         let sub_agents = Self::extract_agents(&graph);
-
         let id = AgentId::new(format!("workflow_{}", graph.start_node_id()));
         let mut metadata = AgentMetadata::new(
             "WorkflowAgent",
@@ -52,7 +50,18 @@ impl WorkflowAgent {
             metadata,
             graph: Arc::new(graph),
             sub_agents,
+            checkpoint_manager: None,
         }
+    }
+
+    /// 从 WorkflowGraph + CheckpointManager 创建 Agent（带故障恢复）
+    pub fn new_with_checkpoint(
+        graph: WorkflowGraph,
+        checkpoint_manager: Arc<crate::checkpoint::CheckpointManager>,
+    ) -> Self {
+        let mut agent = Self::new(graph);
+        agent.checkpoint_manager = Some(checkpoint_manager);
+        agent
     }
 
     /// 从 WorkflowBuilder 一步创建
@@ -64,7 +73,6 @@ impl WorkflowAgent {
         Ok(Self::new(graph))
     }
 
-    /// 从图中提取已注册的 IAgent（通过 as_agent() 内省）
     fn extract_agents(graph: &WorkflowGraph) -> Vec<Arc<dyn IAgent>> {
         let mut seen: std::collections::HashMap<String, Arc<dyn IAgent>> =
             std::collections::HashMap::new();
@@ -95,14 +103,21 @@ impl IAgent for WorkflowAgent {
         _options: Option<AgentRunOptions>,
     ) -> Result<BoxStream<'static, Result<AgentResponseResult>>> {
         let graph = self.graph.clone();
+        let checkpoint = self.checkpoint_manager.clone();
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<AgentResponseResult>>(64);
 
         tokio::spawn(async move {
-            let initial_message: Box<dyn std::any::Any + Send + Sync> =
-                Box::new(messages);
+            let initial_message: Arc<dyn std::any::Any + Send + Sync> =
+                Arc::new(messages);
 
-            let engine = crate::engine::WorkflowEngine::new((*graph).clone());
+            let engine = {
+                let mut eng = crate::engine::WorkflowEngine::new((*graph).clone());
+                if let Some(cp) = checkpoint {
+                    eng = eng.with_checkpoint_manager(cp);
+                }
+                eng
+            };
 
             match engine.run(initial_message, session).await {
                 Ok((mut event_stream, mut output_stream)) => {
@@ -128,74 +143,7 @@ impl IAgent for WorkflowAgent {
                                     .await;
                             }
                             WorkflowEvent::NodeStreaming { node_id, chunk } => {
-                                let content = match chunk {
-                                    NodeChunk::TextDelta { delta } => {
-                                        Content::Text(rust_agent_core::TextContent {
-                                            delta,
-                                            meta: make_meta(&node_id),
-                                        })
-                                    }
-                                    NodeChunk::ReasoningDelta { delta } => {
-                                        Content::Reasoning(
-                                            rust_agent_core::ReasoningContent {
-                                                delta,
-                                                meta: make_meta(&node_id),
-                                            },
-                                        )
-                                    }
-                                    NodeChunk::ToolCallStart { call_id, name } => {
-                                        Content::ToolCallStart(
-                                            rust_agent_core::ToolCallStartContent {
-                                                call_id,
-                                                name,
-                                                meta: make_meta(&node_id),
-                                            },
-                                        )
-                                    }
-                                    NodeChunk::ToolCallArgs {
-                                        call_id,
-                                        args_delta,
-                                    } => Content::ToolCallArgs(
-                                        rust_agent_core::ToolCallArgsContent {
-                                            call_id,
-                                            args_delta,
-                                            meta: make_meta(&node_id),
-                                        },
-                                    ),
-                                    NodeChunk::ToolCallEnd { call_id } => {
-                                        Content::ToolCallEnd(
-                                            rust_agent_core::ToolCallEndContent {
-                                                call_id,
-                                                meta: make_meta(&node_id),
-                                            },
-                                        )
-                                    }
-                                    NodeChunk::ToolResult { call_id, result } => {
-                                        Content::ToolCalled(
-                                            rust_agent_core::ToolCalledContent {
-                                                call_id,
-                                                result: Some(result),
-                                            error: None,
-                                                meta: make_meta(&node_id),
-                                            },
-                                        )
-                                    }
-                                    NodeChunk::UsageUpdate {
-                                        prompt_tokens,
-                                        completion_tokens,
-                                    } => Content::Usage(rust_agent_core::UsageContent {
-                                        usage: rust_agent_core::Usage {
-                                            prompt_tokens,
-                                            completion_tokens,
-                                            total_tokens: prompt_tokens + completion_tokens,
-                                            prompt_cache_hit_tokens: None,
-                                            prompt_cache_miss_tokens: None,
-                                            reasoning_tokens: None,
-                                        },
-                                        meta: make_meta(&node_id),
-                                    }),
-                                    _ => continue,
-                                };
+                                let content = node_chunk_to_content(chunk, &node_id);
                                 let _ = tx
                                     .send(Ok(AgentResponseResult {
                                         id: Some(node_id),
@@ -234,9 +182,7 @@ impl IAgent for WorkflowAgent {
                             }
                             WorkflowEvent::WorkflowError { error, .. } => {
                                 let _ = tx
-                                    .send(Err(rust_agent_core::AgentError::WorkflowError(
-                                        error,
-                                    )))
+                                    .send(Err(rust_agent_core::AgentError::WorkflowError(error)))
                                     .await;
                             }
                             _ => {}
@@ -296,7 +242,66 @@ impl IAgent for WorkflowAgent {
     }
 }
 
-/// 构造 ResponseMetadata 辅助函数
+fn node_chunk_to_content(chunk: NodeChunk, node_id: &str) -> Content {
+    match chunk {
+        NodeChunk::TextDelta { delta } => Content::Text(rust_agent_core::TextContent {
+            delta,
+            meta: make_meta(node_id),
+        }),
+        NodeChunk::ReasoningDelta { delta } => Content::Reasoning(
+            rust_agent_core::ReasoningContent {
+                delta,
+                meta: make_meta(node_id),
+            },
+        ),
+        NodeChunk::ToolCallStart { call_id, name } => {
+            Content::ToolCallStart(rust_agent_core::ToolCallStartContent {
+                call_id,
+                name,
+                meta: make_meta(node_id),
+            })
+        }
+        NodeChunk::ToolCallArgs { call_id, args_delta } => {
+            Content::ToolCallArgs(rust_agent_core::ToolCallArgsContent {
+                call_id,
+                args_delta,
+                meta: make_meta(node_id),
+            })
+        }
+        NodeChunk::ToolCallEnd { call_id } => {
+            Content::ToolCallEnd(rust_agent_core::ToolCallEndContent {
+                call_id,
+                meta: make_meta(node_id),
+            })
+        }
+        NodeChunk::ToolResult { call_id, result } => Content::ToolCalled(
+            rust_agent_core::ToolCalledContent {
+                call_id,
+                result: Some(result),
+                error: None,
+                meta: make_meta(node_id),
+            },
+        ),
+        NodeChunk::UsageUpdate { prompt_tokens, completion_tokens } => {
+            Content::Usage(rust_agent_core::UsageContent {
+                usage: rust_agent_core::Usage {
+                    prompt_tokens,
+                    completion_tokens,
+                    total_tokens: prompt_tokens + completion_tokens,
+                    prompt_cache_hit_tokens: None,
+                    prompt_cache_miss_tokens: None,
+                    reasoning_tokens: None,
+                },
+                meta: make_meta(node_id),
+            })
+        }
+        _ => Content::Text(rust_agent_core::TextContent {
+            delta: String::new(),
+            meta: make_meta(node_id),
+        }),
+    }
+}
+
 fn make_meta(agent_id: &str) -> rust_agent_core::ResponseMetadata {
     rust_agent_core::ResponseMetadata {
         agent_id: if agent_id.is_empty() {

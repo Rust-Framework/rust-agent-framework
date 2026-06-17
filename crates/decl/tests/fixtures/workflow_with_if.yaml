@@ -1,0 +1,20 @@
+# MAF-compatible Workflow with conditional branching
+kind: workflow
+name: conditional-workflow
+trigger:
+  kind: OnConversationStart
+  id: cond_workflow
+  actions:
+    - kind: SetVariable
+      variable: Local.age
+      value: =System.LastMessage.Text
+    - kind: If
+      condition: =Local.age >= 18
+      then:
+        - kind: SendActivity
+          activity:
+            text: Welcome, adult user!
+      else:
+        - kind: SendActivity
+          activity:
+            text: Welcome, young user!

@@ -1,0 +1,16 @@
+# MAF-compatible Prompt Agent with tools
+kind: prompt
+name: ToolAssistant
+displayName: Assistant with Tools
+description: An assistant that can search the web and read files.
+model:
+  id: gpt-4o
+  connection:
+    kind: key
+    api_key: $OPENAI_API_KEY
+instructions: You are a helpful assistant with tool access.
+tools:
+  - kind: web_search
+  - kind: function
+    name: read_file
+    description: Read the contents of a file
