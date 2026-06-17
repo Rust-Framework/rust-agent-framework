@@ -80,6 +80,96 @@ enum LoopState {
     Done,
 }
 
+/// 按工具的 JSON Schema 验证参数是否合法。
+///
+/// 校验逻辑：
+/// 1. 参数必须是一个 JSON 对象（含对空对象降级为字符串边界情况的包容处理）
+/// 2. 所有 `required` 字段必须存在
+/// 3. 每个字段的值类型必须与 `properties[<field>].type` 兼容
+///
+/// 返回 `Ok(())` 表示校验通过；`Err(message)` 给出人类可读的缺失/错误清单。
+fn validate_against_schema(args: &serde_json::Value, schema: &serde_json::Value) -> std::result::Result<(), String> {
+    let obj = match args {
+        serde_json::Value::Object(o) => o,
+        other => {
+            // 包容处理：空字符串/空数组/基本类型 — 给一个明确提示
+            return Err(format!(
+                "Expected a JSON object with named parameters, but received: {}. \
+                 Please use the format {{\"param1\": value1, \"param2\": value2}}.",
+                match other {
+                    serde_json::Value::String(s) if s.is_empty() => "an empty string",
+                    serde_json::Value::String(s) => return Err(format!(
+                        "Expected a JSON object, but received a bare string: \"{}\". \
+                         Did you mean {{\"<parameter_name>\": \"{}\"}}? \
+                         Check the schema below for the correct parameter names.",
+                        s, s
+                    )),
+                    serde_json::Value::Array(_) => "an array",
+                    serde_json::Value::Number(_) => "a number",
+                    serde_json::Value::Bool(_) => "a boolean",
+                    serde_json::Value::Null => "null",
+                    _ => "an unexpected value type",
+                }
+            ));
+        }
+    };
+
+    let mut errors: Vec<String> = Vec::new();
+
+    // 1. 校验 required 字段
+    if let Some(required) = schema.get("required").and_then(|r| r.as_array()) {
+        for field in required {
+            let field_name = field.as_str().unwrap_or("");
+            if !obj.contains_key(field_name) {
+                errors.push(format!("Missing required field: \"{}\"", field_name));
+            }
+        }
+    }
+
+    // 2. 校验每个已提供字段的类型
+    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
+        for (field_name, field_value) in obj {
+            if let Some(prop_schema) = properties.get(field_name) {
+                let expected_type = prop_schema
+                    .get("type")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("string");
+
+                let type_ok = match expected_type {
+                    "string" => field_value.is_string(),
+                    "number" | "integer" => field_value.is_number(),
+                    "boolean" => field_value.is_boolean(),
+                    "object" => field_value.is_object(),
+                    "array" => field_value.is_array(),
+                    _ => true, // 未知类型不校验
+                };
+
+                if !type_ok {
+                    let actual = match field_value {
+                        serde_json::Value::String(_) => "string",
+                        serde_json::Value::Number(_) => "number",
+                        serde_json::Value::Bool(_) => "boolean",
+                        serde_json::Value::Array(_) => "array",
+                        serde_json::Value::Object(_) => "object",
+                        serde_json::Value::Null => "null",
+                    };
+                    errors.push(format!(
+                        "Field \"{}\" has type \"{}\", but expected type \"{}\".",
+                        field_name, actual, expected_type
+                    ));
+                }
+            }
+            // 未知字段不报错 — LLM 有时会发送额外字段，工具可以选择忽略
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
 #[async_trait]
 impl IChatClient for FunctionInvokingChatClient {
     async fn run(
@@ -274,7 +364,7 @@ impl IChatClient for FunctionInvokingChatClient {
                                     "Tool loop reached max rounds, terminating"
                                 );
                                 let err_update = AgentResponseUpdate::Finish {
-                                    finish_reason: FinishReason::Stop,
+                                    finish_reason: FinishReason::MaxRounds,
                                     usage: None,
                                 };
                                 return Some((Ok(err_update), LoopState::Done));
@@ -353,6 +443,12 @@ impl IChatClient for FunctionInvokingChatClient {
                                                 AgentResponseUpdate::ToolCallStart { id, name } => {
                                                     tracing::trace!(tool_name = %name, call_id = %id, "ToolCallStart received");
                                                     has_tool_calls = true;
+                                                    // 并行 tool call：先提交上一个未 End 的调用
+                                                    if let Some(prev) = current_tool_args.take() {
+                                                        if !prev.id.is_empty() && !prev.name.is_empty() {
+                                                            tool_calls.push(prev);
+                                                        }
+                                                    }
                                                     current_tool_args = Some(AccumulatedToolCall {
                                                         id: id.clone(),
                                                         name: name.clone(),
@@ -431,7 +527,32 @@ impl IChatClient for FunctionInvokingChatClient {
                                     }
                                 }
 
-                                if !has_tool_calls {
+                                // ── 收尾：Stream 结束时，如果 current_tool_args 仍有数据 ──
+                                // 说明 ToolCallStart 已到达但 ToolCallEnd 未到达（流提前终止
+                                // 或提供商的 streaming 格式异常）。此时需将未完成的 tool call
+                                // 提交到执行队列，避免静默丢失工具调用。
+                                if let Some(dangling) = current_tool_args.take() {
+                                    if !dangling.id.is_empty() && !dangling.name.is_empty() {
+                                        tracing::warn!(
+                                            tool_name = %dangling.name,
+                                            call_id = %dangling.id,
+                                            args_len = dangling.arguments.len(),
+                                            args_preview = %if dangling.arguments.len() > 200 {
+                                                format!("{}...", &dangling.arguments[..200])
+                                            } else {
+                                                dangling.arguments.clone()
+                                            },
+                                            "Stream ended with unfinished tool call — finalizing"
+                                        );
+                                        has_tool_calls = true;
+                                        tool_calls.push(dangling);
+                                    }
+                                }
+
+                                // 丢弃无 id/name 的占位槽位（ToolCallDelta 按 index 预分配时可能产生）
+                                tool_calls.retain(|tc| !tc.id.is_empty() && !tc.name.is_empty());
+
+                                if !has_tool_calls || tool_calls.is_empty() {
                                     tracing::info!("No tool calls detected — emitting final Finish(Stop)");
                                     let _ = tx.send(Ok(AgentResponseUpdate::Finish { finish_reason: FinishReason::Stop, usage: None })).await;
                                     return;
@@ -539,7 +660,64 @@ impl IChatClient for FunctionInvokingChatClient {
                                             }
                                         }
 
-                                        let args_value = serde_json::from_str(&tc.arguments).unwrap_or(serde_json::Value::Object(Default::default()));
+                                        let args_value = match serde_json::from_str(&tc.arguments) {
+                                            Ok(v) => v,
+                                            Err(e) => {
+                                                tracing::warn!(
+                                                    tool_name = %tc.name,
+                                                    call_id = %tc.id,
+                                                    error = %e,
+                                                    raw_args = %tc.arguments,
+                                                    "Failed to parse tool call arguments as JSON"
+                                                );
+                                                // JSON 解析失败时直接返回错误，不再静默降级为空对象。
+                                                // 带上原始参数和 schema，让 LLM 能自我纠正。
+                                                let msg = format!(
+                                                    "Tool '{}' was called with invalid JSON arguments: {}\n\
+                                                     Parse error: {}\n\
+                                                     Please provide valid JSON with all required fields.",
+                                                    tc.name, tc.arguments, e
+                                                );
+                                                if let Some(tool) = tools.iter().find(|t| t.name() == tc.name) {
+                                                    let schema = tool.parameters();
+                                                    return ToolCalledContent {
+                                                        meta, call_id: tc.id.clone(), result: None,
+                                                        error: Some(format!("{} Expected schema: {}", msg, schema)),
+                                                    };
+                                                }
+                                                return ToolCalledContent {
+                                                    meta, call_id: tc.id.clone(), result: None, error: Some(msg),
+                                                };
+                                            }
+                                        };
+
+                                        // ── Schema 验证：在工具执行前校验参数完整性 ──
+                                        // 不依赖工具内部的 serde 反序列化报错（不同工具报错格式不一致），
+                                        // 而是统一在此处按声明的 JSON Schema 做前置校验。
+                                        if let Some(tool) = tools.iter().find(|t| t.name() == tc.name) {
+                                            let schema = tool.parameters();
+                                            if let Err(validation_err) = validate_against_schema(&args_value, &schema) {
+                                                tracing::warn!(
+                                                    tool_name = %tc.name,
+                                                    call_id = %tc.id,
+                                                    error = %validation_err,
+                                                    raw_args = %tc.arguments,
+                                                    "Tool call arguments failed schema validation"
+                                                );
+                                                let msg = format!(
+                                                    "Tool '{}' was called with invalid or incomplete arguments.\n\
+                                                     You sent: {}\n\
+                                                     Problem: {}\n\
+                                                     Expected schema: {}\n\
+                                                     Please fix your arguments and retry.",
+                                                    tc.name, tc.arguments, validation_err, schema
+                                                );
+                                                return ToolCalledContent {
+                                                    meta, call_id: tc.id.clone(), result: None, error: Some(msg),
+                                                };
+                                            }
+                                        }
+
                                         match tools.iter().find(|t| t.name() == tc.name) {
                                             Some(tool) => match tool.execute(args_value).await {
                                                 Ok(output) => {
@@ -550,8 +728,11 @@ impl IChatClient for FunctionInvokingChatClient {
                                                     tracing::warn!(tool_name = %tc.name, call_id = %tc.id, error = %e, "Tool execution failed");
                                                     let schema = tool.parameters();
                                                     let msg = format!(
-                                                        "Tool '{}' execution failed: {}. Expected schema: {}. Please check your parameters and retry.",
-                                                        tc.name, e, schema
+                                                        "Tool '{}' execution failed: {}\n\
+                                                         You called with arguments: {}\n\
+                                                         Expected schema: {}\n\
+                                                         Please fix your arguments and retry.",
+                                                        tc.name, e, tc.arguments, schema
                                                     );
                                                     ToolCalledContent { meta, call_id: tc.id.clone(), result: None, error: Some(msg) }
                                                 }

@@ -452,6 +452,13 @@ pub struct AgentResponse {
     pub text: String,
     pub reasoning_text: Option<String>,
     pub tool_calls: Vec<ToolCall>,
+    /// Tool-role messages for this turn's tool results (paired with `tool_calls`).
+    #[serde(default)]
+    pub tool_messages: Vec<ChatMessage>,
+    /// Full multi-round transcript for this agent run (user + assistant/tool chain).
+    /// Used by MemoryAgent selective context projection — excludes MainAgent system.
+    #[serde(default)]
+    pub turn_transcript: Vec<ChatMessage>,
     pub finish_reason: Option<FinishReason>,
     pub usage: Option<Usage>,
     pub source_agent_id: Option<AgentId>,
@@ -465,6 +472,8 @@ impl AgentResponse {
             text: text.into(),
             reasoning_text: None,
             tool_calls: Vec::new(),
+            tool_messages: Vec::new(),
+            turn_transcript: Vec::new(),
             finish_reason: None,
             usage: None,
             source_agent_id: None,

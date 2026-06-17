@@ -509,6 +509,7 @@ async fn manual_search_example() {
                 first_url.to_string(),
                 Some(50000),  // max_length
                 None,         // settle_ms
+                None,         // clean_mode
             ).await;
             let page_json: serde_json::Value = serde_json::from_str(&page).unwrap();
             println!("标题: {}", page_json["data"]["title"]);

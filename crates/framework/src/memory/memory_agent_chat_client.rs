@@ -5,16 +5,14 @@ use rust_agent_core::{
     AgentResponseUpdate, BoxStream, ChatClientRunOptions, ChatMessage, IChatClient, Result,
 };
 
-/// Light-weight decorator that forces memory-optimal parameters on every call.
+/// Light-weight decorator that forces precision parameters on every call.
 ///
-/// Memory consolidation is a precision task — the agent needs to distill
-/// conversation facts into concise, accurate records.  High temperature and
-/// chain-of-thought reasoning are actively harmful here:
+/// Memory consolidation demands near-deterministic output so the same facts
+/// consistently produce the same file writes (no hallucinated records):
 ///
-/// - **temperature → 0.1**:  near-deterministic output so the same facts
-///   consistently produce the same file writes (no hallucinated records).
-/// - **thinking → disabled**:  extra reasoning tokens are noise, not signal;
-///   the `AGENT.md` prompt already encodes the consolidation workflow.
+/// - **temperature → 0.3**:  near-deterministic with slight flexibility for structured writes.
+/// - **thinking → disabled**:  memory consolidation is file IO, not open-ended reasoning.
+/// - **parallel_tool_calls → false**:  one tool at a time; avoids empty `{}` bursts.
 ///
 /// ## Relationship to `with_memory_agent()`
 ///
@@ -40,15 +38,9 @@ impl IChatClient for MemoryAgentChatClient {
         messages: &[ChatMessage],
         mut options: ChatClientRunOptions,
     ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>> {
-        // Force memory-optimal parameters
-        options.temperature = Some(0.1);
-
-        // Disable chain-of-thought / reasoning — wastes tokens on a
-        // structured write task whose workflow is already encoded in
-        // the AGENT.md system prompt.
-        options
-            .extra_body
-            .insert("thinking".to_string(), serde_json::json!({ "type": "disabled" }));
+        options.temperature = Some(0.3);
+        options.parallel_tool_calls = Some(false);
+        options.extra_body.remove("thinking");
         options.extra_body.remove("reasoning_effort");
 
         self.inner.run(messages, options).await

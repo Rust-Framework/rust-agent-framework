@@ -36,6 +36,9 @@ rand = "0.8"
 # URL handling
 url = "2"
 
+# Regex for content cleaning
+regex = { workspace = true }
+
 [features]
 default = ["rustls-tls"]
 rustls-tls = ["reqwest/rustls-tls"]

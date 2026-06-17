@@ -492,7 +492,7 @@ async fn scenario_4_tool_call_pipeline() -> Result<()> {
     let agent: Arc<dyn rust_agent_core::IAgent> = AgentBuilder::new("tool-agent")
         .chat_client(client)
         .instructions("你是文件分析助手。用户要求读文件时使用 read_file 工具。")
-        .with_tool(ReadFile)
+        .with_tool(ReadFile::default())
         .max_tool_rounds(3)
         .build()?;
 

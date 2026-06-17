@@ -112,12 +112,20 @@ impl ChatClient {
                     let tc_json: Vec<serde_json::Value> = tool_calls
                         .iter()
                         .map(|tc| {
+                            // tc.arguments may be Value::String(json_str) from
+                            // function_invoking.rs (Path 1) or Value::Object(...) from
+                            // converter.rs → session persistence (Path 2).
+                            // .as_str() handles Path 1, .to_string() handles Path 2.
+                            let args_str = match &tc.arguments {
+                                serde_json::Value::String(s) => s.clone(),
+                                other => other.to_string(),
+                            };
                             serde_json::json!({
                                 "id": tc.id,
                                 "type": "function",
                                 "function": {
                                     "name": tc.name,
-                                    "arguments": tc.arguments.to_string(),
+                                    "arguments": args_str,
                                 }
                             })
                         })

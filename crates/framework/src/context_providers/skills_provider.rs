@@ -1,9 +1,7 @@
 use std::path::Path;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures_util::Future;
 use rust_agent_core::{
     AgentResponse, AgentRunOptions, ChatMessage, ContextInjection, IAgent, IContextProvider,
     ISession, ITool, Result,
@@ -12,57 +10,7 @@ use rust_agent_core::{
 use super::agent_skill::AgentSkill;
 use super::script_runner::AgentSkillScriptRunner;
 
-// ── Internal Tool Wrapper ──
-
-/// 函数式 ITool 实现 — 避免引入 pub(crate) AIFunction 的跨 crate 访问问题。
-struct FnTool {
-    name: String,
-    description: String,
-    parameters: serde_json::Value,
-    handler: Arc<
-        dyn Fn(serde_json::Value) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
-            + Send
-            + Sync,
-    >,
-}
-
-impl FnTool {
-    fn new(
-        name: impl Into<String>,
-        description: impl Into<String>,
-        parameters: serde_json::Value,
-        handler: impl Fn(serde_json::Value) -> Pin<Box<dyn Future<Output = Result<String>> + Send>>
-            + Send
-            + Sync
-            + 'static,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            description: description.into(),
-            parameters,
-            handler: Arc::new(handler),
-        }
-    }
-}
-
-#[async_trait]
-impl ITool for FnTool {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn description(&self) -> &str {
-        &self.description
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        self.parameters.clone()
-    }
-
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
-        (self.handler)(arguments).await
-    }
-}
+use crate::tools::{LoadSkillTool, ReadSkillResourceTool, RunSkillScriptTool};
 
 // ── AgentSkillsProvider ──
 
@@ -146,199 +94,17 @@ impl AgentSkillsProvider {
     // ── 内部工具创建 ──
 
     pub fn create_load_skill_tool(&self) -> Arc<dyn ITool> {
-        let skills: Vec<AgentSkill> = self.skills.clone();
-
-        Arc::new(FnTool::new(
-            "load_skill",
-            "Load a skill's full instructions from SKILL.md. Call this when a user's task matches a skill's domain to get detailed step-by-step guidance.",
-            serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "skill_name": {
-                        "type": "string",
-                        "description": "The name of the skill to load"
-                    }
-                },
-                "required": ["skill_name"]
-            }),
-            move |args: serde_json::Value| {
-                let skills = skills.clone();
-                Box::pin(async move {
-                    let skill_name = args["skill_name"]
-                        .as_str()
-                        .ok_or_else(|| {
-                            rust_agent_core::AgentError::ToolError(
-                                "Missing 'skill_name' argument".into(),
-                            )
-                        })?;
-
-                    let skill = skills.iter().find(|s| s.metadata.name == skill_name).ok_or_else(|| {
-                        rust_agent_core::AgentError::ToolError(format!(
-                            "Skill '{}' not found. Available skills: {}",
-                            skill_name,
-                            skills
-                                .iter()
-                                .map(|s| s.metadata.name.as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ))
-                    })?;
-
-                    let instructions = skill.load_instructions()?;
-                    Ok(serde_json::json!({
-                        "ok": true,
-                        "data": {
-                            "skill_name": skill_name,
-                            "instructions": instructions,
-                        }
-                    }).to_string())
-                })
-            },
-        ))
+        Arc::new(LoadSkillTool::new(Arc::new(self.skills.clone())))
     }
 
     pub fn create_read_resource_tool(&self) -> Arc<dyn ITool> {
-        let skills: Vec<AgentSkill> = self.skills.clone();
-
-        Arc::new(FnTool::new(
-            "read_skill_resource",
-            "Read a resource file from a loaded skill's references/ or assets/ directory. Use this to access supplementary documents, templates, or style guides.",
-            serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "skill_name": {
-                        "type": "string",
-                        "description": "The name of the skill"
-                    },
-                    "resource_path": {
-                        "type": "string",
-                        "description": "Relative path to the resource file (e.g., 'references/style-guide.md')"
-                    }
-                },
-                "required": ["skill_name", "resource_path"]
-            }),
-            move |args: serde_json::Value| {
-                let skills = skills.clone();
-                Box::pin(async move {
-                    let skill_name = args["skill_name"]
-                        .as_str()
-                        .ok_or_else(|| {
-                            rust_agent_core::AgentError::ToolError(
-                                "Missing 'skill_name' argument".into(),
-                            )
-                        })?;
-                    let resource_path = args["resource_path"]
-                        .as_str()
-                        .ok_or_else(|| {
-                            rust_agent_core::AgentError::ToolError(
-                                "Missing 'resource_path' argument".into(),
-                            )
-                        })?;
-
-                    let skill = skills.iter().find(|s| s.metadata.name == skill_name).ok_or_else(|| {
-                        rust_agent_core::AgentError::ToolError(format!(
-                            "Skill '{}' not found",
-                            skill_name
-                        ))
-                    })?;
-
-                    let content = skill.read_resource(resource_path)?;
-                    Ok(serde_json::json!({
-                        "ok": true,
-                        "data": {
-                            "skill_name": skill_name,
-                            "resource_path": resource_path,
-                            "content": content,
-                        }
-                    }).to_string())
-                })
-            },
-        ))
+        Arc::new(ReadSkillResourceTool::new(Arc::new(self.skills.clone())))
     }
 
     pub fn create_run_script_tool(&self) -> Arc<dyn ITool> {
-        let skills: Vec<AgentSkill> = self.skills.clone();
-        let runner = self.script_runner.clone();
-
-        Arc::new(FnTool::new(
-            "run_skill_script",
-            "Execute a script from a skill's scripts/ directory. Use this to run validation, analysis, or automation scripts bundled with a skill.",
-            serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "skill_name": {
-                        "type": "string",
-                        "description": "The name of the skill"
-                    },
-                    "script_path": {
-                        "type": "string",
-                        "description": "Relative path to the script file (e.g., 'scripts/validate.py')"
-                    },
-                    "args": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Optional command-line arguments to pass to the script"
-                    }
-                },
-                "required": ["skill_name", "script_path"]
-            }),
-            move |args: serde_json::Value| {
-                let skills = skills.clone();
-                let runner = runner.clone();
-                Box::pin(async move {
-                    let skill_name = args["skill_name"]
-                        .as_str()
-                        .ok_or_else(|| {
-                            rust_agent_core::AgentError::ToolError(
-                                "Missing 'skill_name' argument".into(),
-                            )
-                        })?;
-                    let script_path = args["script_path"]
-                        .as_str()
-                        .ok_or_else(|| {
-                            rust_agent_core::AgentError::ToolError(
-                                "Missing 'script_path' argument".into(),
-                            )
-                        })?;
-
-                    let skill = skills.iter().find(|s| s.metadata.name == skill_name).ok_or_else(|| {
-                        rust_agent_core::AgentError::ToolError(format!(
-                            "Skill '{}' not found",
-                            skill_name
-                        ))
-                    })?;
-
-                    let root = skill.root_dir.as_ref().ok_or_else(|| {
-                        rust_agent_core::AgentError::ConfigError(
-                            "Skill has no root_dir — script execution not supported for dynamic skills".into(),
-                        )
-                    })?;
-
-                    let full_path = root.join(script_path);
-
-                    let script_args = if let Some(arr) = args.get("args").and_then(|v| v.as_array()) {
-                        Some(arr.iter().filter_map(|v| v.as_str().map(String::from)).collect::<Vec<_>>())
-                    } else {
-                        None
-                    };
-
-                    let runner = runner.as_ref().ok_or_else(|| {
-                        rust_agent_core::AgentError::ToolError(
-                            "No script runner configured".into(),
-                        )
-                    })?;
-
-                    let output = runner.run(skill_name, &full_path, script_args).await?;
-                    Ok(serde_json::json!({
-                        "ok": true,
-                        "data": {
-                            "skill_name": skill_name,
-                            "script_path": script_path,
-                            "output": output,
-                        }
-                    }).to_string())
-                })
-            },
+        Arc::new(RunSkillScriptTool::new(
+            Arc::new(self.skills.clone()),
+            self.script_runner.clone(),
         ))
     }
 

@@ -37,10 +37,12 @@
 
 pub mod anti_detection;
 pub mod bing;
+pub mod content_cleaner;
 pub mod error;
 pub mod fetcher;
 pub mod html_utils;
 pub mod probe;
+pub mod scraper_fallback;
 pub mod searcher;
 pub mod searxng;
 pub mod types;
@@ -51,6 +53,7 @@ pub mod duckduckgo;
 
 pub use anti_detection::{RateLimiter, random_user_agent};
 pub use bing::search_bing;
+pub use content_cleaner::{CleanMode, ContentCleaner, score_content};
 pub use error::SearchError;
 pub use fetcher::fetch_page;
 pub use probe::{clear_cache as clear_probe_cache, BackendKind, Reachability};

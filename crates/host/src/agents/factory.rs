@@ -98,13 +98,13 @@ impl<'a> AgentFactory<'a> {
                 5. 修改文件前先读取文件内容\n\
                 6. 用中文回复")
             .with_description("代码专家智能体 — 代码生成、审查、调试、重构")
-            .with_tool(rust_agent_framework::tools::ReadFile)
-            .with_tool(rust_agent_framework::tools::WriteFile)
-            .with_tool(rust_agent_framework::tools::EditFile)
-            .with_tool(rust_agent_framework::tools::ListFiles)
-            .with_tool(rust_agent_framework::tools::SearchFile)
-            .with_tool(rust_agent_framework::tools::FindFiles)
-            .with_tool(rust_agent_framework::tools::RunCommand)
+            .with_tool(rust_agent_framework::tools::ReadFile::default())
+            .with_tool(rust_agent_framework::tools::WriteFile::default())
+            .with_tool(rust_agent_framework::tools::EditFile::default())
+            .with_tool(rust_agent_framework::tools::ListFiles::default())
+            .with_tool(rust_agent_framework::tools::SearchFile::default())
+            .with_tool(rust_agent_framework::tools::FindFiles::default())
+            .with_tool(rust_agent_framework::tools::RunCommand::default())
             .max_tool_rounds(15)
             .build()?;
 
@@ -146,7 +146,7 @@ impl<'a> AgentFactory<'a> {
                 4. 使用表格和列表增强可读性\n\
                 5. 用中文回复")
             .with_description("数据分析师 — 深度研究、多源对比、趋势分析")
-            .with_tool(rust_agent_framework::tools::ReadFile)
+            .with_tool(rust_agent_framework::tools::ReadFile::default())
             .max_tool_rounds(10)
             .build()?;
 

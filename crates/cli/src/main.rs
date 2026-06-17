@@ -11,12 +11,13 @@ use rust_agent_core::{
     AgentRunOptions, AgentSession, ChatMessage, Content, ISession,
 };
 use rust_agent_framework::memory::SkillMemoryContextProvider;
+use rust_agent_framework::memory::scan_index_gaps;
 use rust_agent_framework::tool;
 use rust_agent_framework::AgentBuilder;
 use rust_agent_websearch::{WebSearch, WebFetch};
 
 // ── Hardcoded API key for development ──────────────────────────
-const DEEPSEEK_API_KEY: &str = "sk-9f8dbaaa822e477faf339e32cdb89e91";
+const DEEPSEEK_API_KEY: &str = "sk-b8136a230aea467e8cdfe4649cab2d3e";
 
 // ── Tool definitions ───────────────────────────────────────────
 #[tool(description = "Echoes back the input text")]
@@ -40,6 +41,27 @@ fn print_help() {
     println!("  /think off   Disable thinking mode");
     println!("  /model NAME  Switch model (e.g. deepseek-chat, deepseek-reasoner)");
     println!("  /quit|exit   Exit (also: quit, exit without slash)");
+}
+
+fn print_assets_tree(dir: &std::path::Path, indent: &str) {
+    if !dir.is_dir() {
+        return;
+    }
+    println!("{}assets:", indent.trim_end());
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        let mut names: Vec<_> = entries.flatten().collect();
+        names.sort_by_key(|e| e.file_name());
+        for entry in names {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let path = entry.path();
+            if path.is_dir() {
+                println!("{}{}/", indent, name);
+                print_assets_tree(&path, &format!("{}  ", indent));
+            } else {
+                println!("{}{}", indent, name);
+            }
+        }
+    }
 }
 
 #[tokio::main]
@@ -71,7 +93,18 @@ async fn main() -> anyhow::Result<()> {
 
     let mut agent = AgentBuilder::new("cli-agent")
         .chat_client(client)
-        .instructions("You are a helpful AI assistant. Respond concisely.")
+        .instructions(
+            "You are a helpful AI assistant. Respond concisely.\n\n\
+             **Behavior rules:**\n\
+             1. Never mention internal system components (memory system, agents, tools, pipelines) in your responses. The user sees you as a single coherent assistant, not a collection of subsystems.\n\
+             2. When you use tools or access memory, do not describe the mechanism. Simply use them and present the result naturally.\n\
+             3. Do not explain your thought process step-by-step unless the user explicitly asks you to think aloud.\n\
+             4. If you don't know something, admit it directly without commenting on what tools or data sources are available to you.\n\n\
+             **Memory-first principle:**\n\
+             5. Your identity, the user's identity, and your shared purpose are in persistent memory. For identity questions, retrieve from memory before answering — never use training-data defaults.\n\n\
+             **Context reuse principle:**\n\
+             6. Tool call results from earlier turns are already in conversation history. Read each file once per conversation — never re-read files you've already accessed."
+        )
         .with_tool(Echo)
         .with_tool(Add)
         .with_tool(WebSearch)
@@ -127,7 +160,18 @@ async fn main() -> anyhow::Result<()> {
                         .with_consolidation_interval(1);
                     agent = AgentBuilder::new("cli-agent")
                         .chat_client(new_client)
-                        .instructions("You are a helpful AI assistant. Respond concisely.")
+                        .instructions(
+            "You are a helpful AI assistant. Respond concisely.\n\n\
+             **Behavior rules:**\n\
+             1. Never mention internal system components (memory system, agents, tools, pipelines) in your responses. The user sees you as a single coherent assistant, not a collection of subsystems.\n\
+             2. When you use tools or access memory, do not describe the mechanism. Simply use them and present the result naturally.\n\
+             3. Do not explain your thought process step-by-step unless the user explicitly asks you to think aloud.\n\
+             4. If you don't know something, admit it directly without commenting on what tools or data sources are available to you.\n\n\
+             **Memory-first principle:**\n\
+             5. Your identity, the user's identity, and your shared purpose are in persistent memory. For identity questions, retrieve from memory before answering — never use training-data defaults.\n\n\
+             **Context reuse principle:**\n\
+             6. Tool call results from earlier turns are already in conversation history. Read each file once per conversation — never re-read files you've already accessed."
+        )
                         .with_tool(Echo)
                         .with_tool(Add)
                         .with_tool(WebSearch)
@@ -149,10 +193,14 @@ async fn main() -> anyhow::Result<()> {
                             println!("    - {}", e.file_name().to_string_lossy());
                         }
                     }
-                    println!("  assets:");
-                    for entry in std::fs::read_dir(memory_dir.join("assets")).ok().into_iter().flatten() {
-                        if let Ok(e) = entry {
-                            println!("    - {}", e.file_name().to_string_lossy());
+                    print_assets_tree(&memory_dir.join("assets"), "  ");
+                    let gaps = scan_index_gaps(&memory_dir);
+                    if gaps.is_empty() {
+                        println!("  index: OK (no gaps)");
+                    } else {
+                        println!("  index gaps:");
+                        for g in &gaps {
+                            println!("    - {} ({})", g.path.display(), g.reason);
                         }
                     }
                     println!();
@@ -182,7 +230,18 @@ async fn main() -> anyhow::Result<()> {
                             Ok(new_client) => {
                                 agent = AgentBuilder::new("cli-agent")
                                     .chat_client(new_client)
-                                    .instructions("You are a helpful AI assistant. Respond concisely.")
+                                    .instructions(
+            "You are a helpful AI assistant. Respond concisely.\n\n\
+             **Behavior rules:**\n\
+             1. Never mention internal system components (memory system, agents, tools, pipelines) in your responses. The user sees you as a single coherent assistant, not a collection of subsystems.\n\
+             2. When you use tools or access memory, do not describe the mechanism. Simply use them and present the result naturally.\n\
+             3. Do not explain your thought process step-by-step unless the user explicitly asks you to think aloud.\n\
+             4. If you don't know something, admit it directly without commenting on what tools or data sources are available to you.\n\n\
+             **Memory-first principle:**\n\
+             5. Your identity, the user's identity, and your shared purpose are in persistent memory. For identity questions, retrieve from memory before answering — never use training-data defaults.\n\n\
+             **Context reuse principle:**\n\
+             6. Tool call results from earlier turns are already in conversation history. Read each file once per conversation — never re-read files you've already accessed."
+        )
                                     .build()?;
                                 println!("[Model switched to {}]\n", model);
                             }

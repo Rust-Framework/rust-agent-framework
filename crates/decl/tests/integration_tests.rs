@@ -298,14 +298,14 @@ fn test_workflow_decl_rhai_node() {
 
 #[test]
 fn test_resolve_builtin_tool_read_file() {
-    let tool = DefaultAgentResolver::resolve_builtin_tool("read_file").unwrap();
+    let tool = DefaultAgentResolver::resolve_builtin_tool("read_file", &std::collections::HashMap::new()).unwrap();
     assert_eq!(tool.name(), "read_file");
     assert!(!tool.description().is_empty());
 }
 
 #[test]
 fn test_resolve_builtin_tool_web_search() {
-    let tool = DefaultAgentResolver::resolve_builtin_tool("web_search").unwrap();
+    let tool = DefaultAgentResolver::resolve_builtin_tool("web_search", &std::collections::HashMap::new()).unwrap();
     assert_eq!(tool.name(), "web_search");
 }
 
@@ -317,14 +317,14 @@ fn test_resolve_builtin_tool_all() {
         "find_files", "search_file", "run_command", "web_search", "web_fetch",
     ];
     for name in &names {
-        let tool = DefaultAgentResolver::resolve_builtin_tool(name).unwrap();
+        let tool = DefaultAgentResolver::resolve_builtin_tool(name, &std::collections::HashMap::new()).unwrap();
         assert_eq!(tool.name(), *name, "Tool name mismatch for '{}'", name);
     }
 }
 
 #[test]
 fn test_resolve_builtin_tool_unknown() {
-    let result = DefaultAgentResolver::resolve_builtin_tool("nonexistent_tool");
+    let result = DefaultAgentResolver::resolve_builtin_tool("nonexistent_tool", &std::collections::HashMap::new());
     assert!(result.is_err());
 }
 

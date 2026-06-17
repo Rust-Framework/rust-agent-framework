@@ -99,6 +99,9 @@ pub enum FinishReason {
     /// The session retains full context (including the assistant(tool_calls) message).
     /// Caller should collect approval decisions and resume via `AgentRunOptions.tool_approval_responses`.
     AwaitingApproval,
+    /// The tool-calling loop reached the maximum round limit and was forcibly terminated.
+    /// The agent may have wanted to make additional tool calls but was cut off.
+    MaxRounds,
     #[serde(untagged)]
     Other(String),
 }

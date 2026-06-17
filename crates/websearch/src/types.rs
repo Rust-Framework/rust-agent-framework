@@ -1,5 +1,7 @@
 //! 核心类型定义：搜索结果、搜索配置、抓取配置等。
 
+use std::collections::HashMap;
+
 /// 搜索来源引擎。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchSource {
@@ -127,6 +129,24 @@ pub struct FetchConfig {
     ///
     /// 页面 load 事件后额外等待的时间，用于 SPA/JS 渲染页面。
     pub settle_ms: u64,
+    /// 内容清洗模式（默认：Auto）。
+    ///
+    /// - `Auto`：自动检测噪音比例并选择策略
+    /// - `Aggressive`：仅保留明确的正文行
+    /// - `Minimal`：仅合并多余空白
+    /// - `Raw`：不做任何后处理
+    pub clean_mode: crate::content_cleaner::CleanMode,
+    /// 是否启用 scraper 回退（默认：true）。
+    ///
+    /// 当 servo-fetch 提取结果质量低于阈值时，使用 reqwest + scraper 重试。
+    pub fallback_enabled: bool,
+    /// 接受 servo-fetch 输出的最低内容质量评分（0.0 ~ 1.0，默认 0.4）。
+    pub quality_threshold: f64,
+    /// 用户自定义的 CSS 选择器（域名 → 选择器字符串）。
+    ///
+    /// 用于指定特定网站的内容区域。例如：
+    /// `{"example.com": "#article-body", "blog.example.com": ".post"}`.
+    pub domain_selectors: Option<HashMap<String, String>>,
 }
 
 impl Default for FetchConfig {
@@ -138,6 +158,10 @@ impl Default for FetchConfig {
             min_interval_ms: 1000,
             user_agent: None,
             settle_ms: 0,
+            clean_mode: crate::content_cleaner::CleanMode::Auto,
+            fallback_enabled: true,
+            quality_threshold: 0.4,
+            domain_selectors: None,
         }
     }
 }

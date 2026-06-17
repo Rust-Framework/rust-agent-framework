@@ -20,11 +20,12 @@ pub(crate) fn build_fetch_config() -> rust_websearch::FetchConfig {
     config
 }
 
-#[tool(description = "Fetches content from a URL and returns it as Markdown. Uses an embedded Servo browser engine for real JavaScript execution and layout-aware content extraction. Automatically strips navigation bars, footers, cookie banners, and ads. Supports Chinese encoding (GBK/GB2312/Big5) and SPA pages. Use settle_ms for JavaScript-heavy sites that need extra time to render.")]
+#[tool(description = "Fetches content from a URL and returns it as Markdown. Uses an embedded Servo browser engine for real JavaScript execution and layout-aware content extraction. Automatically strips navigation bars, footers, cookie banners, and ads via multi-layer cleaning: heuristic line filtering, footer detection, boilerplate removal, and optional scraper-based fallback for low-quality pages. Supports Chinese encoding (GBK/GB2312/Big5) and SPA pages. Use settle_ms for JavaScript-heavy sites that need extra time to render.")]
 async fn web_fetch(
     #[param(desc = "The URL to fetch")] url: String,
     #[param(desc = "Maximum content length in bytes (default: 50000)")] max_length: Option<usize>,
     #[param(desc = "Extra wait time in milliseconds after page load for SPA hydration (default: 0, max: 10000)")] settle_ms: Option<u64>,
+    #[param(desc = "Content cleaning mode: 'auto' (default, auto-detect noise), 'aggressive' (content-only), 'minimal' (whitespace only), 'raw' (no cleaning)")] clean_mode: Option<String>,
 ) -> String {
     let mut config = build_fetch_config();
     if let Some(max_len) = max_length {
@@ -32,6 +33,11 @@ async fn web_fetch(
     }
     if let Some(ms) = settle_ms {
         config.settle_ms = ms.min(10_000);
+    }
+    if let Some(mode_str) = clean_mode {
+        if let Some(mode) = rust_websearch::CleanMode::from_str(&mode_str) {
+            config.clean_mode = mode;
+        }
     }
 
     match rust_websearch::fetch_page(&url, &config).await {
@@ -95,7 +101,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_web_fetch_invalid_url() {
-        let result = WebFetch.call("".to_string(), None, None).await;
+        let result = WebFetch.call("".to_string(), None, None, None).await;
         assert!(result.contains("\"ok\":false"));
     }
 

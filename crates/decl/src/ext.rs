@@ -76,8 +76,8 @@ impl AgentBuilderExt for AgentBuilder<ClientWrapper> {
         // Tools: sync-only builtins can be registered here.
         // Rhai tools (async) are skipped — use AgentResolver for full support.
         for tool_ref in &decl.tools {
-            if let crate::agent::ToolRef::Builtin { name, .. } = tool_ref {
-                if let Ok(tool) = DefaultAgentResolver::resolve_builtin_tool(name) {
+            if let crate::agent::ToolRef::Builtin { name, config } = tool_ref {
+                if let Ok(tool) = DefaultAgentResolver::resolve_builtin_tool(name, config) {
                     builder = builder.with_tool(ToolWrapper(tool));
                 }
             }

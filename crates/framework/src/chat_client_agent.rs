@@ -10,6 +10,7 @@ use rust_agent_core::{
     ToolCall, ToolRegistry, Usage,
 };
 use crate::converter::AgentResponseConverter;
+use crate::memory::memory_context::build_turn_transcript;
 
 /// ChatClientAgent — IAgent 实现，对齐 MAF ChatClientAgent。
 ///
@@ -118,6 +119,13 @@ impl IAgent for ChatClientAgent {
         options: Option<AgentRunOptions>,
     ) -> Result<BoxStream<'static, Result<AgentResponseResult>>> {
         let run_options = options.unwrap_or_default();
+
+        // Caller messages only (before provider/history merge) — used for turn transcript.
+        let caller_messages: Vec<ChatMessage> = messages
+            .iter()
+            .filter(|m| m.role != MessageRole::System)
+            .cloned()
+            .collect();
 
         // ── Phase 1: Pre-invocation ───────────────────────────────────
         let mut merged_instructions = String::new();
@@ -305,6 +313,7 @@ impl IAgent for ChatClientAgent {
             let providers = Arc::new(self.context_providers.clone());
             let session_for_invoked = session.clone();
             let request_messages = original_request_messages;
+            let caller_messages_for_transcript = caller_messages;
             let agent_id_proxy = self.id.clone();
             let agent_meta_proxy = self.metadata.clone();
             let chat_client_proxy = self.chat_client.clone();
@@ -319,13 +328,22 @@ impl IAgent for ChatClientAgent {
                 let mut tool_results: Vec<(String, Option<String>, Option<String>)> = Vec::new();
                 let mut source_agent_id = None;
                 let mut finish_reason = None;
+                let flat_chunks: Vec<AgentResponseResult> =
+                    collected.iter().flatten().cloned().collect();
                 for chunk in collected.iter().flatten() {
                     if chunk.finish_reason.is_some() { finish_reason = chunk.finish_reason.clone(); }
                     for content in &chunk.contents {
                         if let Content::Text(c) = content { text.push_str(&c.delta); }
                         if let Content::ToolCalling(c) = content {
+                            // Normalize arguments to Value::String for consistent
+                            // downstream handling. flush_tool_calls() may have
+                            // parsed them into Value::Object via serde_json::from_str.
+                            let args = match &c.arguments {
+                                serde_json::Value::String(_) => c.arguments.clone(),
+                                other => serde_json::Value::String(other.to_string()),
+                            };
                             tool_calls.push(ToolCall {
-                                id: c.call_id.clone(), name: c.name.clone(), arguments: c.arguments.clone(),
+                                id: c.call_id.clone(), name: c.name.clone(), arguments: args,
                             });
                             if source_agent_id.is_none() { source_agent_id = c.meta.agent_id.clone(); }
                         }
@@ -334,8 +352,21 @@ impl IAgent for ChatClientAgent {
                         }
                     }
                 }
+                let mut tool_result_messages = Vec::new();
+                for tc in &tool_calls {
+                    let content = tool_results
+                        .iter()
+                        .find(|(id, _, _)| id == &tc.id)
+                        .and_then(|(_, result, error)| error.clone().or_else(|| result.clone()))
+                        .unwrap_or_default();
+                    tool_result_messages.push(ChatMessage::tool(content, &tc.id));
+                }
+                let turn_transcript =
+                    build_turn_transcript(&caller_messages_for_transcript, &flat_chunks);
                 let response = AgentResponse {
                     id: None, model: None, text, reasoning_text: None, tool_calls,
+                    tool_messages: tool_result_messages,
+                    turn_transcript,
                     finish_reason, usage: None, source_agent_id,
                 };
                 let proxy = AgentProxy { id: agent_id_proxy, metadata: agent_meta_proxy, chat_client: chat_client_proxy };
@@ -349,27 +380,28 @@ impl IAgent for ChatClientAgent {
                         }
                     }
 
-                    // Persist assistant message and tool interaction to session
-                    if !response.tool_calls.is_empty() {
-                        // Persist assistant message with tool_calls
+                    // Persist assistant + tool messages from full turn transcript.
+                    if !response.turn_transcript.is_empty() {
+                        let non_user: Vec<ChatMessage> = response
+                            .turn_transcript
+                            .iter()
+                            .filter(|m| m.role != MessageRole::User)
+                            .cloned()
+                            .collect();
+                        if !non_user.is_empty() {
+                            if let Err(e) = sess.add_messages_batch(&non_user).await {
+                                tracing::warn!(error = %e, "Failed to persist turn transcript to session");
+                            }
+                        }
+                    } else if !response.tool_calls.is_empty() {
                         if let Err(e) = sess.add_message(ChatMessage::assistant_with_tools(
                             response.text.clone(),
                             response.tool_calls.clone(),
                         )).await {
                             tracing::warn!(error = %e, "Failed to persist assistant+tool_calls message to session");
                         }
-                        // Persist tool result messages
-                        for tc in &response.tool_calls {
-                            let result_content = tool_results.iter()
-                                .find(|(id, _, _)| id == &tc.id)
-                                .and_then(|(_, result, error)| {
-                                    error.clone().or_else(|| result.clone())
-                                })
-                                .unwrap_or_default();
-                            if let Err(e) = sess.add_message(ChatMessage::tool(
-                                result_content,
-                                &tc.id,
-                            )).await {
+                        for tm in &response.tool_messages {
+                            if let Err(e) = sess.add_message(tm.clone()).await {
                                 tracing::warn!(error = %e, "Failed to persist tool result message to session");
                             }
                         }

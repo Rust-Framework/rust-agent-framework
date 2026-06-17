@@ -275,8 +275,8 @@ fn build_agent_from_json(json: &str, api_key: &str) -> Result<Arc<dyn IAgent>, B
 
     let mut builtin_count = 0usize;
     for tool_ref in &decl.tools {
-        if let rust_agent_decl::ToolRef::Builtin { name, .. } = tool_ref {
-            if let Ok(tool) = DefaultAgentResolver::resolve_builtin_tool(name) {
+        if let rust_agent_decl::ToolRef::Builtin { name, config } = tool_ref {
+            if let Ok(tool) = DefaultAgentResolver::resolve_builtin_tool(name, config) {
                 tracing::debug!(tool_name = %name, "Registered builtin tool");
                 builder = builder.with_tool(rust_agent_decl::ToolWrapper(tool));
                 builtin_count += 1;

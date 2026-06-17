@@ -2,123 +2,77 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use futures_util::StreamExt;
-use rust_agent_core::{ChatMessage, IAgent, IChatClient, ITool, MessageRole, ToolRegistry};
+use rust_agent_core::{
+    AgentResponse, AgentRunOptions, ChatMessage, IAgent, IChatClient, ITool, MessageRole,
+    ToolRegistry,
+};
 
 use crate::tools::{ReadFile, WriteFile};
 use crate::chat_client_decorators::FunctionInvokingChatClient;
 use crate::ChatClientAgent;
 
-/// 运行 MemoryAgent 进行记忆沉淀。
+use super::index_audit::{format_index_gaps, scan_index_gaps};
+use super::memory_context::build_consolidation_context;
+
+/// Run MemoryAgent for memory consolidation.
 ///
-/// 读取 `AGENT.md` 作为 system prompt，构建一个带有 `ReadFile` 和 `WriteFile`
-/// 工具的子代理，分析对话上下文并将有价值的信息写入持久记忆文件。
-///
-/// ## Working directory
-///
-/// Switches the process CWD to `memory_dir` before executing so that
-/// relative paths (e.g. `references/USER.md`) in the LLM's tool calls
-/// resolve against the correct memory directory.  The original CWD is
-/// restored before returning.
+/// `consolidation_messages` is the selective projection of factual conversation
+/// context (no MainAgent system).  `AGENT.md` is injected separately as system.
 pub(crate) async fn run_memory_agent(
     memory_dir: PathBuf,
     client: Arc<dyn IChatClient>,
-    request_messages: Vec<ChatMessage>,
-    response: Option<String>,
+    consolidation_messages: Vec<ChatMessage>,
 ) {
-    // Canonicalize before switching CWD — `memory_dir` may be a relative
-    // path (e.g. "logs/memory").  After set_current_dir() the relative
-    // path would resolve against the NEW cwd, doubling the path segment.
-    let memory_dir = match memory_dir.canonicalize() {
-        Ok(abs) => abs,
-        Err(e) => {
-            tracing::warn!(error = %e, "Failed to canonicalize memory_dir");
-            return;
-        }
-    };
-
-    // Switch CWD to memory_dir so read_file / write_file paths resolve
-    // correctly.  AGENT.md instructs the LLM to use relative paths like
-    // `references/USER.md` — without this they would resolve against the
-    // process startup CWD (workspace root), writing memory files to the
-    // wrong location.
-    let prev_cwd = std::env::current_dir().ok();
-    if std::env::set_current_dir(&memory_dir).is_err() {
-        tracing::warn!("Failed to set CWD to memory_dir");
-    }
-    let restore_cwd = || {
-        if let Some(d) = &prev_cwd {
-            let _ = std::env::set_current_dir(d);
-        }
-    };
-
-    // 读取 AGENT.md 作为 system prompt
-    let agent_md = match std::fs::read_to_string(memory_dir.join("AGENT.md")) {
+    let agent_md_path = memory_dir.join("AGENT.md");
+    let agent_md = match std::fs::read_to_string(&agent_md_path) {
         Ok(c) => c,
         Err(e) => {
-            tracing::warn!(error = %e, "Failed to read AGENT.md");
-            restore_cwd();
+            tracing::warn!(error = %e, path = %agent_md_path.display(), "Failed to read AGENT.md");
             return;
         }
     };
 
-    // 构建 MemoryAgent 输入
-    let mut input = agent_md.clone();
-    input.push_str("\n\n---\n\n## 本轮对话上下文\n\n");
-    for msg in &request_messages {
-        if msg.role != MessageRole::System {
-            input.push_str(&format!(
-                "[{}]: {}\n",
-                match msg.role {
-                    MessageRole::User => "用户",
-                    MessageRole::Assistant => "助手",
-                    MessageRole::Tool => "工具",
-                    _ => "其他",
-                },
-                msg.content
-            ));
-        }
-    }
-    if let Some(ref resp_text) = response {
-        if !resp_text.is_empty() {
-            input.push_str(&format!("\n[助手回复]: {}\n", resp_text));
-        }
+    let messages: Vec<ChatMessage> = consolidation_messages
+        .into_iter()
+        .filter(|m| m.role != MessageRole::System)
+        .collect();
+
+    if messages.is_empty() {
+        eprintln!("\x1b[90m[Memory] skipped — no consolidation messages\x1b[0m");
+        return;
     }
 
-    // 构建 MemoryAgent
-    //
-    // IMPORTANT: must wrap the client in FunctionInvokingChatClient so
-    // tool calls (read_file / write_file) from the LLM are auto-invoked.
-    // ChatClientAgent::new().with_tools() only stores tool *definitions*
-    // in the registry; the execution loop comes from the decorator.
     let mut registry = ToolRegistry::new();
-    registry.register(ReadFile);
-    registry.register(WriteFile);
+    registry.register(ReadFile::new(&memory_dir));
+    registry.register(WriteFile::new(&memory_dir));
 
     let tools: Vec<Arc<dyn ITool>> = registry
         .list()
         .into_iter()
         .cloned()
         .collect();
+
     let pipeline_client: Arc<dyn IChatClient> = Arc::new(
-        FunctionInvokingChatClient::new(client, tools.clone())
-            .with_max_rounds(5),
+        FunctionInvokingChatClient::new(client, tools.clone()).with_max_rounds(200),
     );
 
     let agent = ChatClientAgent::new("memory-agent", pipeline_client)
         .with_instructions(agent_md)
         .with_tools(registry);
 
-    let messages = vec![ChatMessage::user(&input)];
-    let stream = match agent.run(messages, None, None).await {
+    let run_opts = AgentRunOptions::new()
+        .with_thinking(false)
+        .with_parallel_tool_calls(false);
+
+    let stream = match agent.run(messages, None, Some(run_opts)).await {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!(error = %e, "MemoryAgent failed to start");
-            restore_cwd();
+            eprintln!("\x1b[31m[Memory] failed to start: {}\x1b[0m", e);
             return;
         }
     };
 
-    // 消费流并记录结果
     let mut output = String::new();
     {
         let mut stream = Box::pin(stream);
@@ -133,7 +87,7 @@ pub(crate) async fn run_memory_agent(
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, "MemoryAgent stream error");
-                    restore_cwd();
+                    eprintln!("\x1b[31m[Memory] stream error: {}\x1b[0m", e);
                     return;
                 }
             }
@@ -141,8 +95,57 @@ pub(crate) async fn run_memory_agent(
     }
 
     let trimmed = output.trim();
-    if !trimmed.is_empty() && trimmed != "OK" {
+    let gaps = scan_index_gaps(&memory_dir);
+    let gap_text = format_index_gaps(&gaps);
+
+    if !gap_text.is_empty() {
+        eprintln!("\x1b[33m[Memory] {}\x1b[0m", gap_text);
+    }
+
+    if trimmed.is_empty() || trimmed == "OK" {
+        if gap_text.is_empty() {
+            eprintln!("\x1b[90m[Memory] OK\x1b[0m");
+        }
+    } else if trimmed.starts_with("UPDATED:") || trimmed.starts_with("INDEX_GAP:") {
+        eprintln!("\x1b[32m[Memory] {}\x1b[0m", trimmed);
+    } else {
+        eprintln!("\x1b[32m[Memory] {}\x1b[0m", trimmed);
         tracing::info!(result = %trimmed, "MemoryAgent consolidation completed");
     }
-    restore_cwd();
+}
+
+/// Build consolidation messages from session projection + current turn transcript.
+pub(crate) fn prepare_consolidation_messages(
+    memory_projection: &[ChatMessage],
+    turn_transcript: &[ChatMessage],
+) -> Vec<ChatMessage> {
+    build_consolidation_context(memory_projection, turn_transcript)
+}
+
+/// Legacy entry point — kept for tests; prefer `run_memory_agent` with projected messages.
+#[allow(dead_code)]
+pub(crate) async fn run_memory_agent_legacy(
+    memory_dir: PathBuf,
+    client: Arc<dyn IChatClient>,
+    request_messages: Vec<ChatMessage>,
+    response: Option<AgentResponse>,
+) {
+    let mut turn = request_messages
+        .into_iter()
+        .filter(|m| m.role != MessageRole::System)
+        .collect::<Vec<_>>();
+    if let Some(resp) = response {
+        if !resp.turn_transcript.is_empty() {
+            turn = resp.turn_transcript.clone();
+        } else if !resp.tool_calls.is_empty() {
+            turn.push(ChatMessage::assistant_with_tools(
+                resp.text.clone(),
+                resp.tool_calls.clone(),
+            ));
+            turn.extend(resp.tool_messages.clone());
+        } else if !resp.text.is_empty() {
+            turn.push(ChatMessage::assistant(resp.text));
+        }
+    }
+    run_memory_agent(memory_dir, client, turn).await;
 }

@@ -1,35 +1,102 @@
-use rust_agent_macros::tool;
+use std::path::{Path, PathBuf};
+
+use async_trait::async_trait;
+use rust_agent_core::{ITool, Result};
 
 use super::{err_response, ok_response};
 
-#[tool(description = "Deletes a file or directory at the specified path.")]
-async fn remove_path(
-    #[param(desc = "Absolute path to the file or directory to delete")] path: String,
-) -> String {
-    let meta = match std::fs::symlink_metadata(&path) {
-        Ok(m) => m,
-        Err(e) => return err_response(&format!("Failed to access path: {}", e)),
-    };
+/// Deletes a file or directory at the specified path.
+///
+/// Paths are resolved against `base_dir`:
+/// - Absolute paths pass through unchanged.
+/// - Relative paths are joined to `base_dir`.
+pub struct RemovePath {
+    base_dir: PathBuf,
+}
 
-    let result = if meta.is_dir() {
-        std::fs::remove_dir_all(&path)
-    } else {
-        std::fs::remove_file(&path)
-    };
+impl RemovePath {
+    pub fn new(base_dir: impl Into<PathBuf>) -> Self {
+        Self { base_dir: base_dir.into() }
+    }
 
-    match result {
-        Ok(_) => ok_response(serde_json::json!({
-            "path": path,
-            "deleted": true,
-        })),
-        Err(e) => err_response(&format!("Failed to delete: {}", e)),
+    fn resolve(&self, path: &str) -> PathBuf {
+        let p = Path::new(path);
+        if p.is_absolute() { p.to_path_buf() }
+        else if path.is_empty() || path == "." { self.base_dir.clone() }
+        else { self.base_dir.join(p) }
+    }
+
+    async fn call(&self, path: String) -> String {
+        let resolved = self.resolve(&path);
+
+        let meta = match std::fs::symlink_metadata(&resolved) {
+            Ok(m) => m,
+            Err(e) => return err_response(&format!("Failed to access path: {}", e)),
+        };
+
+        let result = if meta.is_dir() {
+            std::fs::remove_dir_all(&resolved)
+        } else {
+            std::fs::remove_file(&resolved)
+        };
+
+        match result {
+            Ok(_) => ok_response(serde_json::json!({
+                "path": path,
+                "deleted": true,
+            })),
+            Err(e) => err_response(&format!("Failed to delete: {}", e)),
+        }
+    }
+}
+
+impl Default for RemovePath {
+    fn default() -> Self {
+        Self::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    }
+}
+
+#[async_trait]
+impl ITool for RemovePath {
+    fn name(&self) -> &str {
+        "remove_path"
+    }
+
+    fn description(&self) -> &str {
+        "Deletes a file or directory at the specified path."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Path to the file or directory to delete (absolute, or relative to the agent's working directory)"
+                }
+            },
+            "required": ["path"]
+        })
+    }
+
+    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
+        #[derive(serde::Deserialize)]
+        struct Args {
+            path: String,
+        }
+        let args: Args = serde_json::from_value(arguments).map_err(|e| {
+            rust_agent_core::AgentError::ToolError(format!(
+                "Argument deserialization failed: {}",
+                e
+            ))
+        })?;
+        Ok(self.call(args.path).await)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rust_agent_core::ITool;
 
     #[tokio::test]
     async fn test_remove_file() {
@@ -38,7 +105,7 @@ mod tests {
         std::fs::write(tmp, "data").unwrap();
         assert!(std::fs::metadata(tmp).is_ok());
 
-        let result = RemovePath
+        let result = RemovePath::default()
             .execute(serde_json::json!({"path": tmp}))
             .await
             .unwrap();
@@ -52,12 +119,28 @@ mod tests {
         let tmp = "target/test_remove_dir";
         std::fs::create_dir_all(tmp).unwrap();
 
-        let result = RemovePath
+        let result = RemovePath::default()
             .execute(serde_json::json!({"path": tmp}))
             .await
             .unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(v["ok"], true);
         assert!(std::fs::metadata(tmp).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_remove_path_with_base_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("tmp.txt"), "data").unwrap();
+        assert!(dir.path().join("tmp.txt").exists());
+
+        let tool = RemovePath::new(dir.path());
+        let result = tool
+            .execute(serde_json::json!({"path": "tmp.txt"}))
+            .await
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["ok"], true);
+        assert!(!dir.path().join("tmp.txt").exists());
     }
 }

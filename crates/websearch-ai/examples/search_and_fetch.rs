@@ -84,7 +84,7 @@ async fn main() {
     println!("抓取第 {} 条结果: {}", idx + 1, url);
     println!();
 
-    let raw_fetch = WebFetch.call(url, None, None).await;
+    let raw_fetch = WebFetch.call(url, None, None, None).await;
     let fetch_json: serde_json::Value =
         serde_json::from_str(&raw_fetch).expect("解析 web_fetch 返回的 JSON 失败");
 

@@ -229,7 +229,10 @@ fn hash_messages(messages: &[ChatMessage]) -> u64 {
             for call in tc {
                 call.id.hash(&mut hasher);
                 call.name.hash(&mut hasher);
-                call.arguments.to_string().hash(&mut hasher);
+                call.arguments
+                    .as_str()
+                    .unwrap_or("")
+                    .hash(&mut hasher);
             }
         }
         if let Some(ref tcid) = msg.tool_call_id {

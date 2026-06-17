@@ -44,7 +44,9 @@ impl ITokenCounter for EstimateCounter {
             if let Some(ref tool_calls) = msg.tool_calls {
                 for tc in tool_calls {
                     total += self.estimate(&tc.name) + 3;
-                    total += self.estimate(&tc.arguments.to_string());
+                    total += self.estimate(
+                        tc.arguments.as_str().unwrap_or(""),
+                    );
                 }
             }
             if let Some(ref tool_call_id) = msg.tool_call_id {
@@ -113,7 +115,11 @@ impl ITokenCounter for TiktokenCounter {
                             r#type: "function".to_string(),
                             function: tiktoken_rs::ChatCompletionRequestToolCallFunction {
                                 name: tc.name.clone(),
-                                arguments: tc.arguments.to_string(),
+                                arguments: tc
+                                    .arguments
+                                    .as_str()
+                                    .unwrap_or("")
+                                    .to_string(),
                             },
                         })
                         .collect()

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -188,20 +189,32 @@ impl DefaultAgentResolver {
         }
     }
 
-    /// Resolve a built-in tool by name.
-    pub fn resolve_builtin_tool(name: &str) -> Result<Arc<dyn ITool>> {
+    /// Extract base_dir from tool config if present.
+    fn extract_base_dir(config: &HashMap<String, serde_json::Value>) -> Option<PathBuf> {
+        config.get("base_dir")
+            .and_then(|v| v.as_str())
+            .map(PathBuf::from)
+    }
+
+    /// Resolve a built-in tool by name, applying optional per-instance config.
+    pub fn resolve_builtin_tool(
+        name: &str,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> Result<Arc<dyn ITool>> {
+        let base_dir = Self::extract_base_dir(config);
+
         let tool: Arc<dyn ITool> = match name {
-            "read_file" => Arc::new(ReadFile),
-            "write_file" => Arc::new(WriteFile),
-            "edit_file" => Arc::new(EditFile),
-            "list_files" => Arc::new(ListFiles),
-            "inspect_file" => Arc::new(InspectFile),
-            "make_directory" => Arc::new(MakeDirectory),
-            "remove_path" => Arc::new(RemovePath),
-            "move_file" => Arc::new(MoveFile),
-            "find_files" => Arc::new(FindFiles),
-            "search_file" => Arc::new(SearchFile),
-            "run_command" => Arc::new(RunCommand),
+            "read_file" => Arc::new(ReadFile::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
+            "write_file" => Arc::new(WriteFile::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
+            "edit_file" => Arc::new(EditFile::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
+            "list_files" => Arc::new(ListFiles::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
+            "inspect_file" => Arc::new(InspectFile::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
+            "make_directory" => Arc::new(MakeDirectory::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
+            "remove_path" => Arc::new(RemovePath::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
+            "move_file" => Arc::new(MoveFile::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
+            "find_files" => Arc::new(FindFiles::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
+            "search_file" => Arc::new(SearchFile::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
+            "run_command" => Arc::new(RunCommand::new(base_dir.as_deref().unwrap_or(Path::new(".")))),
             "web_search" => Arc::new(WebSearch),
             "web_fetch" => Arc::new(WebFetch),
             other => {
@@ -327,7 +340,7 @@ impl AgentResolver for DefaultAgentResolver {
 
     async fn resolve_tool(&self, tool_ref: &ToolRef) -> Result<Arc<dyn ITool>> {
         match tool_ref {
-            ToolRef::Builtin { name, .. } => Self::resolve_builtin_tool(name),
+            ToolRef::Builtin { name, config } => Self::resolve_builtin_tool(name, config),
             ToolRef::Rhai {
                 name,
                 description,

@@ -91,6 +91,12 @@ impl AgentRunOptions {
         self
     }
 
+    /// Control whether the LLM may emit multiple tool calls in one response.
+    pub fn with_parallel_tool_calls(mut self, enabled: bool) -> Self {
+        self.parallel_tool_calls = Some(enabled);
+        self
+    }
+
     /// Set tool approval responses for resuming after an approval pause.
     pub fn with_tool_approval_responses(
         mut self,

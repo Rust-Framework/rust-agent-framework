@@ -360,12 +360,18 @@ impl AgentResponseConverter {
                 }
             }
             AgentResponseUpdate::ToolApprovalRequest { name, arguments, .. } => {
+                // arguments may be Value::String(json_str) — use as_str() to avoid
+                // double serialization when displaying to the user.
+                let args_display = arguments
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| serde_json::to_string(&arguments).unwrap_or_default());
                 contents.push(Content::Text(TextContent {
                     meta: self.build_meta(),
                     delta: format!(
                         "\n[Approval required: {}({})]\n",
                         name,
-                        serde_json::to_string(&arguments).unwrap_or_default()
+                        args_display,
                     ),
                 }));
             }
@@ -402,11 +408,14 @@ impl AgentResponseConverter {
         }
 
         // Flush accumulated tool calls as complete ToolCallingContent.
-        // Flush when the stream ended with ToolCalls (standard case) or Stop
+        // Flush when the stream ended with ToolCalls (standard case), Stop
         // (covers FunctionInvokingChatClient which filters Finish(ToolCalls)
-        // and replaces it with Finish(Stop) after tool execution).
+        // and replaces it with Finish(Stop) after tool execution), or
+        // MaxRounds (tool loop forcibly terminated — accumulators are typically
+        // empty here but this is defensive).
         if finish_reason == Some(FinishReason::ToolCalls)
             || finish_reason == Some(FinishReason::Stop)
+            || finish_reason == Some(FinishReason::MaxRounds)
         {
             contents.extend(self.flush_tool_calls());
         }

@@ -72,6 +72,8 @@ pub async fn collect_agent_response(
             Some(reasoning_text)
         },
         tool_calls,
+        tool_messages: Vec::new(),
+        turn_transcript: Vec::new(),
         finish_reason,
         usage,
         source_agent_id,
