@@ -126,18 +126,10 @@ impl AgentSkill {
             )
         })?;
 
-        let full_path = root.join(resource_path);
+        // 安全检查 + 路径解析：使用统一的 path_guard 避免相对/绝对路径比较 bug
+        let resolved = crate::tools::path_guard::resolve_safe(root, resource_path)?;
 
-        // 安全检查：防止路径穿越
-        let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-        let canonical_path = full_path.canonicalize().unwrap_or_else(|_| full_path.clone());
-        if !canonical_path.starts_with(&canonical_root) {
-            return Err(rust_agent_core::AgentError::ToolError(
-                "Path traversal denied".into(),
-            ));
-        }
-
-        std::fs::read_to_string(&full_path).map_err(|e| {
+        std::fs::read_to_string(&resolved).map_err(|e| {
             rust_agent_core::AgentError::ToolError(format!(
                 "Failed to read resource '{}': {}",
                 resource_path, e

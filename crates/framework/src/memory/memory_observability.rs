@@ -142,7 +142,11 @@ pub fn parse_memory_output(raw: &str, index_gaps: &[IndexGap]) -> MemoryConsolid
     }
 
     let raw_output_sample = if trimmed.len() > RAW_SAMPLE_MAX {
-        Some(format!("{}...", &trimmed[..RAW_SAMPLE_MAX]))
+        let end = (0..=RAW_SAMPLE_MAX)
+            .rev()
+            .find(|&i| trimmed.is_char_boundary(i))
+            .unwrap_or(0);
+        Some(format!("{}...", &trimmed[..end]))
     } else if !trimmed.is_empty()
         && matches!(status, ConsolidationStatus::Ok | ConsolidationStatus::Error)
     {
