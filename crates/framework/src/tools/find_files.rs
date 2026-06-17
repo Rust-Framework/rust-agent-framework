@@ -1,8 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use rust_agent_core::{ITool, Result};
 
+use super::path_guard::resolve_safe;
 use super::{err_response, ok_response};
 
 const MAX_RESULTS: usize = 500;
@@ -22,16 +23,14 @@ impl FindFiles {
         Self { base_dir: base_dir.into() }
     }
 
-    fn resolve(&self, path: &str) -> PathBuf {
-        let p = Path::new(path);
-        if p.is_absolute() { p.to_path_buf() }
-        else if path.is_empty() || path == "." { self.base_dir.clone() }
-        else { self.base_dir.join(p) }
-    }
-
     async fn call(&self, pattern: String, directory: Option<String>) -> String {
         let base = match directory {
-            Some(d) => self.resolve(&d).to_string_lossy().replace('\\', "/"),
+            Some(d) => {
+                match resolve_safe(&self.base_dir, &d) {
+                    Ok(r) => r.to_string_lossy().replace('\\', "/"),
+                    Err(e) => return err_response(&format!("Path resolution failed: {}", e)),
+                }
+            }
             None => self.base_dir.to_string_lossy().replace('\\', "/"),
         };
         let full_pattern = format!(

@@ -10,7 +10,7 @@ use rust_agent_core::{
 /// Memory consolidation demands near-deterministic output so the same facts
 /// consistently produce the same file writes (no hallucinated records):
 ///
-/// - **temperature → 0.3**:  near-deterministic with slight flexibility for structured writes.
+/// - **temperature → 0.1**:  format compliance over flexible expression.
 /// - **thinking → disabled**:  memory consolidation is file IO, not open-ended reasoning.
 /// - **parallel_tool_calls → false**:  one tool at a time; avoids empty `{}` bursts.
 ///
@@ -38,7 +38,7 @@ impl IChatClient for MemoryAgentChatClient {
         messages: &[ChatMessage],
         mut options: ChatClientRunOptions,
     ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>> {
-        options.temperature = Some(0.3);
+        options.temperature = Some(0.1);
         options.parallel_tool_calls = Some(false);
         options.extra_body.remove("thinking");
         options.extra_body.remove("reasoning_effort");

@@ -24,11 +24,11 @@ pub enum BackendKind {
 
 impl BackendKind {
     /// 返回该后端对应的探测 URL。
-    fn probe_url(&self) -> &'static str {
+    fn probe_url(&self) -> Option<&'static str> {
         match self {
-            BackendKind::DuckDuckGo => "https://duckduckgo.com/",
-            BackendKind::BingCn => "https://cn.bing.com/",
-            BackendKind::SearXNG => unreachable!("SearXNG URL must be provided at runtime"),
+            BackendKind::DuckDuckGo => Some("https://duckduckgo.com/"),
+            BackendKind::BingCn => Some("https://cn.bing.com/"),
+            BackendKind::SearXNG => None,
         }
     }
 }
@@ -160,7 +160,10 @@ async fn probe_one(
             Some(u) => u,
             None => return Reachability::Unreachable,
         },
-        _ => kind.probe_url(),
+        _ => match kind.probe_url() {
+            Some(url) => url,
+            None => return Reachability::Unreachable,
+        },
     };
 
     // 使用短超时构建客户端

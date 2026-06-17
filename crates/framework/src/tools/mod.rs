@@ -1,3 +1,4 @@
+pub mod path_guard;
 pub mod read_file;
 pub mod write_file;
 pub mod edit_file;

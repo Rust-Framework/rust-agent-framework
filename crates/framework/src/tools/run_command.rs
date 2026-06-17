@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use rust_agent_core::{ITool, Result};
@@ -7,6 +8,7 @@ use rust_agent_core::{ITool, Result};
 use super::{err_response, ok_response};
 
 const MAX_OUTPUT_BYTES: usize = 100 * 1024; // 100 KB
+const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
 /// Executes a shell command and returns the output (stdout + stderr) and exit code.
 ///
@@ -16,11 +18,20 @@ const MAX_OUTPUT_BYTES: usize = 100 * 1024; // 100 KB
 /// - If `working_dir` is None → use `base_dir` directly (not process CWD).
 pub struct RunCommand {
     base_dir: PathBuf,
+    timeout_secs: Option<u64>,
 }
 
 impl RunCommand {
     pub fn new(base_dir: impl Into<PathBuf>) -> Self {
-        Self { base_dir: base_dir.into() }
+        Self {
+            base_dir: base_dir.into(),
+            timeout_secs: None,
+        }
+    }
+
+    pub fn with_timeout(mut self, secs: u64) -> Self {
+        self.timeout_secs = Some(secs);
+        self
     }
 
     fn resolve(&self, path: &str) -> PathBuf {
@@ -48,8 +59,22 @@ impl RunCommand {
         };
         cmd.current_dir(&cwd);
 
-        match cmd.output() {
-            Ok(output) => {
+        let timeout_dur = Duration::from_secs(self.timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS));
+
+        match tokio::time::timeout(
+            timeout_dur,
+            tokio::task::spawn_blocking(move || cmd.output()),
+        )
+        .await
+        {
+            Err(_elapsed) => err_response("Command execution timed out"),
+            Ok(Err(join_err)) => {
+                err_response(&format!("Command execution failed: {}", join_err))
+            }
+            Ok(Ok(Err(io_err))) => {
+                err_response(&format!("Failed to execute command: {}", io_err))
+            }
+            Ok(Ok(Ok(output))) => {
                 let stdout = truncate_bytes(&output.stdout, MAX_OUTPUT_BYTES);
                 let stderr = truncate_bytes(&output.stderr, MAX_OUTPUT_BYTES);
                 let exit_code = output.status.code().unwrap_or(-1);
@@ -60,7 +85,6 @@ impl RunCommand {
                     "exit_code": exit_code,
                 }))
             }
-            Err(e) => err_response(&format!("Failed to execute command: {}", e)),
         }
     }
 }

@@ -1,7 +1,10 @@
 use std::path::Path;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use rust_agent_core::Result;
+
+const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
 /// 技能脚本执行器 trait。
 ///
@@ -18,7 +21,26 @@ pub trait AgentSkillScriptRunner: Send + Sync {
 }
 
 /// 默认子进程执行器。
-pub struct SubprocessScriptRunner;
+pub struct SubprocessScriptRunner {
+    timeout_secs: Option<u64>,
+}
+
+impl SubprocessScriptRunner {
+    pub fn new() -> Self {
+        Self { timeout_secs: None }
+    }
+
+    pub fn with_timeout(mut self, secs: u64) -> Self {
+        self.timeout_secs = Some(secs);
+        self
+    }
+}
+
+impl Default for SubprocessScriptRunner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[async_trait]
 impl AgentSkillScriptRunner for SubprocessScriptRunner {
@@ -71,15 +93,32 @@ impl AgentSkillScriptRunner for SubprocessScriptRunner {
             cmd_parts.extend(a.iter().cloned());
         }
 
-        let output = std::process::Command::new(program)
-            .args(&cmd_parts)
-            .output()
-            .map_err(|e| {
-                rust_agent_core::AgentError::ToolError(format!(
-                    "Failed to execute script: {}",
-                    e
-                ))
-            })?;
+        let timeout_dur = Duration::from_secs(self.timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS));
+
+        let output = tokio::time::timeout(
+            timeout_dur,
+            tokio::task::spawn_blocking(move || {
+                std::process::Command::new(program)
+                    .args(&cmd_parts)
+                    .output()
+            }),
+        )
+        .await
+        .map_err(|_| {
+            rust_agent_core::AgentError::ToolError("Script execution timed out".into())
+        })?
+        .map_err(|e| {
+            rust_agent_core::AgentError::ToolError(format!(
+                "Failed to execute script (join error): {}",
+                e
+            ))
+        })?
+        .map_err(|e| {
+            rust_agent_core::AgentError::ToolError(format!(
+                "Failed to execute script: {}",
+                e
+            ))
+        })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();

@@ -69,7 +69,7 @@ impl ITokenCounter for EstimateCounter {
 /// the model is not recognized.
 #[cfg(feature = "tiktoken")]
 pub struct TiktokenCounter {
-    encoding: tiktoken_rs::CoreBPE,
+    encoding: Option<tiktoken_rs::CoreBPE>,
     fallback: EstimateCounter,
 }
 
@@ -78,10 +78,13 @@ impl TiktokenCounter {
     pub fn new(model_id: &str) -> Self {
         let encoding = tiktoken_rs::get_bpe_from_model(model_id)
             .or_else(|_| tiktoken_rs::get_bpe_from_model("gpt-4"))
-            .unwrap_or_else(|_| {
-                // This shouldn't happen with gpt-4 fallback, but just in case
-                panic!("Failed to initialize tiktoken encoding")
-            });
+            .ok();
+        if encoding.is_none() {
+            tracing::warn!(
+                model_id = %model_id,
+                "Failed to initialize tiktoken encoding; falling back to estimate counter"
+            );
+        }
         Self {
             encoding,
             fallback: EstimateCounter::new(),
@@ -133,6 +136,9 @@ impl ITokenCounter for TiktokenCounter {
     }
 
     fn count_text_tokens(&self, text: &str) -> usize {
-        self.encoding.encode_with_special_tokens(text).len()
+        match &self.encoding {
+            Some(enc) => enc.encode_with_special_tokens(text).len(),
+            None => self.fallback.count_text_tokens(text),
+        }
     }
 }

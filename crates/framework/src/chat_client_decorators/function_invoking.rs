@@ -521,7 +521,9 @@ impl IChatClient for FunctionInvokingChatClient {
                                         }
                                         Err(e) => {
                                             tracing::warn!(error = %e, "Error in inner stream");
-                                            let _ = tx.send(Err(e)).await;
+                                            if tx.send(Err(e)).await.is_err() {
+                                                tracing::trace!("Stream consumer dropped (inner error)");
+                                            }
                                             return;
                                         }
                                     }
@@ -554,7 +556,9 @@ impl IChatClient for FunctionInvokingChatClient {
 
                                 if !has_tool_calls || tool_calls.is_empty() {
                                     tracing::info!("No tool calls detected — emitting final Finish(Stop)");
-                                    let _ = tx.send(Ok(AgentResponseUpdate::Finish { finish_reason: FinishReason::Stop, usage: None })).await;
+                                    if tx.send(Ok(AgentResponseUpdate::Finish { finish_reason: FinishReason::Stop, usage: None })).await.is_err() {
+                                        tracing::trace!("Stream consumer dropped (no tool calls finish)");
+                                    }
                                     return;
                                 }
 
@@ -618,7 +622,9 @@ impl IChatClient for FunctionInvokingChatClient {
                                         source: None,
                                     };
                                     next_messages.push(assistant_tool_msg);
-                                    let _ = msg_tx.send(next_messages).await;
+                                    if msg_tx.send(next_messages).await.is_err() {
+                                        tracing::warn!("Message channel closed during approval — accumulated messages lost");
+                                    }
 
                                     // End stream — wait for caller to approve before resuming
                                     let _ = tx
@@ -771,7 +777,9 @@ impl IChatClient for FunctionInvokingChatClient {
                                 }
 
                                 tracing::trace!(assistant_msg_count = 1, tool_result_count = results.len(), "Built accumulated messages for next iteration");
-                                let _ = msg_tx.send(next_messages).await;
+                                if msg_tx.send(next_messages).await.is_err() {
+                                    tracing::warn!("Message channel closed — tool loop messages lost");
+                                }
 
                                 for (i, result) in results.into_iter().enumerate() {
                                     let call_id = tool_calls[i].id.clone();
@@ -787,7 +795,9 @@ impl IChatClient for FunctionInvokingChatClient {
                                 }
 
                                 tracing::trace!("Emitting ToolCalls finish signal for loop continuation");
-                                let _ = tx.send(Ok(AgentResponseUpdate::Finish { finish_reason: FinishReason::ToolCalls, usage: None })).await;
+                                if tx.send(Ok(AgentResponseUpdate::Finish { finish_reason: FinishReason::ToolCalls, usage: None })).await.is_err() {
+                                    tracing::trace!("Stream consumer dropped (ToolCalls finish signal)");
+                                }
                             });
 
                             match rx.recv().await {

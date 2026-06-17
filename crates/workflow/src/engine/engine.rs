@@ -167,11 +167,13 @@ impl WorkflowEngine {
 
         // 发送 WorkflowStarted 事件
         let node_ids: Vec<String> = graph.nodes().keys().cloned().collect();
-        let _ = event_tx.send(WorkflowEvent::WorkflowStarted {
+        if event_tx.send(WorkflowEvent::WorkflowStarted {
             session_id: session_id.clone(),
             graph_node_ids: node_ids,
             start_node_id: graph.start_node_id().to_string(),
-        });
+        }).is_err() {
+            tracing::warn!("Event channel closed (WorkflowStarted)");
+        }
 
         // 创建初始 StepContext
         let envelope = MessageEnvelope::new(
@@ -201,7 +203,7 @@ impl WorkflowEngine {
             let _ = event_tx.send(WorkflowEvent::SuperStepStarted {
                 step_number: current_step_number,
                 active_nodes: active_nodes.clone(),
-            });
+            }).is_err().then(|| tracing::warn!("Event channel closed (SuperStepStarted)"));
 
             let mut next_step_ctx = StepContext::new(current_step_number + 1);
             let mut handles = Vec::new();
@@ -234,11 +236,13 @@ impl WorkflowEngine {
                 let state_map_clone = state_map.clone();
 
                 let handle = tokio::spawn(async move {
-                    let _ = event_tx_clone.send(WorkflowEvent::NodeInvoking {
+                    if event_tx_clone.send(WorkflowEvent::NodeInvoking {
                         node_id: node_label.clone(),
                         node_name: node_label.clone(),
                         step_number: current_step_number,
-                    });
+                    }).is_err() {
+                        tracing::warn!("Event channel closed (NodeInvoking)");
+                    }
 
                     for env in messages {
                         let (progress_tx, mut progress_rx) =
@@ -250,10 +254,12 @@ impl WorkflowEngine {
                         tokio::spawn(async move {
                             while let Some(progress) = progress_rx.recv().await {
                                 let chunk = node_progress_to_chunk(progress);
-                                let _ = event_tx_progress.send(WorkflowEvent::NodeStreaming {
+                                if event_tx_progress.send(WorkflowEvent::NodeStreaming {
                                     node_id: nid.clone(),
                                     chunk,
-                                });
+                                }).is_err() {
+                                    tracing::warn!("Progress event channel closed (NodeStreaming)");
+                                }
                             }
                         });
 
@@ -270,11 +276,13 @@ impl WorkflowEngine {
                                     _ => 0,
                                 };
 
-                                let _ = event_tx_clone.send(WorkflowEvent::NodeCompleted {
+                                if event_tx_clone.send(WorkflowEvent::NodeCompleted {
                                     node_id: node_label.clone(),
                                     messages_produced: msg_count,
                                     usage: None,
-                                });
+                                }).is_err() {
+                                    tracing::warn!("Event channel closed (NodeCompleted)");
+                                }
 
                                 match result {
                                     HandlerResult::Messages(msgs) => {
@@ -282,12 +290,14 @@ impl WorkflowEngine {
                                     }
                                     HandlerResult::Output(output) => {
                                         if node.is_output {
-                                            let _ = output_tx_clone
+                                            if output_tx_clone
                                                 .send(Ok(WorkflowOutput {
                                                     content: output,
                                                     source_node_id: node_label.clone(),
                                                 }))
-                                                .await;
+                                                .await.is_err() {
+                                                tracing::warn!("Output channel closed");
+                                            }
                                         }
                                         return Ok((node_label, vec![], false));
                                     }
@@ -297,10 +307,12 @@ impl WorkflowEngine {
                                 }
                             }
                             Err(e) => {
-                                let _ = event_tx_clone.send(WorkflowEvent::NodeFailed {
+                                if event_tx_clone.send(WorkflowEvent::NodeFailed {
                                     node_id: node_label.clone(),
                                     error: e.to_string(),
-                                });
+                                }).is_err() {
+                                    tracing::warn!("Event channel closed (NodeFailed)");
+                                }
                                 return Err(e);
                             }
                         }
@@ -352,17 +364,21 @@ impl WorkflowEngine {
                         }
                     }
                     Ok(Err(e)) => {
-                        let _ = event_tx.send(WorkflowEvent::WorkflowError {
+                        if event_tx.send(WorkflowEvent::WorkflowError {
                             error: e.to_string(),
                             node_id: None,
-                        });
+                        }).is_err() {
+                            tracing::warn!("Event channel closed (WorkflowError)");
+                        }
                         return Err(e);
                     }
                     Err(join_err) => {
-                        let _ = event_tx.send(WorkflowEvent::WorkflowError {
+                        if event_tx.send(WorkflowEvent::WorkflowError {
                             error: format!("节点任务 panic: {}", join_err),
                             node_id: None,
-                        });
+                        }).is_err() {
+                            tracing::warn!("Event channel closed (WorkflowError - join panic)");
+                        }
                         return Err(rust_agent_core::AgentError::WorkflowError(
                             join_err.to_string(),
                         ));
@@ -370,10 +386,12 @@ impl WorkflowEngine {
                 }
             }
 
-            let _ = event_tx.send(WorkflowEvent::SuperStepCompleted {
+            if event_tx.send(WorkflowEvent::SuperStepCompleted {
                 step_number: current_step_number,
                 outputs_count: 0,
-            });
+            }).is_err() {
+                tracing::warn!("Event channel closed (SuperStepCompleted)");
+            }
 
             tracing::debug!(
                 step = current_step_number,
@@ -418,11 +436,13 @@ impl WorkflowEngine {
             step_ctx = next_step_ctx;
         }
 
-        let _ = event_tx.send(WorkflowEvent::WorkflowCompleted {
+        if event_tx.send(WorkflowEvent::WorkflowCompleted {
             total_steps,
             total_nodes,
             total_usage: None,
-        });
+        }).is_err() {
+            tracing::warn!("Event channel closed (WorkflowCompleted)");
+        }
 
         tracing::info!(
             total_steps,

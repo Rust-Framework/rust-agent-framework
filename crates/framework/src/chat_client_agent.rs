@@ -414,7 +414,11 @@ impl IAgent for ChatClientAgent {
             });
 
             let stream = converted.inspect(move |chunk| {
-                if let Ok(ref c) = chunk { let _ = tx.send(Ok(c.clone())); }
+                if let Ok(ref c) = chunk {
+                    if tx.send(Ok(c.clone())).is_err() {
+                        tracing::warn!("Post-invocation channel closed — context provider notifications may be lost");
+                    }
+                }
             });
             return Ok(Box::pin(stream));
         }

@@ -245,7 +245,7 @@ impl AgentResponseConverter {
                 } else if !acc.start_emitted && acc.name.is_some() {
                     // We already know the name from a previous delta — emit Start now
                     acc.start_emitted = true;
-                    let acc_name = acc.name.clone().unwrap();
+                    let acc_name = acc.name.clone().expect("ToolCallDelta acc.name was checked with is_some() above");
                     contents.push(Content::ToolCallStart(ToolCallStartContent {
                         meta: meta.clone(),
                         call_id: call_id.clone(),
@@ -443,7 +443,7 @@ impl AgentResponseConverter {
                     result.push(Content::ToolCalling(ToolCallingContent {
                         meta: meta.clone(),
                         call_id,
-                        name: acc.name.unwrap(),
+                        name: acc.name.expect("flush_tool_calls acc.name checked with is_some() above"),
                         arguments,
                     }));
                 }

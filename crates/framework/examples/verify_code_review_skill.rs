@@ -33,7 +33,7 @@ fn main() {
 
     provider = provider
         .with_skill(hw_skill)
-        .with_script_runner(Arc::new(SubprocessScriptRunner));
+        .with_script_runner(Arc::new(SubprocessScriptRunner::new()));
 
     // ════════════════════════════════════════════════════════════════
     // 3. Advertise 文本

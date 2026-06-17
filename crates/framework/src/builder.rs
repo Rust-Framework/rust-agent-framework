@@ -140,6 +140,15 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         self
     }
 
+    /// 追加一个已共享（`Arc`）的上下文提供器，便于在 agent 外部保留引用。
+    pub fn add_context_provider_shared(
+        mut self,
+        provider: Arc<dyn IContextProvider>,
+    ) -> Self {
+        self.context_providers.push(provider);
+        self
+    }
+
     /// 替换内置的 `InMemoryHistoryProvider`。
     ///
     /// 在链中定位 `InMemoryHistoryProvider` 并替换为指定实现。

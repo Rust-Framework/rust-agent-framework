@@ -1,8 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use rust_agent_core::{ITool, Result};
 
+use super::path_guard::resolve_safe;
 use super::{err_response, ok_response};
 
 /// Deletes a file or directory at the specified path.
@@ -19,15 +20,31 @@ impl RemovePath {
         Self { base_dir: base_dir.into() }
     }
 
-    fn resolve(&self, path: &str) -> PathBuf {
-        let p = Path::new(path);
-        if p.is_absolute() { p.to_path_buf() }
-        else if path.is_empty() || path == "." { self.base_dir.clone() }
-        else { self.base_dir.join(p) }
-    }
-
     async fn call(&self, path: String) -> String {
-        let resolved = self.resolve(&path);
+        let resolved = match resolve_safe(&self.base_dir, &path) {
+            Ok(r) => r,
+            Err(e) => return err_response(&format!("Path resolution failed: {}", e)),
+        };
+
+        // Guard: refuse to delete base_dir itself or dangerous paths
+        let canonical_base = self
+            .base_dir
+            .canonicalize()
+            .unwrap_or_else(|_| self.base_dir.clone());
+        let dangerous_dirs = vec![
+            canonical_base.clone(),
+            PathBuf::from("/"),
+            PathBuf::from("C:\\"),
+            dirs_next::home_dir().unwrap_or_default(),
+        ];
+        for dangerous in &dangerous_dirs {
+            if resolved == *dangerous
+                || (resolved.starts_with(dangerous)
+                    && resolved.components().count() <= dangerous.components().count() + 1)
+            {
+                return err_response("Refusing to delete critical path");
+            }
+        }
 
         let meta = match std::fs::symlink_metadata(&resolved) {
             Ok(m) => m,

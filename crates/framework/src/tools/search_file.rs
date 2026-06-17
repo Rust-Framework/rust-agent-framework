@@ -1,8 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use rust_agent_core::{ITool, Result};
 
+use super::path_guard::resolve_safe;
 use super::{err_response, ok_response};
 
 const MAX_MATCHES: usize = 200;
@@ -22,13 +23,6 @@ impl SearchFile {
         Self { base_dir: base_dir.into() }
     }
 
-    fn resolve(&self, path: &str) -> PathBuf {
-        let p = Path::new(path);
-        if p.is_absolute() { p.to_path_buf() }
-        else if path.is_empty() || path == "." { self.base_dir.clone() }
-        else { self.base_dir.join(p) }
-    }
-
     async fn call(
         &self,
         pattern: String,
@@ -37,7 +31,10 @@ impl SearchFile {
         case_insensitive: Option<bool>,
     ) -> String {
         let case_insensitive = case_insensitive.unwrap_or(false);
-        let resolved_dir = self.resolve(&directory);
+        let resolved_dir = match resolve_safe(&self.base_dir, &directory) {
+            Ok(r) => r,
+            Err(e) => return err_response(&format!("Path resolution failed: {}", e)),
+        };
 
         let regex = if case_insensitive {
             match regex::bytes::RegexBuilder::new(&format!("(?i){}", pattern))
@@ -54,6 +51,7 @@ impl SearchFile {
         };
 
         let walker = walkdir::WalkDir::new(&resolved_dir)
+            .max_depth(20)
             .follow_links(false)
             .into_iter()
             .filter_entry(|e| {
@@ -108,7 +106,7 @@ impl SearchFile {
                     }
                     let display = String::from_utf8_lossy(line);
                     let truncated: String = if display.len() > MAX_LINE_DISPLAY {
-                        format!("{}...", &display[..MAX_LINE_DISPLAY])
+                        format!("{}...", display.chars().take(MAX_LINE_DISPLAY).collect::<String>())
                     } else {
                         display.to_string()
                     };

@@ -34,15 +34,15 @@ pub enum MessageRole {
 pub struct ChatMessage {
     pub role: MessageRole,
     pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub tool_calls: Option<Vec<ToolCall>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub tool_call_id: Option<String>,
     /// Message source marker for tracking origin.
     /// Used to prevent duplicate persistence of history messages.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub source: Option<MessageSource>,
 }
 

@@ -1,8 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use rust_agent_core::{ITool, Result};
 
+use super::path_guard::resolve_safe;
 use super::{err_response, ok_response};
 
 const MAX_FILE_SIZE: u64 = 512 * 1024; // 512 KB
@@ -22,16 +23,11 @@ impl ReadFile {
         Self { base_dir: base_dir.into() }
     }
 
-    /// Resolve an LLM-supplied path: absolute → passthrough, relative → join with base_dir.
-    fn resolve(&self, path: &str) -> PathBuf {
-        let p = Path::new(path);
-        if p.is_absolute() { p.to_path_buf() }
-        else if path.is_empty() || path == "." { self.base_dir.clone() }
-        else { self.base_dir.join(p) }
-    }
-
     async fn call(&self, path: String, offset: Option<i64>, limit: Option<i64>) -> String {
-        let resolved = self.resolve(&path);
+        let resolved = match resolve_safe(&self.base_dir, &path) {
+            Ok(r) => r,
+            Err(e) => return err_response(&format!("Path resolution failed: {}", e)),
+        };
 
         let meta = match std::fs::metadata(&resolved) {
             Ok(m) => m,

@@ -1,9 +1,13 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use rust_agent_core::{ITool, Result};
 
+use super::path_guard::resolve_safe_new;
 use super::{err_response, ok_response};
+
+/// Maximum file content size (1 MB) to prevent excessive memory usage.
+const MAX_CONTENT_SIZE: usize = 1_000_000;
 
 /// Creates a new file or overwrites an existing file with the given content.
 ///
@@ -19,16 +23,20 @@ impl WriteFile {
         Self { base_dir: base_dir.into() }
     }
 
-    /// Resolve an LLM-supplied path: absolute → passthrough, relative → join with base_dir.
-    fn resolve(&self, path: &str) -> PathBuf {
-        let p = Path::new(path);
-        if p.is_absolute() { p.to_path_buf() }
-        else if path.is_empty() || path == "." { self.base_dir.clone() }
-        else { self.base_dir.join(p) }
-    }
-
     async fn call(&self, path: String, content: String) -> String {
-        let resolved = self.resolve(&path);
+        if content.len() > MAX_CONTENT_SIZE {
+            return err_response(&format!(
+                "Content size {} exceeds maximum of {} bytes ({} MB)",
+                content.len(),
+                MAX_CONTENT_SIZE,
+                MAX_CONTENT_SIZE / 1_000_000,
+            ));
+        }
+
+        let resolved = match resolve_safe_new(&self.base_dir, &path) {
+            Ok(r) => r,
+            Err(e) => return err_response(&format!("Path resolution failed: {}", e)),
+        };
 
         // Ensure parent directory exists
         if let Some(parent) = resolved.parent() {

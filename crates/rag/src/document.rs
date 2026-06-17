@@ -110,15 +110,16 @@ fn extract_html_text(html: &str) -> Result<String> {
     let body_selector = scraper::Selector::parse("body")
         .map_err(|e| DocumentError::Parse(e.to_string()))?;
 
-    let mut text = String::new();
-
     if let Some(body) = document.select(&body_selector).next() {
-        text = body.text().collect::<Vec<_>>().join(" ");
+        let mut text = body.text().collect::<Vec<_>>().join(" ");
         // 压缩空白
         text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        Ok(text)
+    } else {
+        return Err(DocumentError::Parse(
+            "HTML document has no <body> element".to_string(),
+        ));
     }
-
-    Ok(text)
 }
 
 // ─── 文档加载便捷函数 ──────────────────────────────────
@@ -359,7 +360,9 @@ impl Chunker for SemanticChunker {
             }
 
             if current.is_empty() {
-                current_start = text.find(para).unwrap_or(0);
+                current_start = text[current_start..].find(para)
+                    .map(|pos| current_start + pos)
+                    .unwrap_or(0);
             }
 
             if !current.is_empty() {

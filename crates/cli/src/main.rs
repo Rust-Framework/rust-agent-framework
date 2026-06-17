@@ -82,8 +82,9 @@ async fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(&memory_dir).ok();
     println!("[SkillMemory dir: {}]", memory_dir.canonicalize().unwrap_or_else(|_| memory_dir.clone()).display());
 
-    let skill_memory = SkillMemoryContextProvider::new(&memory_dir)
-        .with_consolidation_interval(1); // 开发环境：每轮都触发，便于测试验证
+    let skill_memory = Arc::new(
+        SkillMemoryContextProvider::new(&memory_dir).with_consolidation_interval(1),
+    ); // 开发环境：每轮都触发，便于测试验证
     println!("[SkillMemory loaded: SKILL.md found = {}]",
         memory_dir.join("SKILL.md").exists());
 
@@ -109,7 +110,7 @@ async fn main() -> anyhow::Result<()> {
         .with_tool(Add)
         .with_tool(WebSearch)
         .with_tool(WebFetch)
-        .add_context_provider(skill_memory)
+        .add_context_provider_shared(Arc::clone(&skill_memory) as Arc<dyn rust_agent_core::IContextProvider>)
         .build()?;
 
     let session = Arc::new(AgentSession::new());
@@ -153,11 +154,9 @@ async fn main() -> anyhow::Result<()> {
                 if trimmed == "/restart" {
                     session.clear().await?;
                     agent.reset().await?;
-                    // Rebuild agent to force SkillMemory re-initialization
+                    // Rebuild agent (reuse same SkillMemory provider + worker)
                     let opts = ChatClientOptions::deepseek("deepseek-v4-flash", DEEPSEEK_API_KEY);
                     let new_client = DeepSeekChatClient::new(opts)?;
-                    let skill_memory_new = SkillMemoryContextProvider::new(&memory_dir)
-                        .with_consolidation_interval(1);
                     agent = AgentBuilder::new("cli-agent")
                         .chat_client(new_client)
                         .instructions(
@@ -176,17 +175,23 @@ async fn main() -> anyhow::Result<()> {
                         .with_tool(Add)
                         .with_tool(WebSearch)
                         .with_tool(WebFetch)
-                        .add_context_provider(skill_memory_new)
+                        .add_context_provider_shared(Arc::clone(&skill_memory) as Arc<dyn rust_agent_core::IContextProvider>)
                         .build()?;
                     println!("[Session restarted — history cleared, agent reset]\n");
                     continue;
                 }
                 if trimmed == "/memory" {
+                    let stats = skill_memory.worker_stats();
                     println!("[SkillMemory]");
                     println!("  dir: {}", memory_dir.display());
                     println!("  enabled: true");
                     println!("  SKILL.md: {}", memory_dir.join("SKILL.md").exists());
                     println!("  AGENT.md: {}", memory_dir.join("AGENT.md").exists());
+                    println!("  worker running: {}", stats.running);
+                    println!("  worker pending: {}", stats.pending);
+                    println!("  worker total runs: {}", stats.total_runs);
+                    println!("  worker coalesced dropped: {}", stats.total_coalesced_dropped);
+                    println!("  (consolidation events: RUST_LOG=info or MEMORY_OBS_LEVEL=dev)");
                     println!("  references:");
                     for entry in std::fs::read_dir(memory_dir.join("references")).ok().into_iter().flatten() {
                         if let Ok(e) = entry {

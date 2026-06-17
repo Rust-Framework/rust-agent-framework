@@ -9,10 +9,11 @@ use rust_agent_core::{
 
 use crate::context_providers::agent_skill::AgentSkill;
 use crate::context_providers::skills_provider::AgentSkillsProvider;
-use super::memory_agent::{prepare_consolidation_messages, run_memory_agent};
+use super::memory_agent::prepare_consolidation_messages;
 use super::memory_agent_chat_client::MemoryAgentChatClient;
 use super::memory_context::{load_memory_projection, save_memory_projection};
 use super::memory_seed;
+use super::memory_worker::{ConsolidationJob, MemoryConsolidationWorker, WorkerStats};
 
 /// Skill memory context provider: loads SKILL.md tools and runs MemoryAgent on a schedule.
 pub struct SkillMemoryContextProvider {
@@ -22,6 +23,7 @@ pub struct SkillMemoryContextProvider {
     memory_agent_client: Option<Arc<dyn IChatClient>>,
     auto_client: Mutex<Option<Arc<dyn IChatClient>>>,
     consolidation_interval: usize,
+    worker: Arc<MemoryConsolidationWorker>,
 }
 
 impl SkillMemoryContextProvider {
@@ -41,6 +43,7 @@ impl SkillMemoryContextProvider {
             memory_agent_client: None,
             auto_client: Mutex::new(None),
             consolidation_interval: 3,
+            worker: MemoryConsolidationWorker::spawn(),
         }
     }
 
@@ -57,6 +60,11 @@ impl SkillMemoryContextProvider {
     pub fn with_consolidation_interval(mut self, interval: usize) -> Self {
         self.consolidation_interval = interval;
         self
+    }
+
+    /// Background consolidation worker statistics (for `/memory` debug view).
+    pub fn worker_stats(&self) -> WorkerStats {
+        self.worker.stats()
     }
 
     fn build_advertise(&self) -> String {
@@ -159,8 +167,13 @@ impl IContextProvider for SkillMemoryContextProvider {
                 tracing::warn!(error = %e, "Failed to save memory projection to session");
             }
 
-            tokio::spawn(async move {
-                run_memory_agent(memory_dir, client, consolidation).await;
+            let session_id = Some(session.session_id().to_string());
+            self.worker.enqueue_latest(ConsolidationJob {
+                memory_dir,
+                client,
+                messages: consolidation,
+                session_id,
+                coalesced_dropped: 0,
             });
         } else {
             let _ = session.set_provider_state(

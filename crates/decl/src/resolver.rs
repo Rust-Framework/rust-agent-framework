@@ -185,7 +185,12 @@ impl DefaultAgentResolver {
                 let client = OpenAiChatClient::new(options)?;
                 Ok(Arc::new(client))
             }
-            _ => unreachable!(),
+            other => {
+                return Err(DeclError::Unsupported(format!(
+                    "Unknown provider in build_client: {}",
+                    other
+                )));
+            }
         }
     }
 

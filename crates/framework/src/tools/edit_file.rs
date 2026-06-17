@@ -1,8 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use rust_agent_core::{ITool, Result};
 
+use super::path_guard::resolve_safe;
 use super::{err_response, ok_response};
 
 /// Performs exact string replacement in an existing file.
@@ -19,15 +20,11 @@ impl EditFile {
         Self { base_dir: base_dir.into() }
     }
 
-    fn resolve(&self, path: &str) -> PathBuf {
-        let p = Path::new(path);
-        if p.is_absolute() { p.to_path_buf() }
-        else if path.is_empty() || path == "." { self.base_dir.clone() }
-        else { self.base_dir.join(p) }
-    }
-
     async fn call(&self, path: String, old_str: String, new_str: String) -> String {
-        let resolved = self.resolve(&path);
+        let resolved = match resolve_safe(&self.base_dir, &path) {
+            Ok(r) => r,
+            Err(e) => return err_response(&format!("Path resolution failed: {}", e)),
+        };
 
         let original = match std::fs::read_to_string(&resolved) {
             Ok(c) => c,

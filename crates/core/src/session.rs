@@ -270,6 +270,12 @@ impl ISession for AgentSession {
         self.metadata.try_read().map(|m| m.clone()).unwrap_or_default()
     }
 
+    /// Returns a best-effort snapshot of the current session state.
+    ///
+    /// NOTE: Each field is read via separate `try_read()` calls — the snapshot
+    /// is NOT atomically consistent. Messages, metadata, and provider states
+    /// may reflect slightly different points in time. Use only for
+    /// debugging/display; do not rely on cross-field consistency.
     fn snapshot(&self) -> SessionSnapshot {
         let history = self.history.try_read().map(|h| h.clone()).unwrap_or_default();
         let meta = self.metadata.try_read().map(|m| m.clone()).unwrap_or_default();

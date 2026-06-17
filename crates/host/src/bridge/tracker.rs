@@ -41,7 +41,7 @@ impl SubAgentStatusTracker {
 
     /// Register a sub-agent for tracking.
     pub fn register(&self, id: &str, agent_type: &str) {
-        let mut agents = self.agents.lock().unwrap();
+        let mut agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         agents.entry(id.to_string()).or_insert_with(|| SubAgentState {
             agent_type: agent_type.to_string(),
             status: SubAgentStatus::Pending,
@@ -52,7 +52,7 @@ impl SubAgentStatusTracker {
 
     /// Register multiple sub-agents at once.
     pub fn register_all(&self, ids: &[(String, String)]) {
-        let mut agents = self.agents.lock().unwrap();
+        let mut agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         for (id, agent_type) in ids {
             agents.entry(id.clone()).or_insert_with(|| SubAgentState {
                 agent_type: agent_type.clone(),
@@ -66,7 +66,7 @@ impl SubAgentStatusTracker {
     /// Mark a sub-agent as executing (if not already).
     /// Returns `true` if the status changed.
     pub fn ensure_active(&self, id: &str) -> bool {
-        let mut agents = self.agents.lock().unwrap();
+        let mut agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = agents.get_mut(id) {
             if state.status == SubAgentStatus::Pending {
                 state.status = SubAgentStatus::Executing;
@@ -80,7 +80,7 @@ impl SubAgentStatusTracker {
     /// Mark a sub-agent as completed.
     /// Returns `true` if the status changed.
     pub fn mark_completed(&self, id: &str) -> bool {
-        let mut agents = self.agents.lock().unwrap();
+        let mut agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = agents.get_mut(id) {
             if state.status != SubAgentStatus::Completed {
                 state.status = SubAgentStatus::Completed;
@@ -94,7 +94,7 @@ impl SubAgentStatusTracker {
     /// Mark a sub-agent as error.
     /// Returns `true` if the status changed.
     pub fn mark_error(&self, id: &str) -> bool {
-        let mut agents = self.agents.lock().unwrap();
+        let mut agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = agents.get_mut(id) {
             if state.status != SubAgentStatus::Error {
                 state.status = SubAgentStatus::Error;
@@ -107,7 +107,7 @@ impl SubAgentStatusTracker {
 
     /// Mark all tracked agents as completed.
     pub fn mark_all_completed(&self) {
-        let mut agents = self.agents.lock().unwrap();
+        let mut agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         for state in agents.values_mut() {
             if state.status == SubAgentStatus::Executing || state.status == SubAgentStatus::Pending {
                 state.status = SubAgentStatus::Completed;
@@ -118,7 +118,7 @@ impl SubAgentStatusTracker {
 
     /// Build status meta for inclusion in `session/update._meta`.
     pub fn build_status_meta(&self) -> serde_json::Value {
-        let agents = self.agents.lock().unwrap();
+        let agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         let statuses: Vec<serde_json::Value> = agents
             .iter()
             .map(|(id, state)| {
@@ -135,7 +135,7 @@ impl SubAgentStatusTracker {
 
     /// Get the status of a specific agent.
     pub fn get_status(&self, id: &str) -> Option<SubAgentStatus> {
-        self.agents.lock().unwrap().get(id).map(|s| s.status)
+        self.agents.lock().unwrap_or_else(|e| e.into_inner()).get(id).map(|s| s.status)
     }
 
     /// Check if all tracked agents are in a terminal state.

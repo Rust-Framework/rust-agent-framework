@@ -1,8 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use rust_agent_core::{ITool, Result};
 
+use super::path_guard::{resolve_safe, resolve_safe_new};
 use super::{err_response, ok_response};
 
 /// Moves or renames a file or directory.
@@ -19,16 +20,15 @@ impl MoveFile {
         Self { base_dir: base_dir.into() }
     }
 
-    fn resolve(&self, path: &str) -> PathBuf {
-        let p = Path::new(path);
-        if p.is_absolute() { p.to_path_buf() }
-        else if path.is_empty() || path == "." { self.base_dir.clone() }
-        else { self.base_dir.join(p) }
-    }
-
     async fn call(&self, from: String, to: String) -> String {
-        let resolved_from = self.resolve(&from);
-        let resolved_to = self.resolve(&to);
+        let resolved_from = match resolve_safe(&self.base_dir, &from) {
+            Ok(r) => r,
+            Err(e) => return err_response(&format!("Path resolution failed for source: {}", e)),
+        };
+        let resolved_to = match resolve_safe_new(&self.base_dir, &to) {
+            Ok(r) => r,
+            Err(e) => return err_response(&format!("Path resolution failed for destination: {}", e)),
+        };
 
         // Ensure parent directory of destination exists
         if let Some(parent) = resolved_to.parent() {
@@ -37,6 +37,14 @@ impl MoveFile {
                     return err_response(&format!("Failed to create destination parent directory: {}", e));
                 }
             }
+        }
+
+        // Refuse to overwrite existing destination
+        if resolved_to.try_exists().unwrap_or(false) {
+            return err_response(&format!(
+                "Destination already exists: {}",
+                resolved_to.display()
+            ));
         }
 
         match std::fs::rename(&resolved_from, &resolved_to) {

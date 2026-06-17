@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_subprocess_runner() {
-        let _runner = super::super::script_runner::SubprocessScriptRunner;
+        let _runner = super::super::script_runner::SubprocessScriptRunner::new();
         let _cmd = "echo hello";
     }
 }
