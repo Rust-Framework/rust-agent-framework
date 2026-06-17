@@ -1,18 +1,20 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::executor::TypeTag;
 
 /// 消息信封 — 在图中传递的消息，携带路由元数据
 ///
-/// 对应 MAF 的 MessageEnvelope。
+/// 对应 MAF 的 MessageEnvelope。content 使用 Arc 实现零拷贝共享，
+/// 使 FanOut 等需要多投递的场景不会产生数据拷贝。
 #[derive(Debug)]
 pub struct MessageEnvelope {
     pub message_id: String,
     pub source_node_id: String,
     /// None 表示广播
     pub target_node_id: Option<String>,
-    /// 注意：Box<dyn Any> 不可 Clone，MessageEnvelope 手动实现 Clone（content 占位）
-    pub content: Box<dyn std::any::Any + Send + Sync>,
+    /// Arc 共享数据 — Clone 时仅为引用计数递增，零拷贝
+    pub content: Arc<dyn std::any::Any + Send + Sync>,
     pub type_tag: TypeTag,
     pub metadata: HashMap<String, serde_json::Value>,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -21,7 +23,7 @@ pub struct MessageEnvelope {
 impl MessageEnvelope {
     pub fn new(
         source_node_id: impl Into<String>,
-        content: Box<dyn std::any::Any + Send + Sync>,
+        content: Arc<dyn std::any::Any + Send + Sync>,
         type_tag: TypeTag,
     ) -> Self {
         Self {
@@ -52,8 +54,8 @@ impl Clone for MessageEnvelope {
             message_id: self.message_id.clone(),
             source_node_id: self.source_node_id.clone(),
             target_node_id: self.target_node_id.clone(),
-            // content 不可 clone，用占位
-            content: Box::new(()),
+            // Arc::clone 仅增加引用计数，零拷贝共享实际数据
+            content: Arc::clone(&self.content),
             type_tag: self.type_tag.clone(),
             metadata: self.metadata.clone(),
             created_at: self.created_at,

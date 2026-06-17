@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -65,23 +64,17 @@ impl WorkflowAgent {
         Ok(Self::new(graph))
     }
 
-    /// 从图中提取已注册的 IAgent（通过内省 agent executor nodes）
+    /// 从图中提取已注册的 IAgent（通过 as_agent() 内省）
     fn extract_agents(graph: &WorkflowGraph) -> Vec<Arc<dyn IAgent>> {
-        // 简化：遍历 nodes()，检查 executor ID，
-        // 跳过 engine 创建的内部节点（如 engine 相关节点）
-        // 当前版本的 AgentExecutor 通过构造时传入的 IAgent 来获取
-        // 由于类型擦除，这里使用 agent ID 去重
-        let mut seen = HashMap::new();
+        let mut seen: std::collections::HashMap<String, Arc<dyn IAgent>> =
+            std::collections::HashMap::new();
         for node in graph.nodes().values() {
-            let executor_id = node.executor.id();
-            // agent executor 以用户指定的名称注册
-            // 如果节点不是 engine 内部节点，标记为候选
-            seen.entry(executor_id.to_string()).or_insert(node.clone());
+            if let Some(agent) = node.executor.as_agent() {
+                let agent_id = agent.id().to_string();
+                seen.entry(agent_id).or_insert_with(|| agent.clone());
+            }
         }
-
-        // TODO: 当 IExecutor 支持暴露内部 IAgent 时完善此方法
-        // 当前版本返回空，待 AgentExecutor 暴露 agent 访问接口后补全
-        Vec::new()
+        seen.into_values().collect()
     }
 }
 

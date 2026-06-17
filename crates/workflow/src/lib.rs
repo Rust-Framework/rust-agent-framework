@@ -29,9 +29,6 @@ pub use crate::orchestrations::{
     ConcurrentWorkflow, HandoffBuilder, HandoffWorkflow, SequentialWorkflow, WorkflowAsAgent,
 };
 
-// 旧模块（待迁移到新架构后废弃）
-pub mod graph_flow;
-
 pub use builder::WorkflowBuilder;
 pub use checkpoint::{Checkpoint, CheckpointConfig, CheckpointInfo, CheckpointManager, FileCheckpointStore, ICheckpointStore, InMemoryCheckpointStore, ScopeKey, SerializableMessageEnvelope, deserialize_envelopes, serialize_envelopes};
 pub use engine::{IWorkflowContext, MessageEnvelope, NodeChunk, UsageInfo, WorkflowEngine, WorkflowEvent, WorkflowOutput};

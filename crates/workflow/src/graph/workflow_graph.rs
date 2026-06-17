@@ -42,7 +42,7 @@ impl WorkflowGraph {
         }
     }
 
-    /// 从入口出发的 BFS 可达性校验
+    /// 从入口出发的 BFS 可达性校验 + 环检测
     pub fn validate(&self) -> Result<()> {
         // 1. 入口节点存在
         if !self.nodes.contains_key(&self.start_node_id) {
@@ -99,6 +99,57 @@ impl WorkflowGraph {
             tracing::warn!("节点 '{}' 从入口不可达", unreachable);
         }
 
+        // 4. 环检测（DFS 三色标记法，仅检测可达子图）
+        self.detect_cycles(&reachable)?;
+
+        Ok(())
+    }
+
+    /// 使用 DFS 三色标记法检测有向图中的环
+    fn detect_cycles(&self, reachable: &HashSet<&str>) -> Result<()> {
+        #[derive(Clone, Copy, PartialEq)]
+        enum Color {
+            White,
+            Gray,
+            Black,
+        }
+
+        let mut colors: HashMap<&str, Color> = reachable
+            .iter()
+            .map(|id| (*id, Color::White))
+            .collect();
+
+        fn dfs<'a>(
+            node: &'a str,
+            colors: &mut HashMap<&'a str, Color>,
+            edges: &'a HashMap<String, HashSet<Edge>>,
+        ) -> Result<()> {
+            colors.insert(node, Color::Gray);
+            if let Some(edge_set) = edges.get(node) {
+                for edge in edge_set {
+                    for sink in edge.sink_ids() {
+                        if let Some(&color) = colors.get(sink) {
+                            match color {
+                                Color::Gray => {
+                                    return Err(rust_agent_core::AgentError::WorkflowError(
+                                        format!("检测到循环: '{}' -> '{}'", node, sink),
+                                    ));
+                                }
+                                Color::White => {
+                                    dfs(sink, colors, edges)?;
+                                }
+                                Color::Black => {}
+                            }
+                        }
+                    }
+                }
+            }
+            colors.insert(node, Color::Black);
+            Ok(())
+        }
+
+        // 从入口节点开始 DFS
+        dfs(self.start_node_id.as_str(), &mut colors, &self.edges)?;
         Ok(())
     }
 

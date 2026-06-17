@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use rust_agent_core::Result;
@@ -8,9 +9,6 @@ use super::base::{HandlerResult, IExecutor, NodeProgress, TypeTag};
 use crate::engine::IWorkflowContext;
 
 /// 函数驱动的轻量 Executor — 对应 MAF 的 FunctionExecutor
-///
-/// 适用于条件分支、路由决策、数据转换等纯逻辑节点。
-/// `I` 和 `O` 分别表示输入和输出类型，提供编译时类型安全。
 pub struct FunctionExecutor<F, I, O> {
     id: String,
     handler: F,
@@ -36,7 +34,7 @@ where
 impl<F, I, O> IExecutor for FunctionExecutor<F, I, O>
 where
     F: Fn(I) -> O + Send + Sync + 'static,
-    I: Send + Sync + 'static,
+    I: Clone + Send + Sync + 'static,
     O: Into<HandlerResult> + Send + Sync + 'static,
 {
     fn id(&self) -> &str {
@@ -49,11 +47,12 @@ where
 
     async fn handle(
         &self,
-        message: Box<dyn std::any::Any + Send + Sync>,
+        message: Arc<dyn std::any::Any + Send + Sync>,
         _ctx: &dyn IWorkflowContext,
         _progress: UnboundedSender<NodeProgress>,
     ) -> Result<HandlerResult> {
-        let input = message
+        // Arc::downcast 返回 Result<Arc<I>, Arc<dyn Any>>
+        let input: Arc<I> = message
             .downcast::<I>()
             .map_err(|_| {
                 rust_agent_core::AgentError::WorkflowError(format!(
@@ -62,7 +61,7 @@ where
                 ))
             })?;
 
-        let output = (self.handler)(*input);
+        let output = (self.handler)((*input).clone());
         Ok(output.into())
     }
 }
@@ -77,10 +76,10 @@ impl From<()> for HandlerResult {
 
 impl<T: Send + Sync + 'static> From<Vec<T>> for HandlerResult {
     fn from(items: Vec<T>) -> Self {
-        let boxes: Vec<Box<dyn std::any::Any + Send + Sync>> = items
+        let arcs: Vec<Arc<dyn std::any::Any + Send + Sync>> = items
             .into_iter()
-            .map(|item| Box::new(item) as Box<dyn std::any::Any + Send + Sync>)
+            .map(|item| Arc::new(item) as Arc<dyn std::any::Any + Send + Sync>)
             .collect();
-        HandlerResult::Messages(boxes)
+        HandlerResult::Messages(arcs)
     }
 }

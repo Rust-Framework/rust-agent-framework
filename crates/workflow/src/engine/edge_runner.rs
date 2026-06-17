@@ -27,6 +27,11 @@ pub trait IEdgeRunner: Send + Sync {
         envelope: &MessageEnvelope,
         nodes: &HashMap<String, Arc<dyn IExecutor>>,
     ) -> Result<Vec<MessageDelivery>>;
+
+    /// 导出边执行器内部状态以供 checkpoint 持久化（默认空）
+    fn checkpoint_state(&self) -> HashMap<String, serde_json::Value> {
+        HashMap::new()
+    }
 }
 
 // ── 直接边执行器 ──
@@ -127,6 +132,24 @@ impl FanInEdgeRunner {
 
 #[async_trait]
 impl IEdgeRunner for FanInEdgeRunner {
+    fn checkpoint_state(&self) -> HashMap<String, serde_json::Value> {
+        let state = self.state.lock();
+        let received_map: serde_json::Map<String, serde_json::Value> = state
+            .received
+            .iter()
+            .map(|(k, v)| {
+                let count = serde_json::Value::Number(serde_json::Number::from(v.len()));
+                (k.clone(), count)
+            })
+            .collect();
+        let mut map = HashMap::new();
+        map.insert(
+            format!("fanin_{}", self.edge_data.edge_id),
+            serde_json::Value::Object(received_map),
+        );
+        map
+    }
+
     async fn chase(
         &self,
         envelope: &MessageEnvelope,
@@ -145,21 +168,30 @@ impl IEdgeRunner for FanInEdgeRunner {
         }
 
         // 检查是否所有源都已到达
-        let state = self.state.lock();
+        let mut state = self.state.lock();
         let required_sources: Vec<&str> =
             self.edge_data.source_ids.iter().map(|s| s.as_str()).collect();
 
         if required_sources.iter().all(|sid| state.received.contains_key(*sid)) {
-            // 栅栏就绪 — 合并所有消息发送到目标
+            // 栅栏就绪 — 收集所有源的全部消息，合并投递到目标
             if !nodes.contains_key(&self.edge_data.sink_id) {
                 return Ok(vec![]);
             }
 
-            let delivery = MessageDelivery {
-                envelope: envelope.clone(),
-                target_node_id: self.edge_data.sink_id.clone(),
-            };
-            Ok(vec![delivery])
+            let all_deliveries: Vec<MessageDelivery> = state
+                .received
+                .values()
+                .flat_map(|envs| envs.iter())
+                .map(|env| MessageDelivery {
+                    envelope: env.clone(),
+                    target_node_id: self.edge_data.sink_id.clone(),
+                })
+                .collect();
+
+            // 重置栅栏，为下一轮消息做准备
+            state.received.clear();
+
+            Ok(all_deliveries)
         } else {
             // 栅栏未就绪
             Ok(vec![])

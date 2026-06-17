@@ -118,8 +118,15 @@ async fn collect_stream_text(
     while let Some(chunk) = stream.next().await {
         if let Ok(result) = chunk {
             for content in &result.contents {
-                if let Content::Text(ref t) = content {
-                    text.push_str(&t.delta);
+                match content {
+                    Content::Text(ref t) => text.push_str(&t.delta),
+                    Content::Reasoning(ref r) => text.push_str(&r.delta),
+                    Content::ToolCalled(ref tcr) => {
+                        if let Some(ref result) = tcr.result {
+                            text.push_str(&format!("\n[工具结果: {}]\n", result));
+                        }
+                    }
+                    _ => {}
                 }
             }
         }

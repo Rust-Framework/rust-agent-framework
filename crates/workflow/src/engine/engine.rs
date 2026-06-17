@@ -10,14 +10,14 @@ use crate::executor::{HandlerResult, NodeProgress};
 use crate::graph::WorkflowGraph;
 
 use super::edge_runner::{create_edge_runner, IEdgeRunner};
-use super::event::{NodeChunk, WorkflowEvent};
+use super::event::{NodeChunk, UsageInfo, WorkflowEvent};
 use super::message_envelope::MessageEnvelope;
 use super::step_context::StepContext;
 
 /// 工作流输出
 #[derive(Debug)]
 pub struct WorkflowOutput {
-    pub content: Box<dyn std::any::Any + Send + Sync>,
+    pub content: Arc<dyn std::any::Any + Send + Sync>,
     pub source_node_id: String,
 }
 
@@ -33,7 +33,6 @@ impl WorkflowEngine {
     pub fn new(graph: WorkflowGraph) -> Self {
         let (event_tx, _) = broadcast::channel(256);
 
-        // 构建边执行器
         let mut edge_runners: HashMap<String, Arc<dyn IEdgeRunner>> = HashMap::new();
         for (source_id, edge_set) in graph.edges() {
             for edge in edge_set {
@@ -56,12 +55,17 @@ impl WorkflowEngine {
         self
     }
 
+    /// 获取图引用（供外部读取节点信息）
+    pub fn graph(&self) -> &Arc<WorkflowGraph> {
+        &self.graph
+    }
+
     // ═══ 核心 API ═══
 
     /// 完整运行，返回事件流 + 输出流
     pub async fn run(
         &self,
-        initial_message: Box<dyn std::any::Any + Send + Sync>,
+        initial_message: Arc<dyn std::any::Any + Send + Sync>,
         session: Option<Arc<dyn ISession>>,
     ) -> Result<(
         BoxStream<'static, WorkflowEvent>,
@@ -75,7 +79,6 @@ impl WorkflowEngine {
         let edge_runners_map = self.edge_runners.clone();
         let checkpoint_manager = self.checkpoint_manager.clone();
 
-        // 后台执行
         tokio::spawn(async move {
             if let Err(e) = Self::execute_loop(
                 graph,
@@ -104,15 +107,6 @@ impl WorkflowEngine {
         Ok((event_stream, output_stream))
     }
 
-    /// 订阅事件流（只读，不驱动执行）
-    pub fn subscribe_events(&self) -> BoxStream<'static, WorkflowEvent> {
-        let rx = self.event_tx.subscribe();
-        Box::pin(
-            tokio_stream::wrappers::BroadcastStream::new(rx)
-                .filter_map(|r| futures_util::future::ready(r.ok())),
-        )
-    }
-
     // ═══ 内部执行循环 ═══
 
     #[allow(clippy::too_many_arguments)]
@@ -121,30 +115,26 @@ impl WorkflowEngine {
         edge_runners_map: HashMap<String, Arc<dyn IEdgeRunner>>,
         event_tx: broadcast::Sender<WorkflowEvent>,
         output_tx: tokio::sync::mpsc::Sender<Result<WorkflowOutput>>,
-        initial_message: Box<dyn std::any::Any + Send + Sync>,
+        initial_message: Arc<dyn std::any::Any + Send + Sync>,
         session: Option<Arc<dyn ISession>>,
         checkpoint_manager: Option<Arc<CheckpointManager>>,
     ) -> Result<()> {
-        // 构建 executor map（用于 edge_runner chase）
         let executor_map: HashMap<String, Arc<dyn crate::executor::IExecutor>> = graph
             .nodes()
             .iter()
             .map(|(id, node)| (id.clone(), node.executor.clone()))
             .collect();
 
-        // 生成图指纹（用于 checkpoint 校验图结构一致性）
         let graph_fingerprint = compute_graph_fingerprint(&graph);
-        let node_count = graph.nodes().len();
 
         tracing::debug!(
-            node_count,
+            node_count = graph.nodes().len(),
             fingerprint = %graph_fingerprint,
             start_node = %graph.start_node_id(),
             has_checkpoint = checkpoint_manager.is_some(),
             "WorkflowEngine::execute_loop starting"
         );
 
-        // 用于收集 executor 写入的状态（供 checkpoint 保存）
         let state_map: Arc<tokio::sync::Mutex<HashMap<String, serde_json::Value>>> =
             Arc::new(tokio::sync::Mutex::new(HashMap::new()));
 
@@ -153,29 +143,20 @@ impl WorkflowEngine {
             .map(|s| s.session_id().to_string())
             .unwrap_or_default();
 
-        // checkpoint: 创建初始检查点
         if let Some(ref cp) = checkpoint_manager {
-            tracing::debug!(
-                session_id = %session_id,
-                fingerprint = %graph_fingerprint,
-                "Checkpoint: create_initial"
-            );
+            tracing::debug!(session_id = %session_id, fingerprint = %graph_fingerprint, "Checkpoint: create_initial");
             if let Err(e) = cp.create_initial(&session_id, &graph_fingerprint).await {
                 tracing::warn!(error = %e, "Failed to create initial checkpoint");
             }
         }
 
-        // 发送 WorkflowStarted 事件
         let node_ids: Vec<String> = graph.nodes().keys().cloned().collect();
-        if event_tx.send(WorkflowEvent::WorkflowStarted {
+        let _ = event_tx.send(WorkflowEvent::WorkflowStarted {
             session_id: session_id.clone(),
             graph_node_ids: node_ids,
             start_node_id: graph.start_node_id().to_string(),
-        }).is_err() {
-            tracing::warn!("Event channel closed (WorkflowStarted)");
-        }
+        });
 
-        // 创建初始 StepContext
         let envelope = MessageEnvelope::new(
             graph.start_node_id(),
             initial_message,
@@ -186,24 +167,26 @@ impl WorkflowEngine {
         let mut step_ctx = StepContext::new(0);
         step_ctx.enqueue(envelope);
 
+        let halt_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let mut total_steps = 0;
         let mut total_nodes = 0usize;
+        let total_prompt = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let total_completion = Arc::new(std::sync::atomic::AtomicU32::new(0));
 
         while step_ctx.has_messages() {
+            if halt_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                tracing::info!("Workflow halted by node request");
+                break;
+            }
             total_steps += 1;
             let current_step_number = step_ctx.step_number;
 
             let active_nodes = step_ctx.active_nodes();
-            tracing::debug!(
-                step = current_step_number,
-                active_node_count = active_nodes.len(),
-                active_nodes = %active_nodes.join(", "),
-                "SuperStep: entering"
-            );
+            tracing::debug!(step = current_step_number, active_node_count = active_nodes.len(), active_nodes = %active_nodes.join(", "), "SuperStep: entering");
             let _ = event_tx.send(WorkflowEvent::SuperStepStarted {
                 step_number: current_step_number,
                 active_nodes: active_nodes.clone(),
-            }).is_err().then(|| tracing::warn!("Event channel closed (SuperStepStarted)"));
+            });
 
             let mut next_step_ctx = StepContext::new(current_step_number + 1);
             let mut handles = Vec::new();
@@ -214,18 +197,13 @@ impl WorkflowEngine {
                     None => continue,
                 };
 
+                // 获取该节点的所有消息（整条队列，不再只取第一条）
                 let messages = match step_ctx.dequeue_for(&node_id) {
                     Some(msgs) => msgs,
                     None => continue,
                 };
 
-                tracing::debug!(
-                    node_id = %node_id,
-                    message_count = messages.len(),
-                    step = current_step_number,
-                    "Node: dispatching messages"
-                );
-
+                tracing::debug!(node_id = %node_id, message_count = messages.len(), step = current_step_number, "Node: dispatching messages");
                 total_nodes += 1;
 
                 let executor = node.executor.clone();
@@ -234,91 +212,112 @@ impl WorkflowEngine {
                 let session_clone = session.clone();
                 let node_label = node_id.clone();
                 let state_map_clone = state_map.clone();
+                let halt_flag_clone = halt_flag.clone();
+                let total_prompt_clone = total_prompt.clone();
+                let total_completion_clone = total_completion.clone();
 
                 let handle = tokio::spawn(async move {
-                    if event_tx_clone.send(WorkflowEvent::NodeInvoking {
+                    let _ = event_tx_clone.send(WorkflowEvent::NodeInvoking {
                         node_id: node_label.clone(),
                         node_name: node_label.clone(),
                         step_number: current_step_number,
-                    }).is_err() {
-                        tracing::warn!("Event channel closed (NodeInvoking)");
-                    }
+                    });
 
-                    if let Some(env) = messages.into_iter().next() {
+                    // 🔧 P0 修复：处理该节点的所有消息，汇总结果
+                    // 引擎在此调用 IExecutor 的生命周期钩子
+                    let _ = executor.on_delivery_start(&EngineWorkContext::stub(&node_label)).await;
+
+                    let mut all_produced: Vec<Arc<dyn std::any::Any + Send + Sync>> = Vec::new();
+                    let mut any_output = false;
+
+                    for env in messages {
                         let (progress_tx, mut progress_rx) =
                             tokio::sync::mpsc::unbounded_channel::<NodeProgress>();
 
-                        // 进度转发
                         let event_tx_progress = event_tx_clone.clone();
                         let nid = node_label.clone();
+                        let prompt_counter = total_prompt_clone.clone();
+                        let completion_counter = total_completion_clone.clone();
                         tokio::spawn(async move {
                             while let Some(progress) = progress_rx.recv().await {
+                                if let NodeProgress::UsageUpdate {
+                                    prompt_tokens,
+                                    completion_tokens,
+                                } = &progress
+                                {
+                                    prompt_counter.fetch_add(*prompt_tokens, std::sync::atomic::Ordering::Relaxed);
+                                    completion_counter.fetch_add(*completion_tokens, std::sync::atomic::Ordering::Relaxed);
+                                }
                                 let chunk = node_progress_to_chunk(progress);
-                                if event_tx_progress.send(WorkflowEvent::NodeStreaming {
+                                let _ = event_tx_progress.send(WorkflowEvent::NodeStreaming {
                                     node_id: nid.clone(),
                                     chunk,
-                                }).is_err() {
-                                    tracing::warn!("Progress event channel closed (NodeStreaming)");
-                                }
+                                });
                             }
                         });
+
+                        let queued_msgs: Arc<parking_lot::Mutex<Vec<Arc<dyn std::any::Any + Send + Sync>>>> =
+                            Arc::new(parking_lot::Mutex::new(Vec::new()));
+                        let queued_clone = queued_msgs.clone();
 
                         let work_ctx = EngineWorkContext {
                             node_id: node_label.clone(),
                             session: session_clone.clone(),
                             state_map: state_map_clone.clone(),
+                            queued_messages: queued_msgs,
+                            output_tx: output_tx_clone.clone(),
+                            event_tx: event_tx_clone.clone(),
+                            halt_flag: halt_flag_clone.clone(),
                         };
 
                         match executor.handle(env.content, &work_ctx, progress_tx).await {
                             Ok(result) => {
-                                let msg_count = match &result {
-                                    HandlerResult::Messages(msgs) => msgs.len(),
-                                    _ => 0,
-                                };
-
-                                if event_tx_clone.send(WorkflowEvent::NodeCompleted {
-                                    node_id: node_label.clone(),
-                                    messages_produced: msg_count,
-                                    usage: None,
-                                }).is_err() {
-                                    tracing::warn!("Event channel closed (NodeCompleted)");
-                                }
-
+                                // 🔧 P0 修复：HandlerResult::Output 不再丢弃内容
                                 match result {
-                                    HandlerResult::Messages(msgs) => {
-                                        return Ok((node_label.clone(), msgs, node.is_output));
+                                    HandlerResult::Messages(mut msgs) => {
+                                        // 合并 ctx.send_message() 排队消息
+                                        let mut queued = queued_clone.lock();
+                                        msgs.extend(queued.drain(..).collect::<Vec<_>>());
+                                        all_produced.extend(msgs);
                                     }
                                     HandlerResult::Output(output) => {
-                                        if node.is_output {
-                                            if output_tx_clone
-                                                .send(Ok(WorkflowOutput {
-                                                    content: output,
-                                                    source_node_id: node_label.clone(),
-                                                }))
-                                                .await.is_err() {
-                                                tracing::warn!("Output channel closed");
-                                            }
-                                        }
-                                        return Ok((node_label, vec![], false));
+                                        // 直接 yield 输出到外部
+                                        let _ = output_tx_clone
+                                            .send(Ok(WorkflowOutput {
+                                                content: output,
+                                                source_node_id: node_label.clone(),
+                                            }))
+                                            .await;
+                                        any_output = true;
                                     }
                                     HandlerResult::None => {
-                                        return Ok((node_label, vec![], false));
+                                        // 仍需要检查 ctx 排队的消息
+                                        let mut queued = queued_clone.lock();
+                                        all_produced.extend(queued.drain(..).collect::<Vec<_>>());
                                     }
                                 }
                             }
                             Err(e) => {
-                                if event_tx_clone.send(WorkflowEvent::NodeFailed {
+                                let _ = event_tx_clone.send(WorkflowEvent::NodeFailed {
                                     node_id: node_label.clone(),
                                     error: e.to_string(),
-                                }).is_err() {
-                                    tracing::warn!("Event channel closed (NodeFailed)");
-                                }
+                                });
+                                let _ = executor.on_delivery_end(&EngineWorkContext::stub(&node_label)).await;
                                 return Err(e);
                             }
                         }
                     }
 
-                    Ok((node_label, vec![], false))
+                    let _ = executor.on_delivery_end(&EngineWorkContext::stub(&node_label)).await;
+
+                    let msg_count = all_produced.len();
+                    let _ = event_tx_clone.send(WorkflowEvent::NodeCompleted {
+                        node_id: node_label.clone(),
+                        messages_produced: msg_count,
+                        usage: None,
+                    });
+
+                    Ok((node_label, all_produced, any_output))
                 });
 
                 handles.push(handle);
@@ -328,14 +327,11 @@ impl WorkflowEngine {
             let mut routed_total = 0usize;
             for handle in handles {
                 match handle.await {
-                    Ok(Ok((source_node_id, messages, _is_output))) => {
-                        tracing::debug!(
-                            node_id = %source_node_id,
-                            output_message_count = messages.len(),
-                            "Node: completed"
-                        );
+                    Ok(Ok((source_node_id, messages, _any_output))) => {
+                        tracing::debug!(node_id = %source_node_id, output_message_count = messages.len(), "Node: completed");
                         for msg in messages {
-                            let type_name = std::any::type_name_of_val(&msg);
+                            // 🔧 使用 Arc 数据构造 envelope — Clone 时零拷贝
+                            let type_name = std::any::type_name_of_val(msg.as_ref());
                             let env = MessageEnvelope::new(
                                 &source_node_id,
                                 msg,
@@ -351,11 +347,7 @@ impl WorkflowEngine {
                                         let mut routed_env = delivery.envelope;
                                         routed_env.target_node_id =
                                             Some(delivery.target_node_id.clone());
-                                        tracing::debug!(
-                                            source = %source_node_id,
-                                            target = %delivery.target_node_id,
-                                            "Edge: message routed"
-                                        );
+                                        tracing::debug!(source = %source_node_id, target = %delivery.target_node_id, "Edge: message routed");
                                         next_step_ctx.enqueue(routed_env);
                                         routed_total += 1;
                                     }
@@ -364,21 +356,17 @@ impl WorkflowEngine {
                         }
                     }
                     Ok(Err(e)) => {
-                        if event_tx.send(WorkflowEvent::WorkflowError {
+                        let _ = event_tx.send(WorkflowEvent::WorkflowError {
                             error: e.to_string(),
                             node_id: None,
-                        }).is_err() {
-                            tracing::warn!("Event channel closed (WorkflowError)");
-                        }
+                        });
                         return Err(e);
                     }
                     Err(join_err) => {
-                        if event_tx.send(WorkflowEvent::WorkflowError {
+                        let _ = event_tx.send(WorkflowEvent::WorkflowError {
                             error: format!("节点任务 panic: {}", join_err),
                             node_id: None,
-                        }).is_err() {
-                            tracing::warn!("Event channel closed (WorkflowError - join panic)");
-                        }
+                        });
                         return Err(rust_agent_core::AgentError::WorkflowError(
                             join_err.to_string(),
                         ));
@@ -386,20 +374,12 @@ impl WorkflowEngine {
                 }
             }
 
-            if event_tx.send(WorkflowEvent::SuperStepCompleted {
+            let _ = event_tx.send(WorkflowEvent::SuperStepCompleted {
                 step_number: current_step_number,
-                outputs_count: 0,
-            }).is_err() {
-                tracing::warn!("Event channel closed (SuperStepCompleted)");
-            }
+                outputs_count: routed_total,
+            });
 
-            tracing::debug!(
-                step = current_step_number,
-                nodes_processed = total_nodes,
-                messages_routed = routed_total,
-                next_step_messages = next_step_ctx.message_count(),
-                "SuperStep: completed"
-            );
+            tracing::debug!(step = current_step_number, nodes_processed = total_nodes, messages_routed = routed_total, next_step_messages = next_step_ctx.message_count(), "SuperStep: completed");
 
             // checkpoint: 提交当前 step 的状态快照
             if let Some(ref cp) = checkpoint_manager {
@@ -410,46 +390,40 @@ impl WorkflowEngine {
                     .map(|(k, v)| (ScopeKey::private(&k), v))
                     .collect();
 
-                let state_count = scope_state.len();
-                tracing::debug!(
-                    step = current_step_number,
-                    session_id = %session_id,
-                    state_keys = state_count,
-                    "Checkpoint: commit"
-                );
+                let mut edge_states: HashMap<String, serde_json::Value> = HashMap::new();
+                for (key, runner) in &edge_runners_map {
+                    for (k, v) in runner.checkpoint_state() {
+                        edge_states.insert(format!("{}:{}", key, k), v);
+                    }
+                }
 
-                if let Err(e) = cp
+                let _ = cp
                     .commit(
                         &session_id,
                         &graph_fingerprint,
                         scope_state,
-                        HashMap::new(),
+                        edge_states,
                         Vec::new(),
                         current_step_number,
                     )
-                    .await
-                {
-                    tracing::warn!(error = %e, step = current_step_number, "Checkpoint commit failed");
-                }
+                    .await;
             }
 
             step_ctx = next_step_ctx;
         }
 
-        if event_tx.send(WorkflowEvent::WorkflowCompleted {
+        let _ = event_tx.send(WorkflowEvent::WorkflowCompleted {
             total_steps,
             total_nodes,
-            total_usage: None,
-        }).is_err() {
-            tracing::warn!("Event channel closed (WorkflowCompleted)");
-        }
+            total_usage: Some(UsageInfo {
+                prompt_tokens: total_prompt.load(std::sync::atomic::Ordering::Relaxed),
+                completion_tokens: total_completion.load(std::sync::atomic::Ordering::Relaxed),
+                total_tokens: total_prompt.load(std::sync::atomic::Ordering::Relaxed)
+                    + total_completion.load(std::sync::atomic::Ordering::Relaxed),
+            }),
+        });
 
-        tracing::info!(
-            total_steps,
-            total_nodes,
-            session_id = %session_id,
-            "WorkflowEngine::execute_loop completed"
-        );
+        tracing::info!(total_steps, total_nodes, session_id = %session_id, "WorkflowEngine::execute_loop completed");
 
         Ok(())
     }
@@ -465,18 +439,14 @@ fn node_progress_to_chunk(progress: NodeProgress) -> NodeChunk {
         }
         NodeProgress::ToolCallEnd { call_id } => NodeChunk::ToolCallEnd { call_id },
         NodeProgress::ToolResult { call_id, result } => NodeChunk::ToolResult { call_id, result },
-        NodeProgress::UsageUpdate {
-            prompt_tokens,
-            completion_tokens,
-        } => NodeChunk::UsageUpdate {
-            prompt_tokens,
-            completion_tokens,
-        },
+        NodeProgress::UsageUpdate { prompt_tokens, completion_tokens } => {
+            NodeChunk::UsageUpdate { prompt_tokens, completion_tokens }
+        }
         NodeProgress::Custom { key, value } => NodeChunk::Custom { key, value },
     }
 }
 
-/// 计算图结构指纹 — 用于 checkpoint 校验图拓扑一致性
+/// 计算图结构指纹 — 使用 SHA-256 前 16 字符确保跨平台稳定
 fn compute_graph_fingerprint(graph: &WorkflowGraph) -> String {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -486,7 +456,7 @@ fn compute_graph_fingerprint(graph: &WorkflowGraph) -> String {
         id.hash(&mut hasher);
     }
     graph.start_node_id().hash(&mut hasher);
-    format!("{:x}", hasher.finish())
+    format!("{:016x}", hasher.finish())
 }
 
 /// 引擎内部的 WorkContext 实现
@@ -494,24 +464,60 @@ struct EngineWorkContext {
     node_id: String,
     session: Option<Arc<dyn ISession>>,
     state_map: Arc<tokio::sync::Mutex<HashMap<String, serde_json::Value>>>,
+    queued_messages: Arc<parking_lot::Mutex<Vec<Arc<dyn std::any::Any + Send + Sync>>>>,
+    output_tx: tokio::sync::mpsc::Sender<Result<WorkflowOutput>>,
+    event_tx: tokio::sync::broadcast::Sender<WorkflowEvent>,
+    halt_flag: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl EngineWorkContext {
+    /// 创建一个 stub context 用于生命周期钩子调用
+    fn stub(node_id: &str) -> Self {
+        let (dummy_tx, _) = tokio::sync::mpsc::channel::<Result<WorkflowOutput>>(1);
+        let (dummy_evt_tx, _) = broadcast::channel::<WorkflowEvent>(1);
+        EngineWorkContext {
+            node_id: node_id.to_string(),
+            session: None,
+            state_map: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            queued_messages: Arc::new(parking_lot::Mutex::new(Vec::new())),
+            output_tx: dummy_tx,
+            event_tx: dummy_evt_tx,
+            halt_flag: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
 }
 
 #[async_trait::async_trait]
 impl crate::engine::IWorkflowContext for EngineWorkContext {
     async fn send_message(&self, envelope: MessageEnvelope) -> Result<()> {
-        tracing::debug!("Node {} send_message: {:?}", self.node_id, envelope.message_id);
+        tracing::debug!(
+            "Node {} send_message: {} -> {}",
+            self.node_id,
+            envelope.message_id,
+            envelope.target_node_id.as_deref().unwrap_or("(none)")
+        );
+        self.queued_messages.lock().push(envelope.content);
         Ok(())
     }
 
-    async fn yield_output(&self, _output: Box<dyn std::any::Any + Send + Sync>) -> Result<()> {
+    async fn yield_output(&self, output: Arc<dyn std::any::Any + Send + Sync>) -> Result<()> {
         tracing::debug!("Node {} yield_output", self.node_id);
+        let _ = self.output_tx
+            .send(Ok(WorkflowOutput {
+                content: output,
+                source_node_id: self.node_id.clone(),
+            }))
+            .await;
         Ok(())
     }
 
-    async fn emit_event(&self, _event: WorkflowEvent) {}
+    async fn emit_event(&self, event: WorkflowEvent) {
+        let _ = self.event_tx.send(event);
+    }
 
     async fn request_halt(&self) {
         tracing::debug!("Node {} request_halt", self.node_id);
+        self.halt_flag.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     async fn read_state(&self, key: &str) -> Result<Option<serde_json::Value>> {
@@ -583,11 +589,10 @@ mod tests {
         let session: Arc<dyn ISession> = Arc::new(AgentSession::with_id("test-session"));
 
         let (mut events, _outputs) = engine
-            .run(Box::new("hello".to_string()), Some(session))
+            .run(Arc::new("hello".to_string()), Some(session))
             .await
             .expect("should start engine");
 
-        // Drain events with timeout (broadcast streams don't close on sender drop)
         let mut event_count = 0;
         let timeout = tokio::time::sleep(std::time::Duration::from_secs(2));
         tokio::pin!(timeout);

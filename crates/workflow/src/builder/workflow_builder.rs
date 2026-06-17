@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rust_agent_core::{IAgent, Result};
 
 use crate::executor::{AgentExecutor, IExecutor};
-use crate::graph::edge::{DirectEdgeData, Edge, EdgeId, FanInEdgeData, FanOutEdgeData};
+use crate::graph::edge::{DirectEdgeData, Edge, EdgeId, FanInEdgeData, FanOutEdgeData, IEdgeCondition, IFanOutAssigner};
 use crate::graph::node::Node;
 use crate::graph::port::RequestPort;
 use crate::graph::WorkflowGraph;
@@ -112,6 +112,44 @@ impl WorkflowBuilder {
             source_ids: sources.into_iter().map(|s| s.into()).collect(),
             sink_id: target.into(),
             label: None,
+        });
+        self.edges.push(edge);
+        self
+    }
+
+    /// 添加带条件的直接边：只有 condition.evaluate() 返回 true 时消息才沿此边传递
+    pub fn add_edge_with_condition(
+        mut self,
+        source: impl Into<String>,
+        target: impl Into<String>,
+        condition: Arc<dyn IEdgeCondition>,
+    ) -> Self {
+        let edge_id = self.next_edge_id();
+        let edge = Edge::Direct(DirectEdgeData {
+            edge_id,
+            source_id: source.into(),
+            sink_id: target.into(),
+            label: None,
+            condition: Some(condition),
+        });
+        self.edges.push(edge);
+        self
+    }
+
+    /// 添加带分配器的扇出边：由 assigner.targets() 动态决定消息投递目标
+    pub fn add_fan_out_edge_with_assigner(
+        mut self,
+        source: impl Into<String>,
+        targets: Vec<impl Into<String>>,
+        assigner: Arc<dyn IFanOutAssigner>,
+    ) -> Self {
+        let edge_id = self.next_edge_id();
+        let edge = Edge::FanOut(FanOutEdgeData {
+            edge_id,
+            source_id: source.into(),
+            sink_ids: targets.into_iter().map(|t| t.into()).collect(),
+            label: None,
+            assigner: Some(assigner),
         });
         self.edges.push(edge);
         self
