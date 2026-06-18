@@ -92,6 +92,15 @@ pub enum WorkflowEvent {
         timer_name: String,
     },
 
+    // ── 外部事件 ──
+    /// 外部事件注入
+    ExternalEventReceived {
+        port_id: Option<String>,
+        signal_name: Option<String>,
+        timer_id: Option<String>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+
     // ── 自定义事件 ──
     Custom {
         key: String,

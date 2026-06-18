@@ -86,6 +86,36 @@ impl WorkflowEngine {
         &self.config
     }
 
+    /// 向运行中的引擎注入外部事件。
+    ///
+    /// 事件注入兼容 `WorkflowRuntime` 的恢复机制：
+    /// - `MessageReceived`: 通过 RequestPort 路由到目标节点
+    /// - `SignalReceived`: 广播到所有等待该信号的节点
+    /// - `TimerElapsed`: 触发对应定时器的处理器
+    ///
+    /// 注入的事件会包装为 `WorkflowEvent::ExternalEventReceived` 发送到事件流。
+    pub async fn inject_event(
+        &self,
+        event: crate::engine::ExternalEvent,
+    ) -> rust_agent_core::Result<()> {
+        let _ = self.event_tx.send(WorkflowEvent::ExternalEventReceived {
+            port_id: match &event {
+                crate::engine::ExternalEvent::MessageReceived { port_id, .. } => Some(port_id.clone()),
+                _ => None,
+            },
+            signal_name: match &event {
+                crate::engine::ExternalEvent::SignalReceived { signal_name, .. } => Some(signal_name.clone()),
+                _ => None,
+            },
+            timer_id: match &event {
+                crate::engine::ExternalEvent::TimerElapsed { timer_id } => Some(timer_id.clone()),
+                _ => None,
+            },
+            timestamp: chrono::Utc::now(),
+        });
+        Ok(())
+    }
+
     /// 完整运行，返回事件流 + 输出流（简单场景，不支持恢复）
     pub async fn run(
         &self,
@@ -341,6 +371,42 @@ impl WorkflowEngine {
 
                 total_nodes += 1;
                 execution_log.lock().await.push(node_id.clone());
+
+                // ── 循环迭代管理 ──
+                if let Some(ref loop_cfg) = node.loop_config {
+                    let loop_var = loop_cfg
+                        .loop_variable
+                        .clone()
+                        .unwrap_or_else(|| format!("__loop_{}", node_id));
+                    let mut state = state_map.lock().await;
+                    let current: i32 = state
+                        .get(&loop_var)
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0) as i32;
+
+                    if loop_cfg.max_iterations > 0 && current >= loop_cfg.max_iterations as i32 {
+                        tracing::debug!(
+                            node_id = %node_id,
+                            iteration = current,
+                            max = loop_cfg.max_iterations,
+                            "循环达到最大迭代次数，跳过节点"
+                        );
+                        let _ = event_tx.send(WorkflowEvent::NodeCompleted {
+                            node_id: node_id.clone(),
+                            messages_produced: 0,
+                            usage: None,
+                        });
+                        continue;
+                    }
+
+                    let next = current + 1;
+                    state.insert(loop_var.clone(), serde_json::json!(next));
+                    tracing::debug!(
+                        node_id = %node_id,
+                        iteration = next,
+                        "循环迭代"
+                    );
+                }
 
                 let executor = node.executor.clone();
                 let event_tx_clone = event_tx.clone();

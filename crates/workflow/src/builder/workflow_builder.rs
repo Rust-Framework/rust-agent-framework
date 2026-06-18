@@ -95,6 +95,7 @@ impl WorkflowBuilder {
             sink_id: target.into(),
             label: None,
             condition: None,
+            is_loopback: false,
         });
         self.edges.push(edge);
         self
@@ -149,6 +150,7 @@ impl WorkflowBuilder {
             sink_id: target.into(),
             label: None,
             condition: Some(condition),
+            is_loopback: false,
         });
         self.edges.push(edge);
         self
@@ -170,6 +172,115 @@ impl WorkflowBuilder {
             assigner: Some(assigner),
         });
         self.edges.push(edge);
+        self
+    }
+
+    /// 添加循环回边 — source → target，标记 is_loopback=true。
+    ///
+    /// 循环回边在图校验时不视为环错误。引擎在运行时
+    /// 管理迭代计数和终止条件（参见 Node.loop_config）。
+    pub fn add_loopback_edge(
+        mut self,
+        source: impl Into<String>,
+        target: impl Into<String>,
+    ) -> Self {
+        let edge_id = self.next_edge_id();
+        let edge = Edge::Direct(DirectEdgeData {
+            edge_id,
+            source_id: source.into(),
+            sink_id: target.into(),
+            label: Some("loopback".to_string()),
+            condition: None,
+            is_loopback: true,
+        });
+        self.edges.push(edge);
+        self
+    }
+
+    // ── 网关 DSL ──
+
+    /// 并行网关 — 自动创建 FanOut 边从 source 到所有 branches。
+    ///
+    /// 等价于 `add_fan_out_edge(source, branches)`。
+    pub fn parallel_gateway(
+        mut self,
+        source: impl Into<String>,
+        branches: Vec<impl Into<String>>,
+    ) -> Self {
+        let edge_id = self.next_edge_id();
+        let edge = Edge::FanOut(FanOutEdgeData {
+            edge_id,
+            source_id: source.into(),
+            sink_ids: branches.into_iter().map(|t| t.into()).collect(),
+            label: Some("parallel_gateway".to_string()),
+            assigner: None,
+        });
+        self.edges.push(edge);
+        self
+    }
+
+    /// 排他网关 — 根据条件创建多条带条件的 DirectEdge。
+    ///
+    /// 每条 branch 为 (target_node_id, condition)，只有满足条件的边才会传递消息。
+    /// default_branch 为可选的兜底分支（无条件的 DirectEdge）。
+    pub fn exclusive_gateway(
+        mut self,
+        source: impl Into<String>,
+        branches: Vec<(impl Into<String>, Arc<dyn IEdgeCondition>)>,
+        default_branch: Option<impl Into<String>>,
+    ) -> Self {
+        let source_id: String = source.into();
+        for (i, (target, condition)) in branches.into_iter().enumerate() {
+            let edge_id = EdgeId::new(format!("edge_xor_{}", self.edge_count + i as u64));
+            let edge = Edge::Direct(DirectEdgeData {
+                edge_id,
+                source_id: source_id.clone(),
+                sink_id: target.into(),
+                label: Some("exclusive_gateway".to_string()),
+                condition: Some(condition),
+                is_loopback: false,
+            });
+            self.edges.push(edge);
+        }
+        self.edge_count += 1;
+
+        if let Some(default) = default_branch {
+            let edge_id = self.next_edge_id();
+            let edge = Edge::Direct(DirectEdgeData {
+                edge_id,
+                source_id: source_id.clone(),
+                sink_id: default.into(),
+                label: Some("exclusive_default".to_string()),
+                condition: None,
+                is_loopback: false,
+            });
+            self.edges.push(edge);
+        }
+        self
+    }
+
+    /// 包容网关 — 条件为真的所有分支并行执行。
+    ///
+    /// 每条 branch 为 (target_node_id, condition)，所有满足条件的边都会传递消息。
+    pub fn inclusive_gateway(
+        mut self,
+        source: impl Into<String>,
+        branches: Vec<(impl Into<String>, Arc<dyn IEdgeCondition>)>,
+    ) -> Self {
+        let source_id: String = source.into();
+        for (i, (target, condition)) in branches.into_iter().enumerate() {
+            let edge_id = EdgeId::new(format!("edge_inc_{}", self.edge_count + i as u64));
+            let edge = Edge::Direct(DirectEdgeData {
+                edge_id,
+                source_id: source_id.clone(),
+                sink_id: target.into(),
+                label: Some("inclusive_gateway".to_string()),
+                condition: Some(condition),
+                is_loopback: false,
+            });
+            self.edges.push(edge);
+        }
+        self.edge_count += 1;
         self
     }
 

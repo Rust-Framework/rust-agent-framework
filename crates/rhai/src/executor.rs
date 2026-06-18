@@ -220,21 +220,21 @@ mod tests {
 
     #[test]
     fn test_extract_input_json() {
-        let msg = Box::new(serde_json::json!({"key": "value"}));
+        let msg: Arc<dyn std::any::Any + Send + Sync> = Arc::new(serde_json::json!({"key": "value"}));
         let result = extract_input(msg);
         assert_eq!(result, serde_json::json!({"key": "value"}));
     }
 
     #[test]
     fn test_extract_input_string() {
-        let msg = Box::new("hello".to_string());
+        let msg: Arc<dyn std::any::Any + Send + Sync> = Arc::new("hello".to_string());
         let result = extract_input(msg);
         assert_eq!(result, serde_json::Value::String("hello".to_string()));
     }
 
     #[test]
     fn test_extract_input_unknown() {
-        let msg: Box<dyn std::any::Any + Send + Sync> = Box::new(42_i32);
+        let msg: Arc<dyn std::any::Any + Send + Sync> = Arc::new(42_i32);
         let result = extract_input(msg);
         assert_eq!(result, serde_json::Value::Null);
     }

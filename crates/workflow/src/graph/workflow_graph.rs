@@ -105,7 +105,8 @@ impl WorkflowGraph {
         Ok(())
     }
 
-    /// 使用 DFS 三色标记法检测有向图中的环
+    /// 使用 DFS 三色标记法检测有向图中的环。
+    /// 显式标记 `is_loopback = true` 的边不会被检测为环。
     fn detect_cycles(&self, reachable: &HashSet<&str>) -> Result<()> {
         #[derive(Clone, Copy, PartialEq)]
         enum Color {
@@ -119,6 +120,13 @@ impl WorkflowGraph {
             .map(|id| (*id, Color::White))
             .collect();
 
+        fn is_loopback_edge(edge: &Edge) -> bool {
+            match edge {
+                Edge::Direct(d) => d.is_loopback,
+                _ => false,
+            }
+        }
+
         fn dfs<'a>(
             node: &'a str,
             colors: &mut HashMap<&'a str, Color>,
@@ -127,12 +135,16 @@ impl WorkflowGraph {
             colors.insert(node, Color::Gray);
             if let Some(edge_set) = edges.get(node) {
                 for edge in edge_set {
+                    // 跳过显式标记的循环回边
+                    if is_loopback_edge(edge) {
+                        continue;
+                    }
                     for sink in edge.sink_ids() {
                         if let Some(&color) = colors.get(sink) {
                             match color {
                                 Color::Gray => {
                                     return Err(rust_agent_core::AgentError::WorkflowError(
-                                        format!("检测到循环: '{}' -> '{}'", node, sink),
+                                        format!("检测到循环: '{}' -> '{}'。如需循环，请使用 add_loopback_edge() 或标记 is_loopback=true", node, sink),
                                     ));
                                 }
                                 Color::White => {

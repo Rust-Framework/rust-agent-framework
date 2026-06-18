@@ -335,10 +335,10 @@ mod tests {
         let result = rt
             .block_on(tool.execute(serde_json::json!({"skill_name": "my-skill"})))
             .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], true);
-        assert_eq!(v["data"]["skill_name"], "my-skill");
-        assert!(v["data"]["instructions"]
+        assert!(result.ok);
+        let data = result.data.as_ref().unwrap();
+        assert_eq!(data["skill_name"], "my-skill");
+        assert!(data["instructions"]
             .as_str()
             .unwrap()
             .contains("Do the thing"));
@@ -386,9 +386,9 @@ mod tests {
                 "resource_path": "ref.md"
             })))
             .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], true);
-        assert!(v["data"]["content"]
+        assert!(result.ok);
+        let data = result.data.as_ref().unwrap();
+        assert!(data["content"]
             .as_str()
             .unwrap()
             .contains("Reference Content"));

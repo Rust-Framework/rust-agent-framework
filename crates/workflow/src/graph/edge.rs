@@ -34,6 +34,8 @@ pub struct DirectEdgeData {
     pub label: Option<String>,
     #[allow(clippy::type_complexity)]
     pub condition: Option<std::sync::Arc<dyn IEdgeCondition>>,
+    /// 显式标记为循环回边 — 图校验允许此边形成环
+    pub is_loopback: bool,
 }
 
 #[derive(Debug, Clone)]

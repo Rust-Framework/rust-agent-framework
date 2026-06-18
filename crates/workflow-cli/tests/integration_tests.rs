@@ -238,7 +238,7 @@ async fn test_workflow_engine_checkpoint_lifecycle() {
     let session: Arc<dyn ISession> = Arc::new(AgentSession::with_id("cp-test"));
 
     let (mut events, _outputs) = engine
-        .run(Box::new("test message".to_string()), Some(session))
+        .run(Arc::new("test message".to_string()), Some(session))
         .await
         .unwrap();
 

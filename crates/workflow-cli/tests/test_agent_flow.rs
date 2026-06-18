@@ -16,7 +16,7 @@ use rust_agent_core::{
     IChatClient, ITool, ModelMetadata, Result,
 };
 use rust_agent_framework::AgentBuilder;
-use rust_agent_workflow::orchestrations::{HandoffWorkflow, WorkflowAsAgent};
+use rust_agent_workflow::orchestrations::{HandoffWorkflowBuilder, WorkflowAsAgent};
 
 // ============================================================
 // Mock 基础设施
@@ -119,10 +119,10 @@ async fn test_workflow_as_agent_produces_ia_agent_facade() {
     let writer = mock_agent("writer", "You are a writer.", "写作专家");
     let triage = mock_agent("triage", "Route requests.", "路由专家");
 
-    let workflow = HandoffWorkflow::new()
+    let workflow = HandoffWorkflowBuilder::new()
         .triage(triage)
-        .agent(coder.clone())
-        .agent(writer.clone())
+        .add_agent(coder.clone())
+        .add_agent(writer.clone())
         .build()
         .expect("Should build workflow");
 
@@ -158,10 +158,10 @@ async fn test_sub_agent_independent_streaming() {
     let writer = mock_agent("writer", "You are a writer.", "写作专家");
     let triage = mock_agent("triage", "Route requests.", "路由专家");
 
-    let workflow = HandoffWorkflow::new()
+    let workflow = HandoffWorkflowBuilder::new()
         .triage(triage)
-        .agent(coder.clone())
-        .agent(writer.clone())
+        .add_agent(coder.clone())
+        .add_agent(writer.clone())
         .build()
         .expect("Should build workflow");
 
@@ -259,10 +259,10 @@ async fn test_parent_triage_routing_to_sub_agent_with_streaming() {
         .unwrap();
     let writer_id = writer.id().clone();
 
-    let workflow = HandoffWorkflow::new()
+    let workflow = HandoffWorkflowBuilder::new()
         .triage(triage)
-        .agent(coder)
-        .agent(writer)
+        .add_agent(coder)
+        .add_agent(writer)
         .build()
         .expect("Should build workflow");
 
@@ -379,10 +379,10 @@ async fn test_workflow_agent_reset_recursively() {
     let writer = mock_agent("writer", "writer instructions", "writer");
     let triage = mock_agent("triage", "triage instructions", "triage");
 
-    let workflow = HandoffWorkflow::new()
+    let workflow = HandoffWorkflowBuilder::new()
         .triage(triage.clone())
-        .agent(coder.clone())
-        .agent(writer.clone())
+        .add_agent(coder.clone())
+        .add_agent(writer.clone())
         .build()
         .unwrap();
 

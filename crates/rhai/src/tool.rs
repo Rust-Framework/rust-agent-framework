@@ -169,7 +169,9 @@ mod tests {
         let rt = TokioRuntime::new().unwrap();
         let result = rt.block_on(tool.execute(serde_json::json!({"x": 3, "y": 4})));
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "7");
+        let tr = result.unwrap();
+        assert!(tr.ok);
+        assert_eq!(tr.data, Some(serde_json::json!(7)));
     }
 
     #[test]
@@ -196,9 +198,11 @@ mod tests {
             ]
         })));
         assert!(result.is_ok(), "error: {:?}", result);
-        let val: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(val["name"], "order_1");
-        assert_eq!(val["total"], 60);
-        assert_eq!(val["count"], 3);
+        let tr = result.unwrap();
+        assert!(tr.ok);
+        let data = tr.data.as_ref().unwrap();
+        assert_eq!(data["name"], "order_1");
+        assert_eq!(data["total"], 60);
+        assert_eq!(data["count"], 3);
     }
 }

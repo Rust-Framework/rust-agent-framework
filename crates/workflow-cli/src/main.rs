@@ -27,7 +27,7 @@ use rust_agent_framework::{
     tools::ReadFile,
 };
 use rust_agent_workflow::orchestrations::{
-    SequentialWorkflow, HandoffWorkflow, ConcurrentWorkflow,
+    SequentialWorkflow, HandoffWorkflowBuilder, ConcurrentWorkflow,
 };
 
 // ============================================================
@@ -135,10 +135,11 @@ async fn scenario_5_handoff_routing() -> Result<()> {
         .instructions("你是任务路由器，分析用户请求并选择最合适的专家。只回复专家名称。")
         .build()?;
 
-    let workflow = HandoffWorkflow::new()
+    // HandoffWorkflowBuilder::new() returns HandoffWorkflowBuilder
+    let workflow = HandoffWorkflowBuilder::new()
         .triage(triage)
-        .agent(coder)
-        .agent(writer)
+        .add_agent(coder)
+        .add_agent(writer)
         .build()?;
 
     // ── as_agent() → IAgent 统一门面 ──
@@ -202,10 +203,12 @@ async fn scenario_6_sequential_multi_agent() -> Result<()> {
         .instructions("你是总结专家。将研究结果总结为一句话。用中文回复。")
         .build()?;
 
-    let pattern = SequentialWorkflow::from_agents(vec![researcher, summarizer]);
+    // from_agents now returns Result<SequentialWorkflow>
+    let pattern = SequentialWorkflow::from_agents(vec![researcher, summarizer])?;
     let session = Arc::new(AgentSession::with_id("seq-test"));
 
-    let stream = pattern.run(
+    // Use run_agent() for backward-compatible single-stream output
+    let stream = pattern.run_agent(
         vec![ChatMessage::user("分析 AI 在医疗领域的应用前景")],
         Some(session),
         None,
@@ -250,10 +253,10 @@ async fn scenario_7_concurrent_multi_agent() -> Result<()> {
         .instructions("你用一句话从商业角度评价 AI 发展。用中文。")
         .build()?;
 
-    let pattern = ConcurrentWorkflow::from_agents(vec![a1, a2]);
+    let pattern = ConcurrentWorkflow::from_agents(vec![a1, a2])?;
     let session = Arc::new(AgentSession::with_id("concurrent-test"));
 
-    let stream = pattern.run(
+    let stream = pattern.run_agent(
         vec![ChatMessage::user("评价 AI")],
         Some(session),
         None,
@@ -320,10 +323,10 @@ async fn scenario_8_sub_agent_handoff_flow() -> Result<()> {
         .instructions("你是任务路由器，分析用户请求。只回复 code-expert 或 doc-expert。")
         .build()?;
 
-    let workflow = HandoffWorkflow::new()
+    let workflow = HandoffWorkflowBuilder::new()
         .triage(triage)
-        .agent(coder)
-        .agent(writer)
+        .add_agent(coder)
+        .add_agent(writer)
         .build()?;
 
     // ── Step 1: as_agent() 获取统一门面 ──
@@ -433,7 +436,7 @@ async fn scenario_2_workflow_engine_checkpoint() -> Result<()> {
     let session: Arc<dyn ISession> = Arc::new(AgentSession::with_id("workflow-test"));
 
     let (mut events, _outputs) = engine
-        .run(Box::new("AI 芯片市场趋势".to_string()), Some(session))
+        .run(Arc::new("AI 芯片市场趋势".to_string()), Some(session))
         .await?;
 
     let mut event_count = 0;
@@ -492,7 +495,7 @@ async fn scenario_4_tool_call_pipeline() -> Result<()> {
     let agent: Arc<dyn rust_agent_core::IAgent> = AgentBuilder::new("tool-agent")
         .chat_client(client)
         .instructions("你是文件分析助手。用户要求读文件时使用 read_file 工具。")
-        .with_tool(ReadFile::default())
+        .with_tool(ReadFile { scope: None })
         .max_tool_rounds(3)
         .build()?;
 

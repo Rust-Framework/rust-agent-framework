@@ -225,6 +225,7 @@ fn test_edge_id_equality() {
         sink_id: "b".into(),
         label: None,
         condition: None,
+        is_loopback: false,
     });
     let id2 = Edge::Direct(DirectEdgeData {
         edge_id: EdgeId::new("e1"),
@@ -232,6 +233,7 @@ fn test_edge_id_equality() {
         sink_id: "d".into(),
         label: None,
         condition: None,
+        is_loopback: false,
     });
     assert_eq!(id1.edge_id(), id2.edge_id());
 }
@@ -246,6 +248,7 @@ fn test_edge_source_sink_ids() {
         sink_id: "dst".into(),
         label: None,
         condition: None,
+        is_loopback: false,
     });
     assert_eq!(edge.source_ids(), vec!["src"]);
     assert_eq!(edge.sink_ids(), vec!["dst"]);
