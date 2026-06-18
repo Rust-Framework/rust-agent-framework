@@ -13,6 +13,7 @@ pub mod stream;
 pub mod token_counter;
 pub mod tool;
 pub mod types;
+pub mod workspace;
 
 // Re-export interfaces
 pub use agent::IAgent;
@@ -29,7 +30,8 @@ pub use session::{AgentSession, ISession, ProviderState, ProviderStateStore, Ses
 pub use session_store::ISessionStore;
 pub use stream::{BoxStream, collect_agent_response};
 pub use token_counter::ITokenCounter;
-pub use tool::{ApprovalRequiredTool, ITool, ToolApprovalResponse, ToolRegistry};
+pub use tool::{ApprovalRequiredTool, AsAny, ITool, ToolApprovalResponse, ToolRegistry, ToolResult};
+pub use workspace::{IScopeTool, ScopePolicy, WorkspaceScope};
 
 // Re-export core types
 pub use error::{AgentError, Result};

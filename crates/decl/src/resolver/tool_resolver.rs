@@ -102,17 +102,17 @@ fn resolve_function(
 ) -> crate::Result<Arc<dyn ITool>> {
     // Map function names to built-in framework tools
     let tool: Arc<dyn ITool> = match name {
-        "read_file" => Arc::new(ReadFile::new(Path::new("."))),
-        "write_file" => Arc::new(WriteFile::new(Path::new("."))),
-        "edit_file" => Arc::new(EditFile::new(Path::new("."))),
-        "list_files" => Arc::new(ListFiles::new(Path::new("."))),
-        "inspect_file" => Arc::new(InspectFile::new(Path::new("."))),
-        "make_directory" => Arc::new(MakeDirectory::new(Path::new("."))),
-        "remove_path" => Arc::new(RemovePath::new(Path::new("."))),
-        "move_file" => Arc::new(MoveFile::new(Path::new("."))),
-        "find_files" => Arc::new(FindFiles::new(Path::new("."))),
-        "search_file" => Arc::new(SearchFile::new(Path::new("."))),
-        "run_command" => Arc::new(RunCommand::new(Path::new("."))),
+        "read_file" => Arc::new(ReadFile { scope: None }),
+        "write_file" => Arc::new(WriteFile { scope: None }),
+        "edit_file" => Arc::new(EditFile { scope: None }),
+        "list_files" => Arc::new(ListFiles { scope: None }),
+        "inspect_file" => Arc::new(InspectFile { scope: None }),
+        "make_directory" => Arc::new(MakeDirectory { scope: None }),
+        "remove_path" => Arc::new(RemovePath { scope: None }),
+        "move_file" => Arc::new(MoveFile { scope: None }),
+        "find_files" => Arc::new(FindFiles { scope: None }),
+        "search_file" => Arc::new(SearchFile { scope: None }),
+        "run_command" => Arc::new(RunCommand { scope: None, timeout_secs: None }),
         "web_search" => Arc::new(WebSearch),
         "web_fetch" => Arc::new(WebFetch),
         other => {

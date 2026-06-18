@@ -312,8 +312,13 @@ impl IChatClient for FunctionInvokingChatClient {
                                             .find(|t| t.name() == tc.name)
                                         {
                                             Some(tool) => match tool.execute(args).await {
-                                                Ok(output) => output,
-                                                Err(e) => format!("Error: {}", e),
+                                                Ok(output) => serde_json::to_string(&output)
+                                                    .unwrap_or_else(|e| format!(r#"{{"ok":false,"error":"serialize: {}"}}"#, e)),
+                                                Err(e) => serde_json::json!({
+                                                    "ok": false,
+                                                    "error": format!("Framework error: {}", e),
+                                                    "data": null
+                                                }).to_string(),
                                             },
                                             None => {
                                                 format!("Tool '{}' not found", tc.name)
@@ -727,19 +732,18 @@ impl IChatClient for FunctionInvokingChatClient {
                                         match tools.iter().find(|t| t.name() == tc.name) {
                                             Some(tool) => match tool.execute(args_value).await {
                                                 Ok(output) => {
-                                                    tracing::trace!(tool_name = %tc.name, call_id = %tc.id, has_error = false, output_len = output.len(), "Tool execution succeeded");
-                                                    ToolCalledContent { meta, call_id: tc.id.clone(), result: Some(output), error: None }
+                                                    let output_str = serde_json::to_string(&output)
+                                                        .unwrap_or_else(|e| format!(r#"{{"ok":false,"error":"serialize: {}"}}"#, e));
+                                                    tracing::trace!(tool_name = %tc.name, call_id = %tc.id, has_error = !output.ok, output_len = output_str.len(), "Tool execution succeeded");
+                                                    ToolCalledContent { meta, call_id: tc.id.clone(), result: Some(output_str), error: None }
                                                 }
                                                 Err(e) => {
                                                     tracing::warn!(tool_name = %tc.name, call_id = %tc.id, error = %e, "Tool execution failed");
-                                                    let schema = tool.parameters();
-                                                    let msg = format!(
-                                                        "Tool '{}' execution failed: {}\n\
-                                                         You called with arguments: {}\n\
-                                                         Expected schema: {}\n\
-                                                         Please fix your arguments and retry.",
-                                                        tc.name, e, tc.arguments, schema
-                                                    );
+                                                    let msg = serde_json::json!({
+                                                        "ok": false,
+                                                        "error": format!("Framework error: {}", e),
+                                                        "data": null
+                                                    }).to_string();
                                                     ToolCalledContent { meta, call_id: tc.id.clone(), result: None, error: Some(msg) }
                                                 }
                                             },
@@ -912,9 +916,9 @@ mod tests {
         fn parameters(&self) -> serde_json::Value {
             serde_json::json!({"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]})
         }
-        async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
+        async fn execute(&self, arguments: serde_json::Value) -> Result<rust_agent_core::ToolResult> {
             let msg = arguments.get("message").and_then(|v| v.as_str()).unwrap_or("(no message)");
-            Ok(format!("ECHO: {}", msg))
+            Ok(rust_agent_core::ToolResult::success(serde_json::json!({"echo": msg})))
         }
     }
 
@@ -931,9 +935,9 @@ mod tests {
         fn name(&self) -> &str { "count" }
         fn description(&self) -> &str { "Returns the current count" }
         fn parameters(&self) -> serde_json::Value { serde_json::json!({"type": "object", "properties": {}}) }
-        async fn execute(&self, _arguments: serde_json::Value) -> Result<String> {
+        async fn execute(&self, _arguments: serde_json::Value) -> Result<rust_agent_core::ToolResult> {
             let val = 1 + self.counter.fetch_add(1, Ordering::Relaxed);
-            Ok(val.to_string())
+            Ok(rust_agent_core::ToolResult::success(serde_json::json!({"count": val})))
         }
     }
 

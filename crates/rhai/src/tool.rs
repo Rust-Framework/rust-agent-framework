@@ -120,7 +120,7 @@ impl ITool for RhaiTool {
         self.parameters.clone()
     }
 
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
+    async fn execute(&self, arguments: serde_json::Value) -> Result<rust_agent_core::ToolResult> {
         let mut runtime = self.runtime.lock();
 
         // 将 arguments 注入为 args 变量
@@ -129,8 +129,8 @@ impl ITool for RhaiTool {
         // 执行脚本
         let result = runtime.run()?;
 
-        // 结果转为 JSON 字符串
-        Ok(serde_json::to_string(&result).unwrap_or_else(|_| "null".to_string()))
+        // 结果封装为 ToolResult
+        Ok(rust_agent_core::ToolResult::success(result))
     }
 }
 

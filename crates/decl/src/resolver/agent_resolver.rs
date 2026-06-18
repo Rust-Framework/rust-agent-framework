@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rust_agent_core::{IAgent, IChatClient};
+use rust_agent_core::{IAgent, IChatClient, ITool};
 use rust_agent_framework::AgentBuilder;
 
 use crate::definition::{AgentDefinition, AgentKindData};
@@ -151,12 +151,10 @@ impl ITool for ToolWrapper {
         self.0.parameters()
     }
 
-    async fn execute(&self, arguments: serde_json::Value) -> rust_agent_core::Result<String> {
+    async fn execute(&self, arguments: serde_json::Value) -> rust_agent_core::Result<rust_agent_core::ToolResult> {
         self.0.execute(arguments).await
     }
 }
-
-use rust_agent_core::ITool;
 
 // ── Convenience Functions ──
 

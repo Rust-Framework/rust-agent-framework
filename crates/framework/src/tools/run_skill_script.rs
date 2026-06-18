@@ -1,109 +1,47 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use rust_agent_core::{ITool, Result};
+use rust_agent_core::ToolResult;
+use rust_agent_macros::tool;
 
 use crate::context_providers::agent_skill::AgentSkill;
 use crate::context_providers::script_runner::AgentSkillScriptRunner;
 
-/// 从技能的 scripts/ 目录执行脚本。
-///
-/// 包含路径遍历保护：脚本路径会被规范化并验证是否仍在技能根目录内。
+#[tool(description = "Execute a script from a skill's scripts/ directory. Use this to run validation, analysis, or automation scripts bundled with a skill.")]
 pub struct RunSkillScriptTool {
-    skills: Arc<Vec<AgentSkill>>,
-    runner: Option<Arc<dyn AgentSkillScriptRunner>>,
+    pub skills: Arc<Vec<AgentSkill>>,
+    pub runner: Option<Arc<dyn AgentSkillScriptRunner>>,
 }
 
 impl RunSkillScriptTool {
-    pub fn new(
-        skills: Arc<Vec<AgentSkill>>,
-        runner: Option<Arc<dyn AgentSkillScriptRunner>>,
-    ) -> Self {
-        Self { skills, runner }
-    }
-}
-
-#[async_trait]
-impl ITool for RunSkillScriptTool {
-    fn name(&self) -> &str {
-        "run_skill_script"
-    }
-
-    fn description(&self) -> &str {
-        "Execute a script from a skill's scripts/ directory. Use this to run validation, analysis, or automation scripts bundled with a skill."
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "skill_name": {
-                    "type": "string",
-                    "description": "The name of the skill"
-                },
-                "script_path": {
-                    "type": "string",
-                    "description": "Relative path to the script file (e.g., 'scripts/validate.py')"
-                },
-                "args": {
-                    "type": "array",
-                    "items": { "type": "string" },
-                    "description": "Optional command-line arguments to pass to the script"
-                },
-                "timeout_secs": {
-                    "type": "integer",
-                    "description": "Timeout in seconds for the script (optional; defaults to 30). Increase for long-running scripts."
-                }
-            },
-            "required": ["skill_name", "script_path"]
-        })
-    }
-
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
-        let skill_name = arguments["skill_name"]
-            .as_str()
-            .ok_or_else(|| {
-                rust_agent_core::AgentError::ToolError(
-                    "Missing 'skill_name' argument".into(),
-                )
-            })?;
-        let script_path = arguments["script_path"]
-            .as_str()
-            .ok_or_else(|| {
-                rust_agent_core::AgentError::ToolError(
-                    "Missing 'script_path' argument".into(),
-                )
-            })?;
-
-        let skill = self.skills.iter().find(|s| s.metadata.name == skill_name).ok_or_else(|| {
-            rust_agent_core::AgentError::ToolError(format!(
-                "Skill '{}' not found",
-                skill_name
-            ))
+    async fn call(
+        &self,
+        arguments: serde_json::Value,
+    ) -> rust_agent_core::Result<ToolResult> {
+        let skill_name = arguments["skill_name"].as_str().ok_or_else(|| {
+            rust_agent_core::AgentError::ToolError("Missing 'skill_name' argument".into())
+        })?;
+        let script_path = arguments["script_path"].as_str().ok_or_else(|| {
+            rust_agent_core::AgentError::ToolError("Missing 'script_path' argument".into())
         })?;
 
-        let root = skill.root_dir.as_ref().ok_or_else(|| {
-            rust_agent_core::AgentError::ConfigError(
-                "Skill has no root_dir — script execution not supported for dynamic skills".into(),
-            )
-        })?;
+        let args: Vec<String> = arguments["args"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
 
-        let full_path = root.join(script_path);
+        let timeout_secs = arguments["timeout_secs"].as_u64();
 
-        // ── Path-traversal protection (FIX: previously missing) ──
-        let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-        let canonical_path = full_path.canonicalize().unwrap_or_else(|_| full_path.clone());
-        if !canonical_path.starts_with(&canonical_root) {
-            return Err(rust_agent_core::AgentError::ToolError(
-                "Path traversal denied — script path escapes skill directory".into(),
-            ));
-        }
-
-        let script_args = if let Some(arr) = arguments.get("args").and_then(|v| v.as_array()) {
-            Some(arr.iter().filter_map(|v| v.as_str().map(String::from)).collect::<Vec<_>>())
-        } else {
-            None
-        };
+        let skill = self
+            .skills
+            .iter()
+            .find(|s| s.metadata.name == skill_name)
+            .ok_or_else(|| {
+                rust_agent_core::AgentError::ToolError(format!("Skill '{}' not found", skill_name))
+            })?;
 
         let runner = self.runner.as_ref().ok_or_else(|| {
             rust_agent_core::AgentError::ToolError(
@@ -111,20 +49,35 @@ impl ITool for RunSkillScriptTool {
             )
         })?;
 
-        let timeout_secs = arguments
-            .get("timeout_secs")
-            .and_then(|v| v.as_u64());
+        // Skill's scripts are in `<skill_root>/scripts/`
+        let skill_dir = skill.root_dir.as_ref().ok_or_else(|| {
+            rust_agent_core::AgentError::ToolError(
+                "Skill has no root directory (dynamically created skills don't support scripts)".into(),
+            )
+        })?;
+        let full_path = skill_dir.join("scripts").join(script_path);
 
-        let output = runner
-            .run(skill_name, &full_path, script_args, timeout_secs)
-            .await?;
-        Ok(serde_json::json!({
-            "ok": true,
-            "data": {
+        // Path traversal guard: canonicalize and verify it's under skill dir
+        let canonical = full_path.canonicalize().map_err(|e| {
+            rust_agent_core::AgentError::ToolError(format!(
+                "Script path resolution failed: {}",
+                e
+            ))
+        })?;
+        let canonical_root = skill_dir.canonicalize().unwrap_or_else(|_| skill_dir.clone());
+        if !canonical.starts_with(&canonical_root) {
+            return Ok(ToolResult::error("Script path traversal denied"));
+        }
+
+        match runner
+            .run(skill_name, &canonical, Some(args), timeout_secs)
+            .await {
+            Ok(output) => Ok(ToolResult::success(serde_json::json!({
                 "skill_name": skill_name,
                 "script_path": script_path,
                 "output": output,
-            }
-        }).to_string())
+            }))),
+            Err(e) => Ok(ToolResult::error(format!("Script execution failed: {}", e))),
+        }
     }
 }

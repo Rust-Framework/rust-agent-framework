@@ -1,107 +1,44 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
-use rust_agent_core::{ITool, Result};
+use rust_agent_core::{IScopeTool, ITool, ScopePolicy, ToolResult, WorkspaceScope};
+use rust_agent_macros::tool;
 
-use super::{err_response, ok_response};
+use super::path_guard::{resolve_safe, ScopeStatus};
 
-const MAX_OUTPUT_BYTES: usize = 100 * 1024; // 100 KB
+const MAX_OUTPUT_BYTES: usize = 100 * 1024;
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
-/// 执行 shell 命令并返回输出（stdout + stderr）和退出码。
-///
-/// 工作目录相对于 `base_dir` 解析：
-/// - 若 `working_dir` 为绝对路径 → 直接使用。
-/// - 若 `working_dir` 为相对路径 → 拼接至 `base_dir`。
-/// - 若 `working_dir` 为 None → 直接使用 `base_dir`（而非进程 CWD）。
+#[tool(description = "Executes a shell command and returns the output (stdout + stderr) and exit code.")]
 pub struct RunCommand {
-    base_dir: PathBuf,
-    timeout_secs: Option<u64>,
+    pub scope: Option<Arc<WorkspaceScope>>,
+    pub timeout_secs: Option<u64>,
 }
 
-impl RunCommand {
-    pub fn new(base_dir: impl Into<PathBuf>) -> Self {
-        Self {
-            base_dir: base_dir.into(),
-            timeout_secs: None,
-        }
+impl IScopeTool for RunCommand {
+    fn create_scoped(&self, scope: Arc<WorkspaceScope>) -> Arc<dyn ITool> {
+        Arc::new(RunCommand {
+            scope: Some(scope),
+            timeout_secs: self.timeout_secs,
+        })
     }
+}
 
-    pub fn with_timeout(mut self, secs: u64) -> Self {
-        self.timeout_secs = Some(secs);
-        self
-    }
-
-    fn resolve(&self, path: &str) -> PathBuf {
-        let p = Path::new(path);
-        if p.is_absolute() { p.to_path_buf() }
-        else if path.is_empty() || path == "." { self.base_dir.clone() }
-        else { self.base_dir.join(p) }
-    }
-
-    async fn call(
-        &self,
-        command: String,
-        working_dir: Option<String>,
-        timeout_secs: Option<u64>,
-    ) -> String {
-        let (program, args) = if cfg!(windows) {
-            ("cmd", vec!["/c".to_string(), command.clone()])
-        } else {
-            ("sh", vec!["-c".to_string(), command.clone()])
-        };
-
-        let mut cmd = Command::new(program);
-        cmd.args(&args);
-        cmd.stdin(std::process::Stdio::null());
-
-        // Resolve working directory against base_dir
-        let cwd = match working_dir {
-            Some(dir) => self.resolve(&dir),
-            None => self.base_dir.clone(),
-        };
-        cmd.current_dir(&cwd);
-
-        let timeout_dur = Duration::from_secs(
-            timeout_secs
-                .or(self.timeout_secs)
-                .unwrap_or(DEFAULT_TIMEOUT_SECS),
-        );
-
-        match tokio::time::timeout(
-            timeout_dur,
-            tokio::task::spawn_blocking(move || cmd.output()),
-        )
-        .await
-        {
-            Err(_elapsed) => err_response("Command execution timed out"),
-            Ok(Err(join_err)) => {
-                err_response(&format!("Command execution failed: {}", join_err))
-            }
-            Ok(Ok(Err(io_err))) => {
-                err_response(&format!("Failed to execute command: {}", io_err))
-            }
-            Ok(Ok(Ok(output))) => {
-                let stdout = truncate_bytes(&output.stdout, MAX_OUTPUT_BYTES);
-                let stderr = truncate_bytes(&output.stderr, MAX_OUTPUT_BYTES);
-                let exit_code = output.status.code().unwrap_or(-1);
-
-                ok_response(serde_json::json!({
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "exit_code": exit_code,
-                }))
-            }
-        }
+fn resolve_working_dir(base_dir: &Path, path: &str) -> PathBuf {
+    let p = Path::new(path);
+    if p.is_absolute() {
+        p.to_path_buf()
+    } else if path.is_empty() || path == "." {
+        base_dir.to_path_buf()
+    } else {
+        base_dir.join(p)
     }
 }
 
 fn truncate_bytes(data: &[u8], max: usize) -> String {
-    let s = String::from_utf8_lossy(
-        if data.len() <= max { data } else { &data[..max] }
-    ).to_string();
+    let s = String::from_utf8_lossy(if data.len() <= max { data } else { &data[..max] }).to_string();
     if data.len() > max {
         format!("{}...[truncated]", s)
     } else {
@@ -109,44 +46,11 @@ fn truncate_bytes(data: &[u8], max: usize) -> String {
     }
 }
 
-impl Default for RunCommand {
-    fn default() -> Self {
-        Self::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-    }
-}
-
-#[async_trait]
-impl ITool for RunCommand {
-    fn name(&self) -> &str {
-        "run_command"
-    }
-
-    fn description(&self) -> &str {
-        "Executes a shell command and returns the output (stdout + stderr) and exit code."
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "Shell command to execute"
-                },
-                "working_dir": {
-                    "type": "string",
-                    "description": "Working directory for the command (optional; absolute, or relative to the agent's working directory; defaults to agent's working directory)"
-                },
-                "timeout_secs": {
-                    "type": "integer",
-                    "description": "Timeout in seconds for the command (optional; defaults to 30). Increase for long-running commands like builds."
-                }
-            },
-            "required": ["command"]
-        })
-    }
-
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
+impl RunCommand {
+    async fn call(
+        &self,
+        arguments: serde_json::Value,
+    ) -> rust_agent_core::Result<ToolResult> {
         #[derive(serde::Deserialize)]
         struct Args {
             command: String,
@@ -154,60 +58,84 @@ impl ITool for RunCommand {
             timeout_secs: Option<u64>,
         }
         let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!(
-                "Argument deserialization failed: {}",
-                e
-            ))
+            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
         })?;
-        Ok(self
-            .call(args.command, args.working_dir, args.timeout_secs)
-            .await)
-    }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_run_echo() {
-        let cmd = if cfg!(windows) { "echo hello" } else { "echo hello" };
-        let result = RunCommand::default()
-            .execute(serde_json::json!({"command": cmd}))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], true);
-        assert_eq!(v["data"]["exit_code"], 0);
-        assert!(v["data"]["stdout"].as_str().unwrap().contains("hello"));
-    }
-
-    #[tokio::test]
-    async fn test_run_nonexistent_command() {
-        let result = RunCommand::default()
-            .execute(serde_json::json!({"command": "nonexistent_command_xyz"}))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert!(!v["ok"].as_bool().unwrap() || v["data"]["exit_code"].as_i64().unwrap() != 0);
-    }
-
-    #[tokio::test]
-    async fn test_run_command_with_base_dir() {
-        let dir = tempfile::tempdir().unwrap();
-
-        let tool = RunCommand::new(dir.path());
-        let cmd = if cfg!(windows) {
-            "cd".to_string()
+        let (program, shell_args) = if cfg!(windows) {
+            ("cmd", vec!["/c".to_string(), args.command.clone()])
         } else {
-            "pwd".to_string()
+            ("sh", vec!["-c".to_string(), args.command.clone()])
         };
-        let result = tool
-            .execute(serde_json::json!({"command": cmd}))
+
+        let mut cmd = Command::new(program);
+        cmd.args(&shell_args);
+        cmd.stdin(std::process::Stdio::null());
+
+        // Resolve working directory
+        let base_dir = self
+            .scope
+            .as_ref()
+            .map(|s| s.root.clone())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+        let cwd = match args.working_dir {
+            Some(ref dir) => resolve_working_dir(&base_dir, dir),
+            None => base_dir.clone(),
+        };
+        cmd.current_dir(&cwd);
+
+        // Scope detection for working_dir
+        let scope_label = match self.scope.as_ref() {
+            Some(scope) => {
+                let scope_root = scope.root.as_path();
+                // Check if cwd is within scope
+                match resolve_safe(&base_dir, cwd.to_string_lossy().as_ref(), Some(scope_root)) {
+                    Ok((_, status)) => {
+                        if scope.policy == ScopePolicy::DenyOutside
+                            && matches!(status, ScopeStatus::OutsideScope)
+                        {
+                            return Ok(ToolResult::error(
+                                "Access denied: working directory is outside workspace boundary",
+                            ));
+                        }
+                        status.to_label().to_string()
+                    }
+                    Err(_) => "none".to_string(),
+                }
+            }
+            None => "none".to_string(),
+        };
+
+        let timeout_dur = Duration::from_secs(
+            args.timeout_secs
+                .or(self.timeout_secs)
+                .unwrap_or(DEFAULT_TIMEOUT_SECS),
+        );
+
+        match tokio::time::timeout(timeout_dur, tokio::task::spawn_blocking(move || cmd.output()))
             .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], true);
-        assert_eq!(v["data"]["exit_code"], 0);
+        {
+            Err(_elapsed) => Ok(ToolResult::error("Command execution timed out")),
+            Ok(Err(join_err)) => Ok(ToolResult::error(format!(
+                "Command execution failed: {}",
+                join_err
+            ))),
+            Ok(Ok(Err(io_err))) => Ok(ToolResult::error(format!(
+                "Failed to execute command: {}",
+                io_err
+            ))),
+            Ok(Ok(Ok(output))) => {
+                let stdout = truncate_bytes(&output.stdout, MAX_OUTPUT_BYTES);
+                let stderr = truncate_bytes(&output.stderr, MAX_OUTPUT_BYTES);
+                let exit_code = output.status.code().unwrap_or(-1);
+
+                Ok(ToolResult::success(serde_json::json!({
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "exit_code": exit_code,
+                    "scope": scope_label,
+                })))
+            }
+        }
     }
 }

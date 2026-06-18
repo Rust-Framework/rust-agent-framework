@@ -8,7 +8,7 @@ use rustyline::DefaultEditor;
 
 use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
 use rust_agent_core::{
-    AgentRunOptions, AgentSession, ChatMessage, Content, ISession,
+    AgentRunOptions, AgentSession, ChatMessage, Content, ISession, ToolResult,
 };
 use rust_agent_framework::memory::SkillMemoryContextProvider;
 use rust_agent_framework::memory::scan_index_gaps;
@@ -21,13 +21,13 @@ const DEEPSEEK_API_KEY: &str = "sk-b8136a230aea467e8cdfe4649cab2d3e";
 
 // ── Tool definitions ───────────────────────────────────────────
 #[tool(description = "Echoes back the input text")]
-async fn echo(#[param(desc = "The text to echo")] text: String) -> String {
-    text
+async fn echo(#[param(desc = "The text to echo")] text: String) -> ToolResult {
+    ToolResult::success(serde_json::json!({"echo": text}))
 }
 
 #[tool(description = "Adds two numbers together")]
-async fn add(#[param(desc = "First number")] a: i64, #[param(desc = "Second number")] b: i64) -> String {
-    format!("{}", a + b)
+async fn add(#[param(desc = "First number")] a: i64, #[param(desc = "Second number")] b: i64) -> ToolResult {
+    ToolResult::success(serde_json::json!({"result": a + b}))
 }
 
 // ── Commands ───────────────────────────────────────────────────

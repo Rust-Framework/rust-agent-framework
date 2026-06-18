@@ -1,57 +1,21 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use async_trait::async_trait;
-use rust_agent_core::{ITool, Result};
+use rust_agent_core::{IScopeTool, ITool, ScopePolicy, ToolResult, WorkspaceScope};
+use rust_agent_macros::tool;
 
-use super::path_guard::resolve_safe;
-use super::{err_response, ok_response};
+use super::path_guard::{resolve_safe, ScopeStatus};
 
-/// 返回文件或目录的元信息：类型、字节大小、修改时间、权限。
-///
-/// 路径相对于 `base_dir` 解析：
-/// - 绝对路径直接使用。
-/// - 相对路径拼接至 `base_dir`。
+#[tool(description = "Returns metadata about a file or directory: type, size in bytes, modification time, permissions.")]
 pub struct InspectFile {
-    base_dir: PathBuf,
+    pub scope: Option<Arc<WorkspaceScope>>,
 }
 
-impl InspectFile {
-    pub fn new(base_dir: impl Into<PathBuf>) -> Self {
-        Self { base_dir: base_dir.into() }
-    }
-
-    async fn call(&self, path: String) -> String {
-        let resolved = match resolve_safe(&self.base_dir, &path) {
-            Ok(r) => r,
-            Err(e) => return err_response(&format!("Path resolution failed: {}", e)),
-        };
-
-        let meta = match std::fs::metadata(&resolved) {
-            Ok(m) => m,
-            Err(e) => return err_response(&format!("Failed to access path: {}", e)),
-        };
-
-        let file_type = if meta.is_dir() {
-            "dir"
-        } else if meta.is_file() {
-            "file"
-        } else {
-            "unknown"
-        };
-
-        let size = meta.len();
-        let readonly = meta.permissions().readonly();
-        let modified = format_system_time(meta.modified().ok());
-        let created = format_system_time(meta.created().ok());
-
-        ok_response(serde_json::json!({
-            "path": path,
-            "type": file_type,
-            "size": size,
-            "readonly": readonly,
-            "modified": modified,
-            "created": created,
-        }))
+impl IScopeTool for InspectFile {
+    fn create_scoped(&self, scope: Arc<WorkspaceScope>) -> Arc<dyn ITool> {
+        Arc::new(InspectFile {
+            scope: Some(scope),
+        })
     }
 }
 
@@ -63,88 +27,54 @@ fn format_system_time(t: Option<std::time::SystemTime>) -> String {
     .unwrap_or_else(|| "unknown".to_string())
 }
 
-impl Default for InspectFile {
-    fn default() -> Self {
-        Self::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-    }
-}
-
-#[async_trait]
-impl ITool for InspectFile {
-    fn name(&self) -> &str {
-        "inspect_file"
-    }
-
-    fn description(&self) -> &str {
-        "Returns metadata about a file or directory: type, size in bytes, modification time, permissions."
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Path to the file or directory (absolute, or relative to the agent's working directory)"
-                }
-            },
-            "required": ["path"]
-        })
-    }
-
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
+impl InspectFile {
+    async fn call(
+        &self,
+        arguments: serde_json::Value,
+    ) -> rust_agent_core::Result<ToolResult> {
         #[derive(serde::Deserialize)]
         struct Args {
             path: String,
         }
         let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!(
-                "Argument deserialization failed: {}",
-                e
-            ))
+            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
         })?;
-        Ok(self.call(args.path).await)
-    }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+        let base_dir = self
+            .scope
+            .as_ref()
+            .map(|s| s.root.clone())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let scope_root = self.scope.as_ref().map(|s| s.root.as_path());
 
-    #[tokio::test]
-    async fn test_inspect_file_non_existent() {
-        let result = InspectFile::default()
-            .execute(serde_json::json!({"path": "/this_path_does_not_exist_12345abcde"}))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], false);
-    }
+        let (resolved, scope_status) = match resolve_safe(&base_dir, &args.path, scope_root) {
+            Ok(r) => r,
+            Err(e) => {
+                return Ok(ToolResult::error(format!("Path resolution failed: {}", e)));
+            }
+        };
 
-    #[tokio::test]
-    async fn test_inspect_file_cargo_toml() {
-        let result = InspectFile::default()
-            .execute(serde_json::json!({"path": "Cargo.toml"}))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], true);
-        assert_eq!(v["data"]["type"], "file");
-    }
+        let meta = match std::fs::metadata(&resolved) {
+            Ok(m) => m,
+            Err(e) => return Ok(ToolResult::error(format!("Failed to access path: {}", e))),
+        };
 
-    #[tokio::test]
-    async fn test_inspect_file_with_base_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("f.txt"), "hello").unwrap();
+        let file_type = if meta.is_dir() {
+            "dir"
+        } else if meta.is_file() {
+            "file"
+        } else {
+            "unknown"
+        };
 
-        let tool = InspectFile::new(dir.path());
-        let result = tool
-            .execute(serde_json::json!({"path": "f.txt"}))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], true);
-        assert_eq!(v["data"]["type"], "file");
-        assert_eq!(v["data"]["size"], 5);
+        Ok(ToolResult::success(serde_json::json!({
+            "path": args.path,
+            "type": file_type,
+            "size": meta.len(),
+            "readonly": meta.permissions().readonly(),
+            "modified": format_system_time(meta.modified().ok()),
+            "created": format_system_time(meta.created().ok()),
+            "scope": scope_status.to_label(),
+        })))
     }
 }

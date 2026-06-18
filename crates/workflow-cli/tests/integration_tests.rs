@@ -51,10 +51,10 @@ impl ITool for MockReadFileTool {
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}}})
     }
-    async fn execute(&self, args: serde_json::Value) -> Result<String> {
+    async fn execute(&self, args: serde_json::Value) -> Result<rust_agent_core::ToolResult> {
         let _path = args.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
         self.counter.inc().await;
-        Ok("mock file content".to_string())
+        Ok(rust_agent_core::ToolResult::success(serde_json::json!({"content": "mock file content"})))
     }
 }
 

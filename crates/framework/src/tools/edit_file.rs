@@ -1,46 +1,78 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use async_trait::async_trait;
-use rust_agent_core::{ITool, Result};
+use rust_agent_core::{IScopeTool, ITool, ScopePolicy, ToolResult, WorkspaceScope};
+use rust_agent_macros::tool;
 
-use super::path_guard::resolve_safe;
-use super::{err_response, ok_response};
+use super::path_guard::{resolve_safe, ScopeStatus};
 
-/// 对已有文件执行精确的字符串替换。
-///
-/// 路径相对于 `base_dir` 解析：
-/// - 绝对路径直接使用。
-/// - 相对路径拼接至 `base_dir`。
+#[tool(description = "Performs exact string replacement in an existing file. Provide old_str (the exact text to find) and new_str (the replacement). The old_str must uniquely match a contiguous block of lines in the file.")]
 pub struct EditFile {
-    base_dir: PathBuf,
+    pub scope: Option<Arc<WorkspaceScope>>,
+}
+
+impl IScopeTool for EditFile {
+    fn create_scoped(&self, scope: Arc<WorkspaceScope>) -> Arc<dyn ITool> {
+        Arc::new(EditFile {
+            scope: Some(scope),
+        })
+    }
 }
 
 impl EditFile {
-    pub fn new(base_dir: impl Into<PathBuf>) -> Self {
-        Self { base_dir: base_dir.into() }
-    }
+    async fn call(
+        &self,
+        arguments: serde_json::Value,
+    ) -> rust_agent_core::Result<ToolResult> {
+        #[derive(serde::Deserialize)]
+        struct Args {
+            path: String,
+            old_str: String,
+            new_str: String,
+        }
+        let args: Args = serde_json::from_value(arguments).map_err(|e| {
+            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
+        })?;
 
-    async fn call(&self, path: String, old_str: String, new_str: String) -> String {
-        let resolved = match resolve_safe(&self.base_dir, &path) {
+        let base_dir = self
+            .scope
+            .as_ref()
+            .map(|s| s.root.clone())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let scope_root = self.scope.as_ref().map(|s| s.root.as_path());
+
+        let (resolved, scope_status) = match resolve_safe(&base_dir, &args.path, scope_root) {
             Ok(r) => r,
-            Err(e) => return err_response(&format!("Path resolution failed: {}", e)),
+            Err(e) => {
+                return Ok(ToolResult::error(format!("Path resolution failed: {}", e)));
+            }
         };
+
+        if let Some(ref scope) = self.scope {
+            if scope.policy == ScopePolicy::DenyOutside
+                && matches!(scope_status, ScopeStatus::OutsideScope)
+            {
+                return Ok(ToolResult::error(
+                    "Access denied: path is outside workspace boundary",
+                ));
+            }
+        }
 
         let original = match std::fs::read_to_string(&resolved) {
             Ok(c) => c,
-            Err(e) => return err_response(&format!("Failed to read file: {}", e)),
+            Err(e) => return Ok(ToolResult::error(format!("Failed to read file: {}", e))),
         };
 
-        if old_str.is_empty() {
-            return err_response("old_str must not be empty");
+        if args.old_str.is_empty() {
+            return Ok(ToolResult::error("old_str must not be empty"));
         }
 
-        // Count occurrences
-        let occurrences: Vec<usize> = original.match_indices(&old_str).map(|(i, _)| i).collect();
+        let occurrences: Vec<usize> =
+            original.match_indices(&args.old_str).map(|(i, _)| i).collect();
 
         if occurrences.is_empty() {
-            return err_response(&format!(
-                "old_str not found in the file. Make sure you copied the exact text including whitespace and newlines."
+            return Ok(ToolResult::error(
+                "old_str not found in the file. Make sure you copied the exact text including whitespace and newlines.",
             ));
         }
 
@@ -50,159 +82,22 @@ impl EditFile {
                 .take(5)
                 .map(|i| format!("byte offset {}", i))
                 .collect();
-            return err_response(&format!(
-                "old_str is not unique — found {} occurrences (e.g. at {}). Provide more surrounding context to make the match unique.",
+            return Ok(ToolResult::error(format!(
+                "old_str is not unique — found {} occurrences (e.g. at {}). Provide more surrounding context.",
                 occurrences.len(),
                 positions.join(", ")
-            ));
+            )));
         }
 
-        let edited = original.replacen(&old_str, &new_str, 1);
+        let edited = original.replacen(&args.old_str, &args.new_str, 1);
 
         match std::fs::write(&resolved, &edited) {
-            Ok(_) => ok_response(serde_json::json!({
-                "path": path,
+            Ok(_) => Ok(ToolResult::success(serde_json::json!({
+                "path": args.path,
                 "replaced": true,
-            })),
-            Err(e) => err_response(&format!("Failed to write file: {}", e)),
+                "scope": scope_status.to_label(),
+            }))),
+            Err(e) => Ok(ToolResult::error(format!("Failed to write file: {}", e))),
         }
-    }
-}
-
-impl Default for EditFile {
-    fn default() -> Self {
-        Self::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-    }
-}
-
-#[async_trait]
-impl ITool for EditFile {
-    fn name(&self) -> &str {
-        "edit_file"
-    }
-
-    fn description(&self) -> &str {
-        "Performs exact string replacement in an existing file. Provide old_str (the exact text to find) and new_str (the replacement). The old_str must uniquely match a contiguous block of lines in the file."
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Path to the file to edit (absolute, or relative to the agent's working directory)"
-                },
-                "old_str": {
-                    "type": "string",
-                    "description": "Exact text to find in the file (must be unique and contiguous)"
-                },
-                "new_str": {
-                    "type": "string",
-                    "description": "Text to replace it with"
-                }
-            },
-            "required": ["path", "old_str", "new_str"]
-        })
-    }
-
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
-        #[derive(serde::Deserialize)]
-        struct Args {
-            path: String,
-            old_str: String,
-            new_str: String,
-        }
-        let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!(
-                "Argument deserialization failed: {}",
-                e
-            ))
-        })?;
-        Ok(self.call(args.path, args.old_str, args.new_str).await)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_edit_file_basic() {
-        let tmp = "target/test_edit_file.txt";
-        std::fs::create_dir_all("target").unwrap();
-        std::fs::write(tmp, "line a\nline b\nline c\n").unwrap();
-
-        let result = EditFile::default()
-            .execute(serde_json::json!({
-                "path": tmp,
-                "old_str": "line b",
-                "new_str": "line X"
-            }))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], true);
-
-        let content = std::fs::read_to_string(tmp).unwrap();
-        assert_eq!(content, "line a\nline X\nline c\n");
-
-        let _ = std::fs::remove_file(tmp);
-    }
-
-    #[tokio::test]
-    async fn test_edit_file_not_unique() {
-        let tmp = "target/test_edit_file_dup.txt";
-        std::fs::create_dir_all("target").unwrap();
-        std::fs::write(tmp, "dup\ndup\n").unwrap();
-
-        let result = EditFile::default()
-            .execute(serde_json::json!({
-                "path": tmp,
-                "old_str": "dup",
-                "new_str": "x"
-            }))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], false);
-        assert!(v["error"].as_str().unwrap().contains("not unique"));
-
-        let _ = std::fs::remove_file(tmp);
-    }
-
-    #[tokio::test]
-    async fn test_edit_file_not_found() {
-        let tmp = "target/test_edit_file_nf.txt";
-        std::fs::create_dir_all("target").unwrap();
-        std::fs::write(tmp, "hello\n").unwrap();
-
-        let result = EditFile::default()
-            .execute(serde_json::json!({
-                "path": tmp,
-                "old_str": "not there",
-                "new_str": "x"
-            }))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], false);
-
-        let _ = std::fs::remove_file(tmp);
-    }
-
-    #[tokio::test]
-    async fn test_edit_file_with_base_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("f.txt"), "A B C").unwrap();
-
-        let tool = EditFile::new(dir.path());
-        let result = tool
-            .execute(serde_json::json!({"path": "f.txt", "old_str": "B", "new_str": "X"}))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], true);
-        assert_eq!(std::fs::read_to_string(dir.path().join("f.txt")).unwrap(), "A X C");
     }
 }

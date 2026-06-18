@@ -5,17 +5,85 @@ use std::sync::Arc;
 
 use crate::Result;
 
+// ── AsAny ────────────────────────────────────────────────────────────────
+
+/// 为 trait object 提供运行时下转型能力。
+///
+/// `ITool` 继承此 trait，使 `Arc<dyn ITool>` 可通过 `as_any()` 下转
+/// 到具体类型。`WorkspaceContextProvider` 用此检测 `IScopeTool` 实现。
+pub trait AsAny {
+    fn as_any(&self) -> &dyn std::any::Any;
+}
+
+/// 为所有 `'static` 类型自动实现 `AsAny`。
+impl<T: 'static> AsAny for T {
+    fn as_any(&self) -> &dyn std::any::Any { self }
+}
+
+// ── ToolResult ───────────────────────────────────────────────────────────
+
+/// 工具执行结果——框架级统一返回类型。
+///
+/// 所有 `ITool::execute()` 返回此结构体：
+/// - 成功：`ToolResult::success(data)`
+/// - 预期错误（如文件不存在）：`ToolResult::error("File not found")`
+/// - 框架错误（如参数反序列化失败）：`Result::Err(AgentError)`
+///
+/// 框架层（`FunctionInvokingChatClient`）统一将 `ToolResult` 序列化
+/// 为 JSON 字符串注入 LLM 对话。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolResult {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl ToolResult {
+    /// 创建成功结果。
+    pub fn success(data: impl Serialize) -> Self {
+        Self {
+            ok: true,
+            data: Some(serde_json::to_value(data).unwrap_or_default()),
+            error: None,
+        }
+    }
+
+    /// 创建工具级错误（非框架异常）。
+    pub fn error(msg: impl Into<String>) -> Self {
+        Self { ok: false, data: None, error: Some(msg.into()) }
+    }
+
+    /// 创建带结构化错误数据的错误结果（如校验失败的字段详情）。
+    pub fn error_with_data(msg: impl Into<String>, data: impl Serialize) -> Self {
+        Self {
+            ok: false,
+            data: Some(serde_json::to_value(data).unwrap_or_default()),
+            error: Some(msg.into()),
+        }
+    }
+}
+
+// ── ITool ────────────────────────────────────────────────────────────────
+
 /// 工具接口，遵循 MAF 的工具抽象。
 #[async_trait]
-pub trait ITool: Send + Sync {
+pub trait ITool: AsAny + Send + Sync {
     /// 获取工具名称
     fn name(&self) -> &str;
     /// 获取工具描述
     fn description(&self) -> &str;
     /// 获取工具参数 JSON Schema
     fn parameters(&self) -> serde_json::Value;
-    /// 执行工具并返回执行结果
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String>;
+
+    /// 执行业务逻辑。
+    ///
+    /// - `Ok(ToolResult)`：工具执行完成（含成功或工具级预期错误）
+    /// - `Err(AgentError)`：框架级错误（参数反序列化失败等）
+    ///
+    /// 框架层负责将 `ToolResult` 序列化为 JSON 字符串注入 LLM 对话。
+    async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult>;
 
     /// 运行时标记：返回 `true` 表示需要人工审批才能执行
     ///
@@ -25,6 +93,8 @@ pub trait ITool: Send + Sync {
         false
     }
 }
+
+// ── ApprovalRequiredTool ─────────────────────────────────────────────────
 
 /// 包装任意 [`ITool`]，标记为需要人工审批才能执行。
 ///
@@ -49,7 +119,6 @@ pub struct ApprovalRequiredTool {
 }
 
 impl ApprovalRequiredTool {
-    /// 创建一个需要审批的包装工具
     pub fn new(tool: Arc<dyn ITool>) -> Self {
         Self { inner: tool }
     }
@@ -65,23 +134,18 @@ impl std::fmt::Debug for ApprovalRequiredTool {
 
 #[async_trait]
 impl ITool for ApprovalRequiredTool {
-    /// 透传获取被包装工具的名称
     fn name(&self) -> &str {
         self.inner.name()
     }
-    /// 透传获取被包装工具的描述
     fn description(&self) -> &str {
         self.inner.description()
     }
-    /// 透传获取被包装工具的参数 Schema
     fn parameters(&self) -> serde_json::Value {
         self.inner.parameters()
     }
-    /// 透传执行被包装的工具
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
+    async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult> {
         self.inner.execute(arguments).await
     }
-    /// 始终返回 `true`，标记此工具需要审批
     fn requires_approval(&self) -> bool {
         true
     }
@@ -106,36 +170,28 @@ pub struct ToolRegistry {
 }
 
 impl ToolRegistry {
-    /// 创建空的工具注册表
     pub fn new() -> Self { Self { tools: HashMap::new() } }
 
-    /// 注册一个工具（按名称索引）
     pub fn register(&mut self, tool: impl ITool + 'static) {
         self.tools.insert(tool.name().to_string(), Arc::new(tool));
     }
 
-    /// 注册一个已共享（`Arc`）的工具
     pub fn register_arc(&mut self, tool: Arc<dyn ITool>) {
         self.tools.insert(tool.name().to_string(), tool);
     }
 
-    /// 按名称查找工具
     pub fn get(&self, name: &str) -> Option<&Arc<dyn ITool>> {
         self.tools.get(name)
     }
 
-    /// 获取所有已注册的工具列表
     pub fn list(&self) -> Vec<&Arc<dyn ITool>> {
         self.tools.values().collect()
     }
 
-    /// 获取已注册工具的数量
     pub fn len(&self) -> usize { self.tools.len() }
-    /// 检查是否没有注册任何工具
     pub fn is_empty(&self) -> bool { self.tools.is_empty() }
 }
 
 impl Default for ToolRegistry {
-    /// 创建空的工具注册表
     fn default() -> Self { Self::new() }
 }

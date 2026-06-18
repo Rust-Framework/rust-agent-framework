@@ -8,22 +8,25 @@ use syn::{DeriveInput, Expr, ExprLit, Lit, Meta};
 ///
 /// ```ignore
 /// #[tool(description = "Echoes back the input text")]
-/// async fn echo(#[param(desc = "Text to echo")] text: String) -> String {
-///     text
+/// async fn echo(#[param(desc = "Text to echo")] text: String) -> rust_agent_core::ToolResult {
+///     rust_agent_core::ToolResult::success(serde_json::json!({"echo": text}))
 /// }
 /// ```
 ///
 /// 生成一个实现 `ITool` 的结构体（函数名的帕斯卡命名），
 /// 自动派生 JSON schema 和参数反序列化。
 ///
-/// # 用于单元结构体
+/// # 用于结构体
 ///
 /// ```ignore
-/// #[tool(description = "My tool")]
-/// struct MyTool;
+/// #[tool(description = "Reads a file from the local filesystem")]
+/// pub struct ReadFile {
+///     scope: Option<Arc<WorkspaceScope>>,
+/// }
+/// // 需在 impl ReadFile 中手动提供 call(&self, args: Value) -> Result<ToolResult>
 /// ```
 ///
-/// 生成委托给你定义的 `call` 方法的 `ITool` 实现。
+/// 生成委托给 `self.call(arguments)` 的 `ITool` 实现。
 #[proc_macro_attribute]
 pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
     let description = parse_description(attr);
@@ -40,7 +43,7 @@ pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     syn::Error::new(
         proc_macro2::Span::call_site(),
-        "#[tool] can only be applied to async functions or unit structs",
+        "#[tool] can only be applied to async functions or structs",
     )
     .to_compile_error()
     .into()
@@ -142,7 +145,7 @@ fn expand_tool_fn(description: &str, func: syn::ItemFn) -> TokenStream {
             quote! { pub #name: #ty }
         });
 
-    // Build the call method signature: async fn call(&self, text: String) -> String
+    // Build the call method signature
     let call_params = param_idents.iter().zip(param_types.iter()).map(|(name, ty)| {
         quote! { #name: #ty }
     });
@@ -152,7 +155,6 @@ fn expand_tool_fn(description: &str, func: syn::ItemFn) -> TokenStream {
     let arg_names = &param_idents;
 
     let expanded = quote! {
-        /// Auto-generated args struct by #[tool] macro.
         #[derive(::serde::Deserialize)]
         #[allow(non_snake_case)]
         #[doc(hidden)]
@@ -160,11 +162,9 @@ fn expand_tool_fn(description: &str, func: syn::ItemFn) -> TokenStream {
             #(#arg_fields),*
         }
 
-        /// Auto-generated tool struct by #[tool] macro.
         pub struct #struct_name;
 
         impl #struct_name {
-            /// The original function logic.
             pub async fn call(&self, #(#call_params),*) #return_type #func_body
         }
 
@@ -194,13 +194,12 @@ fn expand_tool_fn(description: &str, func: syn::ItemFn) -> TokenStream {
                 schema
             }
 
-            async fn execute(&self, arguments: serde_json::Value) -> rust_agent_core::Result<String> {
+            async fn execute(&self, arguments: serde_json::Value) -> rust_agent_core::Result<rust_agent_core::ToolResult> {
                 let args: #args_struct_name = ::serde_json::from_value(arguments)
                     .map_err(|e| rust_agent_core::AgentError::ToolError(
                         format!("Argument deserialization failed: {}", e)
                     ))?;
-                let result = self.call(#(args.#arg_names),*).await;
-                Ok(result)
+                Ok(self.call(#(args.#arg_names),*).await)
             }
         }
     };
@@ -228,8 +227,8 @@ fn expand_tool_struct(description: &str, input: DeriveInput) -> TokenStream {
                 serde_json::json!({"type": "object", "properties": {}})
             }
 
-            async fn execute(&self, _arguments: serde_json::Value) -> rust_agent_core::Result<String> {
-                self.call(_arguments).await
+            async fn execute(&self, arguments: serde_json::Value) -> rust_agent_core::Result<rust_agent_core::ToolResult> {
+                self.call(arguments).await
             }
         }
     };

@@ -86,10 +86,10 @@ impl ITool for MockTool {
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({"type": "object", "properties": {}})
     }
-    async fn execute(&self, _args: serde_json::Value) -> Result<String> {
+    async fn execute(&self, _args: serde_json::Value) -> Result<rust_agent_core::ToolResult> {
         self.call_count.fetch_add(1, Ordering::Relaxed);
         tracing::debug!(tool = %self.name, count = self.call_count.load(Ordering::Relaxed), "MockTool::execute");
-        Ok(self.result.to_string())
+        Ok(rust_agent_core::ToolResult::success(serde_json::json!({"result": self.result.to_string()})))
     }
 }
 

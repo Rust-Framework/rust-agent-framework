@@ -20,13 +20,13 @@ pub(crate) fn build_fetch_config() -> rust_websearch::FetchConfig {
     config
 }
 
-#[tool(description = "Fetches content from a URL and returns it as Markdown. Uses an embedded Servo browser engine for real JavaScript execution and layout-aware content extraction. Automatically strips navigation bars, footers, cookie banners, and ads via multi-layer cleaning: heuristic line filtering, footer detection, boilerplate removal, and optional scraper-based fallback for low-quality pages. Supports Chinese encoding (GBK/GB2312/Big5) and SPA pages. Use settle_ms for JavaScript-heavy sites that need extra time to render.")]
+#[tool(description = "Fetches content from a URL and returns it as Markdown.")]
 async fn web_fetch(
     #[param(desc = "The URL to fetch")] url: String,
     #[param(desc = "Maximum content length in bytes (default: 50000)")] max_length: Option<usize>,
     #[param(desc = "Extra wait time in milliseconds after page load for SPA hydration (default: 0, max: 10000)")] settle_ms: Option<u64>,
-    #[param(desc = "Content cleaning mode: 'auto' (default, auto-detect noise), 'aggressive' (content-only), 'minimal' (whitespace only), 'raw' (no cleaning)")] clean_mode: Option<String>,
-) -> String {
+    #[param(desc = "Content cleaning mode: 'auto' (default), 'aggressive', 'minimal', 'raw'")] clean_mode: Option<String>,
+) -> rust_agent_core::ToolResult {
     let mut config = build_fetch_config();
     if let Some(max_len) = max_length {
         config.max_content_bytes = max_len.clamp(1000, 200_000);
@@ -48,9 +48,17 @@ async fn web_fetch(
                 content_len = page.content_length,
                 "web_fetch succeeded"
             );
-            let mut result = serde_json::json!({
-                "ok": true,
-                "data": {
+            let mut result = rust_agent_core::ToolResult::success(serde_json::json!({
+                "url": page.url,
+                "final_url": page.final_url,
+                "title": page.title,
+                "content": page.content,
+                "content_length": page.content_length,
+                "truncated": page.truncated,
+                "status_code": page.status_code,
+            }));
+            if page.truncated {
+                result = rust_agent_core::ToolResult::success(serde_json::json!({
                     "url": page.url,
                     "final_url": page.final_url,
                     "title": page.title,
@@ -58,60 +66,29 @@ async fn web_fetch(
                     "content_length": page.content_length,
                     "truncated": page.truncated,
                     "status_code": page.status_code,
-                }
-            });
-
-            if page.truncated {
-                result["_suggestion"] = serde_json::Value::String(
-                    "Content was truncated. Try fetching a more specific sub-page or use a smaller max_length.".into()
-                );
+                    "_suggestion": "Content was truncated. Try fetching a more specific sub-page or use a smaller max_length.",
+                }));
             }
-
-            result.to_string()
+            result
         }
         Err(e) => {
             tracing::warn!(url = %url, error = %e, "web_fetch failed");
             let error_str = format!("{e}");
             let suggestion = if error_str.contains("Timeout") || error_str.contains("timeout") {
-                format!("The page took too long to load. Try increasing settle_ms or check if the URL is correct.")
+                "The page took too long to load. Try increasing settle_ms or check if the URL is correct."
             } else if error_str.contains("Invalid URL") {
-                format!("The URL is invalid. Check the URL format and try again.")
+                "The URL is invalid. Check the URL format and try again."
             } else if error_str.contains("not allowed") || error_str.contains("SSRF") {
-                format!("The URL points to a private or reserved address that is blocked for security reasons.")
+                "The URL points to a private or reserved address that is blocked for security reasons."
             } else if error_str.contains("Connection") || error_str.contains("unreachable") {
-                format!("The URL is unreachable. Check the URL and try again.")
+                "The URL is unreachable. Check the URL and try again."
             } else {
-                format!("Fetch failed: {error_str}. Check the URL and try again, or use web_search to find alternative sources.")
+                "Fetch failed. Check the URL and try again, or use web_search to find alternative sources."
             };
-            serde_json::json!({
-                "ok": false,
-                "data": null,
-                "error": format!("Fetch failed: {error_str}"),
-                "suggestion": suggestion,
-            })
-            .to_string()
+            rust_agent_core::ToolResult::error_with_data(
+                format!("Fetch failed: {error_str}"),
+                serde_json::json!({"suggestion": suggestion}),
+            )
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rust_agent_core::ITool;
-
-    #[tokio::test]
-    async fn test_web_fetch_invalid_url() {
-        let result = WebFetch.call("".to_string(), None, None, None).await;
-        assert!(result.contains("\"ok\":false"));
-    }
-
-    #[tokio::test]
-    async fn test_web_fetch_name() {
-        assert_eq!(WebFetch.name(), "web_fetch");
-    }
-
-    #[tokio::test]
-    async fn test_web_fetch_description() {
-        assert!(!WebFetch.description().is_empty());
     }
 }

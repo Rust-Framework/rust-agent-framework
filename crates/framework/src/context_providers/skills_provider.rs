@@ -94,18 +94,22 @@ impl AgentSkillsProvider {
     // ── 内部工具创建 ──
 
     pub fn create_load_skill_tool(&self) -> Arc<dyn ITool> {
-        Arc::new(LoadSkillTool::new(Arc::new(self.skills.clone())))
+        Arc::new(LoadSkillTool {
+            skills: Arc::new(self.skills.clone()),
+        })
     }
 
     pub fn create_read_resource_tool(&self) -> Arc<dyn ITool> {
-        Arc::new(ReadSkillResourceTool::new(Arc::new(self.skills.clone())))
+        Arc::new(ReadSkillResourceTool {
+            skills: Arc::new(self.skills.clone()),
+        })
     }
 
     pub fn create_run_script_tool(&self) -> Arc<dyn ITool> {
-        Arc::new(RunSkillScriptTool::new(
-            Arc::new(self.skills.clone()),
-            self.script_runner.clone(),
-        ))
+        Arc::new(RunSkillScriptTool {
+            skills: Arc::new(self.skills.clone()),
+            runner: self.script_runner.clone(),
+        })
     }
 
     // ── advertise 文本 ──

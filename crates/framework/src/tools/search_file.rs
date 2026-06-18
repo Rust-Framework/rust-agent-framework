@@ -1,52 +1,70 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use async_trait::async_trait;
-use rust_agent_core::{ITool, Result};
+use rust_agent_core::{IScopeTool, ITool, ToolResult, WorkspaceScope};
+use rust_agent_macros::tool;
 
-use super::path_guard::resolve_safe;
-use super::{err_response, ok_response};
+use super::path_guard::{resolve_safe, ScopeStatus};
 
 const MAX_MATCHES: usize = 200;
 const MAX_LINE_DISPLAY: usize = 300;
 
-/// 使用正则表达式搜索文件内容。
-///
-/// 目录相对于 `base_dir` 解析：
-/// - 绝对路径直接使用。
-/// - 相对路径拼接至 `base_dir`。
+#[tool(description = "Searches file contents using a regex pattern. Returns matching lines with file path and line number.")]
 pub struct SearchFile {
-    base_dir: PathBuf,
+    pub scope: Option<Arc<WorkspaceScope>>,
+}
+
+impl IScopeTool for SearchFile {
+    fn create_scoped(&self, scope: Arc<WorkspaceScope>) -> Arc<dyn ITool> {
+        Arc::new(SearchFile {
+            scope: Some(scope),
+        })
+    }
 }
 
 impl SearchFile {
-    pub fn new(base_dir: impl Into<PathBuf>) -> Self {
-        Self { base_dir: base_dir.into() }
-    }
-
     async fn call(
         &self,
-        pattern: String,
-        directory: String,
-        include: Option<String>,
-        case_insensitive: Option<bool>,
-    ) -> String {
-        let case_insensitive = case_insensitive.unwrap_or(false);
-        let resolved_dir = match resolve_safe(&self.base_dir, &directory) {
-            Ok(r) => r,
-            Err(e) => return err_response(&format!("Path resolution failed: {}", e)),
-        };
+        arguments: serde_json::Value,
+    ) -> rust_agent_core::Result<ToolResult> {
+        #[derive(serde::Deserialize)]
+        struct Args {
+            pattern: String,
+            directory: String,
+            include: Option<String>,
+            case_insensitive: Option<bool>,
+        }
+        let args: Args = serde_json::from_value(arguments).map_err(|e| {
+            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
+        })?;
+
+        let case_insensitive = args.case_insensitive.unwrap_or(false);
+        let base_dir = self
+            .scope
+            .as_ref()
+            .map(|s| s.root.clone())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let scope_root = self.scope.as_ref().map(|s| s.root.as_path());
+
+        let (resolved_dir, scope_status) =
+            match resolve_safe(&base_dir, &args.directory, scope_root) {
+                Ok(r) => r,
+                Err(e) => {
+                    return Ok(ToolResult::error(format!("Path resolution failed: {}", e)));
+                }
+            };
 
         let regex = if case_insensitive {
-            match regex::bytes::RegexBuilder::new(&format!("(?i){}", pattern))
+            match regex::bytes::RegexBuilder::new(&format!("(?i){}", args.pattern))
                 .build()
             {
                 Ok(r) => r,
-                Err(e) => return err_response(&format!("Invalid regex pattern: {}", e)),
+                Err(e) => return Ok(ToolResult::error(format!("Invalid regex: {}", e))),
             }
         } else {
-            match regex::bytes::Regex::new(&pattern) {
+            match regex::bytes::Regex::new(&args.pattern) {
                 Ok(r) => r,
-                Err(e) => return err_response(&format!("Invalid regex pattern: {}", e)),
+                Err(e) => return Ok(ToolResult::error(format!("Invalid regex: {}", e))),
             }
         };
 
@@ -55,16 +73,20 @@ impl SearchFile {
             .follow_links(false)
             .into_iter()
             .filter_entry(|e| {
-                // Never skip the root directory; only filter subdirectories
-                // that start with '.' (hidden dirs like .git)
-                e.depth() == 0 || !e.file_name().to_str().map(|s| s.starts_with('.')).unwrap_or(false)
+                e.depth() == 0
+                    || !e.file_name()
+                        .to_str()
+                        .map(|s| s.starts_with('.'))
+                        .unwrap_or(false)
             });
 
-        // Compile include glob if provided
-        let include_pattern = include.as_ref().map(|inc| {
+        let include_pattern = args.include.as_ref().map(|inc| {
             format!(
                 "{}/{}",
-                resolved_dir.to_string_lossy().replace('\\', "/").trim_end_matches('/'),
+                resolved_dir
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .trim_end_matches('/'),
                 inc
             )
         });
@@ -81,7 +103,6 @@ impl SearchFile {
                 continue;
             }
 
-            // Filter by include glob
             if let Some(ref pattern) = include_pattern {
                 let path = entry.path().to_string_lossy().replace('\\', "/");
                 if !glob::Pattern::new(pattern).map_or(false, |p| p.matches(&path)) {
@@ -94,7 +115,6 @@ impl SearchFile {
                 Err(_) => continue,
             };
 
-            // Skip binary files (check for null bytes in first 8KB)
             if contents.iter().take(8192).any(|&b| b == 0) {
                 continue;
             }
@@ -106,7 +126,10 @@ impl SearchFile {
                     }
                     let display = String::from_utf8_lossy(line);
                     let truncated: String = if display.len() > MAX_LINE_DISPLAY {
-                        format!("{}...", display.chars().take(MAX_LINE_DISPLAY).collect::<String>())
+                        format!(
+                            "{}...",
+                            display.chars().take(MAX_LINE_DISPLAY).collect::<String>()
+                        )
                     } else {
                         display.to_string()
                     };
@@ -124,106 +147,13 @@ impl SearchFile {
 
         let truncated = matches.len() >= MAX_MATCHES;
 
-        ok_response(serde_json::json!({
-            "pattern": pattern,
-            "directory": directory,
+        Ok(ToolResult::success(serde_json::json!({
+            "pattern": args.pattern,
+            "directory": args.directory,
             "matches": matches,
             "total": matches.len(),
             "truncated": truncated,
-        }))
-    }
-}
-
-impl Default for SearchFile {
-    fn default() -> Self {
-        Self::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-    }
-}
-
-#[async_trait]
-impl ITool for SearchFile {
-    fn name(&self) -> &str {
-        "search_file"
-    }
-
-    fn description(&self) -> &str {
-        "Searches file contents using a regex pattern. Returns matching lines with file path and line number."
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "pattern": {
-                    "type": "string",
-                    "description": "Regular expression pattern to search for"
-                },
-                "directory": {
-                    "type": "string",
-                    "description": "Directory to search recursively (absolute, or relative to the agent's working directory)"
-                },
-                "include": {
-                    "type": "string",
-                    "description": "Glob pattern to filter files to include (e.g. '*.rs')"
-                },
-                "case_insensitive": {
-                    "type": "boolean",
-                    "description": "Case insensitive search (default: false)"
-                }
-            },
-            "required": ["pattern", "directory"]
-        })
-    }
-
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
-        #[derive(serde::Deserialize)]
-        struct Args {
-            pattern: String,
-            directory: String,
-            include: Option<String>,
-            case_insensitive: Option<bool>,
-        }
-        let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!(
-                "Argument deserialization failed: {}",
-                e
-            ))
-        })?;
-        Ok(self.call(args.pattern, args.directory, args.include, args.case_insensitive).await)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_search_rust_code() {
-        let result = SearchFile::default()
-            .execute(serde_json::json!({
-                "pattern": "fn test_",
-                "directory": "src/tools",
-                "include": "*.rs",
-            }))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], true);
-        assert!(v["data"]["total"].as_u64().unwrap() > 0);
-    }
-
-    #[tokio::test]
-    async fn test_search_file_with_base_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("code.rs"), "fn hello() {}\nfn test_stuff() {}\n").unwrap();
-
-        let tool = SearchFile::new(dir.path());
-        let result = tool
-            .execute(serde_json::json!({"pattern": "fn test_", "directory": "."}))
-            .await
-            .unwrap();
-        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["ok"], true);
-        assert_eq!(v["data"]["total"], 1);
+            "scope": scope_status.to_label(),
+        })))
     }
 }

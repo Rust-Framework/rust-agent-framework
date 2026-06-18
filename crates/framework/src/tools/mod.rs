@@ -28,36 +28,3 @@ pub use run_command::RunCommand;
 pub use load_skill::LoadSkillTool;
 pub use read_skill_resource::ReadSkillResourceTool;
 pub use run_skill_script::RunSkillScriptTool;
-
-use std::path::PathBuf;
-
-use rust_agent_core::ToolRegistry;
-
-/// 一次性注册所有内置文件系统工具。
-///
-/// 每个工具使用给定的 `base_dir` 进行相对路径解析。
-/// LLM 传递的绝对路径绕过 base_dir。
-pub fn register_all(registry: &mut ToolRegistry, base_dir: impl Into<PathBuf>) {
-    let base_dir = base_dir.into();
-    registry.register(ReadFile::new(&base_dir));
-    registry.register(WriteFile::new(&base_dir));
-    registry.register(EditFile::new(&base_dir));
-    registry.register(ListFiles::new(&base_dir));
-    registry.register(InspectFile::new(&base_dir));
-    registry.register(MakeDirectory::new(&base_dir));
-    registry.register(RemovePath::new(&base_dir));
-    registry.register(MoveFile::new(&base_dir));
-    registry.register(FindFiles::new(&base_dir));
-    registry.register(SearchFile::new(&base_dir));
-    registry.register(RunCommand::new(&base_dir));
-}
-
-/// Helper: build a success response.
-fn ok_response(data: serde_json::Value) -> String {
-    serde_json::json!({"ok": true, "data": data}).to_string()
-}
-
-/// Helper: build an error response.
-fn err_response(msg: &str) -> String {
-    serde_json::json!({"ok": false, "data": null, "error": msg}).to_string()
-}

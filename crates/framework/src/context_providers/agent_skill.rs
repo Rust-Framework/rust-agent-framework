@@ -127,7 +127,7 @@ impl AgentSkill {
         })?;
 
         // 安全检查 + 路径解析：使用统一的 path_guard 避免相对/绝对路径比较 bug
-        let resolved = crate::tools::path_guard::resolve_safe(root, resource_path)?;
+        let (resolved, _scope) = crate::tools::path_guard::resolve_safe(root, resource_path, None)?;
 
         std::fs::read_to_string(&resolved).map_err(|e| {
             rust_agent_core::AgentError::ToolError(format!(

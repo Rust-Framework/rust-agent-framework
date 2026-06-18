@@ -63,8 +63,8 @@ pub(crate) async fn run_memory_agent(
     }
 
     let mut registry = ToolRegistry::new();
-    registry.register(ReadFile::new(&memory_dir));
-    registry.register(WriteFile::new(&memory_dir));
+    registry.register(ReadFile { scope: None });
+    registry.register(WriteFile { scope: None });
 
     let tools: Vec<Arc<dyn ITool>> = registry
         .list()

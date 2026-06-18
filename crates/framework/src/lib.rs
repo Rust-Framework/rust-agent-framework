@@ -15,6 +15,7 @@ pub use context_providers::history_provider::InMemoryHistoryProvider;
 pub use context_providers::agent_skill::{AgentSkill, SkillMetadata};
 pub use context_providers::script_runner::{AgentSkillScriptRunner, SubprocessScriptRunner};
 pub use context_providers::skills_provider::AgentSkillsProvider;
+pub use context_providers::workspace::WorkspaceContextProvider;
 pub use chat_client_decorators::FunctionInvokingChatClient;
 pub use chat_client_decorators::PerServiceCallPersistingChatClient;
 pub use compression::SlidingWindowStrategy;
