@@ -83,12 +83,12 @@ pub use actions::{
 
 // ── Resolver ──
 pub use resolver::{
-    AgentResolver, ToolResolver, WorkflowResolver,
+    AgentResolver, McpRequestExecutor, ToolResolver, WorkflowResolver,
     quick_agent, quick_workflow, ToolFactoryFn,
 };
 
 // ── Extension traits ──
-pub use ext::{AgentBuilderExt, ChatClientWrapper, ToolWrapper, WorkflowBuilderExt};
+pub use ext::{AgentBuilderExt, ChatClientWrapper, ToolWrapper, WorkflowBuilderExt, AgentBuilderMcpExt};
 
 // ── Expression engine ──
 pub use expression::ExpressionEngine;

@@ -10,7 +10,7 @@
 | [4.2](tool-registry.md) | ToolRegistry 工具注册表 | HashMap 存储、register/register_arc、按名称查找、工具列表获取 |
 | [4.3](approval-required-tool.md) | ApprovalRequiredTool 审批包装器 | 委托模式、requires_approval() 返回 true、与 FunctionInvokingChatClient 的集成 |
 | [4.4](builtin-filesystem-tools.md) | 内置文件系统工具 | 10 个文件操作工具的 JSON Schema、能力边界、路径解析、文件大小/行数限制 |
-| [4.5](run-command-tool.md) | RunCommand 命令执行工具 | 平台感知、超时控制、工作目录解析、输出截断（100KB） |
+| [4.5](run-command-tool.md) | RunCommand 命令执行工具 | output_level 四级输出粒度、智能尾部截断、truncation_note 被动引导、Scope 边界感知 |
 | [4.6](custom-tools.md) | 自定义工具开发指南 | 三种定义方式：手动实现 ITool、异步函数宏、结构体宏 |
 | [4.7](scope-tool.md) | IScopeTool 工作区感知 | create_scoped()、DenyOutside 策略检查、scope 标签响应、WorkspaceContextProvider 注入 |
 

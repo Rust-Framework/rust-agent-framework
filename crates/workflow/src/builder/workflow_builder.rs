@@ -6,7 +6,7 @@ use rust_agent_core::{IAgent, Result};
 use crate::engine::retry::RetryOptions;
 use crate::executor::{AgentExecutor, IExecutor};
 use crate::graph::edge::{DirectEdgeData, Edge, EdgeId, FanInEdgeData, FanOutEdgeData, IEdgeCondition, IFanOutAssigner};
-use crate::graph::node::Node;
+use crate::graph::node::{LoopConfig, Node};
 use crate::graph::port::RequestPort;
 use crate::graph::WorkflowGraph;
 use std::time::Duration;
@@ -23,7 +23,7 @@ use std::time::Duration;
 ///     .with_output_from("writer")
 ///     .build()?;
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct WorkflowBuilder {
     nodes: HashMap<String, Node>,
     edges: Vec<Edge>,
@@ -68,6 +68,14 @@ impl WorkflowBuilder {
     pub fn with_node_timeout(mut self, timeout: Duration) -> Self {
         if let Some((_, node)) = self.nodes.iter_mut().last() {
             node.timeout = Some(timeout);
+        }
+        self
+    }
+
+    /// 为最后一次 add_node 添加的节点设置循环配置
+    pub fn with_loop(mut self, config: LoopConfig) -> Self {
+        if let Some((_, node)) = self.nodes.iter_mut().last() {
+            node.loop_config = Some(config);
         }
         self
     }

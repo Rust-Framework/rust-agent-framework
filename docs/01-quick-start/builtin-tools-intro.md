@@ -1,6 +1,6 @@
 # 内置工具概览
 
-RAF 提供 14 个开箱即用的内置工具，涵盖文件操作、目录管理、命令执行和 Skill 系统。所有工具均遵循 `ITool` 接口，支持工作区范围约束和人工审批。
+RAF 提供 13 个开箱即用的内置工具，涵盖文件操作、目录管理、命令执行和 Skill 系统。所有工具均遵循 `ITool` 接口，支持工作区范围约束和人工审批。
 
 ## 工具列表
 
@@ -19,7 +19,6 @@ RAF 提供 14 个开箱即用的内置工具，涵盖文件操作、目录管理
 | `run_command` | `tools::RunCommand` | 执行 shell 命令 |
 | `load_skill` | `tools::LoadSkillTool` | 加载 Skill 定义 |
 | `read_skill_resource` | `tools::ReadSkillResourceTool` | 读取 Skill 关联资源 |
-| `run_skill_script` | `tools::RunSkillScriptTool` | 执行 Skill 脚本 |
 
 ## 注册工具
 
@@ -53,7 +52,6 @@ let workspace = WorkspaceContextProvider::new(scope)
     .add_tool(EditFile { scope: None })
     .add_tool(ListFiles { scope: None })
     .add_tool(InspectFile { scope: None })
-    .add_tool(MakeDirectory { scope: None })
     .add_tool(RemovePath { scope: None })
     .add_tool(MoveFile { scope: None })
     .add_tool(FindFiles { scope: None })
@@ -187,6 +185,7 @@ RunCommand { scope: None, timeout_secs: None }
 | `command` | `String` | 要执行的命令 |
 | `working_dir` | `Option<String>` | 工作目录 |
 | `timeout_secs` | `Option<u64>` | 超时时间（秒），默认 30 |
+| `output_level` | `Option<String>` | 输出级别。`"error"` 仅返回 stderr；`"warning"` 返回 stderr + exit_code；`"info"`（默认）返回 stdout 前 100 行 + stderr + exit_code；`"all"` 返回完整 stdout + stderr + exit_code |
 
 **返回示例**：
 
@@ -200,6 +199,17 @@ RunCommand { scope: None, timeout_secs: None }
 ```
 
 **限制**：输出最大 100KB，超时默认 30 秒。
+
+### 脚本执行
+
+`run_skill_script` 已删除，其功能合并到 `run_command` 中。`RunCommand` 本身已实现 `IScopeTool`，支持 `WorkspaceScope` 工作区边界保护。
+
+```
+旧方式（已删除）: run_skill_script("skill-name", "script.py")
+新方式: run_command("python scripts/script.py", working_dir="/path/to/skill")
+```
+
+将 `RunCommand` 与 `WorkspaceContextProvider` 配合使用，即可安全地在 skill 目录下执行脚本。
 
 ## 工作区范围（WorkspaceScope）
 

@@ -14,6 +14,7 @@ members = [
     "crates/rag",
     "crates/wiki",
     "crates/host",
+    "crates/mcp",
 ]
 default-members = [
     "crates/core",
@@ -51,6 +52,7 @@ rust-websearch = { path = "crates/websearch", version = "0.1.0" }
 rust-agent-websearch = { path = "crates/websearch-ai", version = "0.1.0" }
 rust-agent-rag = { path = "crates/rag", version = "0.1.0" }
 rust-agent-host = { path = "crates/host", version = "0.1.0" }
+rust-agent-mcp = { path = "crates/mcp", version = "0.1.0" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

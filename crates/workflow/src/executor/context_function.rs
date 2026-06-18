@@ -10,12 +10,11 @@ use crate::executor::base::{HandlerResult, IExecutor, NodeProgress};
 
 /// 带工作流上下文的函数执行器 —— 在 `handle()` 中可访问 `Arc<dyn IWorkflowContext>`。
 ///
-/// 用于 SetVariable / ResetVariable 等需要读写 state_map 的动作编译。
 /// 闭包签名: `Fn(Arc<dyn Any>, Arc<dyn IWorkflowContext>, UnboundedSender<NodeProgress>) -> Fut`
 pub struct ContextFunctionExecutor<F, Fut> {
     id: String,
     handler: F,
-    _phantom: PhantomData<Fut>,
+    _phantom: PhantomData<fn() -> Fut>,
 }
 
 impl<F, Fut> ContextFunctionExecutor<F, Fut>
@@ -28,14 +27,10 @@ where
         + Send
         + Sync
         + 'static,
-    Fut: std::future::Future<Output = Result<HandlerResult>> + Send + Sync,
+    Fut: std::future::Future<Output = Result<HandlerResult>> + Send,
 {
     pub fn new(id: impl Into<String>, handler: F) -> Self {
-        Self {
-            id: id.into(),
-            handler,
-            _phantom: PhantomData,
-        }
+        Self { id: id.into(), handler, _phantom: PhantomData }
     }
 }
 
@@ -50,11 +45,9 @@ where
         + Send
         + Sync
         + 'static,
-    Fut: std::future::Future<Output = Result<HandlerResult>> + Send + Sync,
+    Fut: std::future::Future<Output = Result<HandlerResult>> + Send,
 {
-    fn id(&self) -> &str {
-        &self.id
-    }
+    fn id(&self) -> &str { &self.id }
 
     async fn handle(
         &self,

@@ -291,6 +291,16 @@ impl XxxTool {
 
 **关键实现**：使用 `std::fs::create_dir_all()` 递归创建；路径尚不存在时用 `resolve_safe_new()` 解析。
 
+#### 与其他方式对比
+
+| 方式 | 作用 | scope 保护 | 推荐度 |
+|------|------|-----------|--------|
+| `make_directory("a/b/c")` | 创建空目录结构 | **是**（`IScopeTool` + `DenyOutside`） | **推荐** |
+| `write_file("a/b/c/d.txt", "...")` | 写文件，自动创建父目录 | **是** | 推荐（但语义是"写文件"不是"创建目录"） |
+| `run_command("mkdir -p a/b/c")` | 批量创建目录 | **否**——只检查 `working_dir`，不检查命令参数路径 | **不推荐**——绕过 scope 保护 |
+
+`write_file` 的 `create_dir_all` 仅创建文件的父目录，不会创建文件本身所在的目标目录；`make_directory` 的 `create_dir_all` 创建的是用户指定的目标目录本身。两者语义互补，均保留。
+
 ---
 
 ### 4.4.7 remove_path — 删除路径

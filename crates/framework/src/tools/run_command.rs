@@ -3,8 +3,8 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use rust_agent_core::{IScopeTool, ITool, ScopePolicy, ToolResult, WorkspaceScope};
-use rust_agent_macros::tool;
 
 use super::path_guard::{resolve_safe, ScopeStatus};
 
@@ -17,7 +17,6 @@ const MAX_ERROR: usize = 100 * 1024; // error/warning 模式单流限制
 const MAX_WARNING_STDOUT: usize = 200 * 1024; // warning 模式 stdout（过滤后）
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
-#[tool(description = "Executes a shell command and returns output at a configurable verbosity level. Use output_level to control how much output to return: 'error' (errors only), 'warning' (errors+warnings), 'info' (smart summary, default), 'all' (full output).")]
 pub struct RunCommand {
     pub scope: Option<Arc<WorkspaceScope>>,
     pub timeout_secs: Option<u64>,
@@ -29,6 +28,51 @@ impl IScopeTool for RunCommand {
             scope: Some(scope),
             timeout_secs: self.timeout_secs,
         })
+    }
+}
+
+#[async_trait]
+impl ITool for RunCommand {
+    fn name(&self) -> &str {
+        "run_command"
+    }
+
+    /// 平台感知的描述——让 LLM 知道当前执行环境，构建正确的命令。
+    fn description(&self) -> &str {
+        if cfg!(windows) {
+            "Executes a shell command via cmd /c on Windows. \
+             Use cmd syntax: dir, del, type, set, &&, ||, >, <. \
+             For PowerShell, prefix with powershell -Command \"...\". \
+             output_level: 'error'(errors only), 'warning'(errors+warnings), 'info'(smart summary, default), 'all'(full output)."
+        } else {
+            "Executes a shell command via sh -c on Unix (Linux/macOS). \
+             Use POSIX shell syntax: ls, rm, grep, |, >, &&, $VAR. \
+             For scripts, write the interpreter explicitly: python3 script.py. \
+             output_level: 'error'(errors only), 'warning'(errors+warnings), 'info'(smart summary, default), 'all'(full output)."
+        }
+    }
+
+    /// 平台感知的参数 schema。
+    fn parameters(&self) -> serde_json::Value {
+        let command_desc = if cfg!(windows) {
+            "Shell command (via cmd /c). Use && to chain, > to redirect, 2>&1 to merge stderr. One-line string."
+        } else {
+            "Shell command (via sh -c). Use && to chain, > to redirect, 2>&1 to merge stderr. $VAR expansion supported. One-line string."
+        };
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "command": { "type": "string", "description": command_desc },
+                "working_dir": { "type": "string", "description": "Working directory (optional; absolute or relative to workspace root). Defaults to workspace root." },
+                "timeout_secs": { "type": "integer", "description": "Timeout in seconds (optional; defaults to 30)." },
+                "output_level": { "type": "string", "description": "Output verbosity (optional; default 'info'): 'error', 'warning', 'info', 'all'." }
+            },
+            "required": ["command"]
+        })
+    }
+
+    async fn execute(&self, arguments: serde_json::Value) -> rust_agent_core::Result<ToolResult> {
+        self.call(arguments).await
     }
 }
 

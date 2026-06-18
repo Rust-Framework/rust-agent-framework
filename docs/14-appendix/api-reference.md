@@ -113,7 +113,7 @@ pub struct AgentBuilder<C: IChatClient> {
 | `MakeDirectory` | 创建目录 |
 | `RemovePath` | 删除文件或目录 |
 | `MoveFile` | 移动/重命名文件 |
-| `RunCommand` | 执行 Shell 命令 |
+| `RunCommand` | 执行 Shell 命令（支持 `output_level` 参数控制输出粒度） |
 
 ### 上下文提供器
 

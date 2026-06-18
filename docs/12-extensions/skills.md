@@ -204,7 +204,7 @@ let agent = AgentBuilder::new("multi_skill_agent")
 
 `AgentSkillsProvider` 在每次 Agent 调用时：
 1. 将每个技能的 `SKILL.md` 正文注入到 system prompt
-2. 注册 `load_skill`、`read_skill_resource`、`run_skill_script` 三个工具
+2. 注册 `load_skill`、`read_skill_resource` 两个工具
 3. 使 Agent 能够动态加载和使用技能
 
 ### 技能相关工具
@@ -213,7 +213,16 @@ let agent = AgentBuilder::new("multi_skill_agent")
 |------|------|
 | `load_skill(name)` | 加载指定技能的指令内容 |
 | `read_skill_resource(skill, path)` | 读取技能的资源文件 |
-| `run_skill_script(skill, script, args)` | 执行技能目录下的脚本 |
+
+> **注意**：`run_skill_script` 已删除。如需执行 skill 目录下的脚本，请使用 `RunCommand` + `WorkspaceScope` 组合。将 `RunCommand` 注册为 `WorkspaceContextProvider` 的工具，并将 scope 设置为 skill 目录，即可安全地运行脚本。
+
+```rust
+let scope = Arc::new(WorkspaceScope::new(skill_dir, "skill-scripts")
+    .with_policy(ScopePolicy::ApproveOutside));
+let provider = WorkspaceContextProvider::new(scope)
+    .add_tool(RunCommand { scope: None, timeout_secs: Some(30) });
+// LLM can now run: run_command("python scripts/validate.py --check")
+```
 
 ## 完整示例
 
