@@ -13,6 +13,7 @@
 | [4.5](run-command-tool.md) | RunCommand 命令执行工具 | output_level 四级输出粒度、智能尾部截断、truncation_note 被动引导、Scope 边界感知 |
 | [4.6](custom-tools.md) | 自定义工具开发指南 | 三种定义方式：手动实现 ITool、异步函数宏、结构体宏 |
 | [4.7](scope-tool.md) | IScopeTool 工作区感知 | create_scoped()、DenyOutside 策略检查、scope 标签响应、WorkspaceContextProvider 注入 |
+| [4.8](mcp-tools.md) | MCP 工具集成 | MCP 协议概述、McpTool（ITool 适配器）、McpServerClient（连接发现）、McpContextProvider（动态注入） |
 
 ## 架构概览
 

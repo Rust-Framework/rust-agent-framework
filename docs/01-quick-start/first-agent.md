@@ -218,3 +218,100 @@ async fn celsius_to_fahrenheit(
 ## 下一步
 
 理解了构建智能体的基本流程后，请阅读 **[核心概念](./core-concepts.md)** 深入理解框架的架构设计。
+
+---
+
+## 声明式构建（附）：一行 YAML 替代手写代码
+
+从 v0.1.0 起，RAF 支持通过 YAML 声明文件驱动 Agent 构建，避免将系统指令和工具配置硬编码在 Rust 源码中。
+
+### 声明文件: `cli-agent.yaml`
+
+```yaml
+kind: prompt
+name: my-agent
+model:
+  id: deepseek-v4-flash
+  provider: deepseek
+  connection:
+    kind: key
+    api_key: $DEEPSEEK_API_KEY          # 从环境变量读取，部署时无需改代码
+instructions: |
+  You are a helpful AI assistant.
+  Respond concisely in the user's language.
+
+tools:
+  - kind: web_search
+  - kind: function
+    name: echo
+    description: Echoes back the input text
+
+max_tool_rounds: 8
+```
+
+### 声明式加载
+
+```rust
+use rust_agent_decl::DeclAgentBuilder;
+
+let agent = DeclAgentBuilder::new()
+    .from_yaml_file("cli-agent.yaml")
+    .with_model("deepseek-v4-flash")       // 可选：覆盖 YAML 中的模型
+    .with_api_key(&std::env::var("DEEPSEEK_API_KEY")?)
+    .with_tool("echo", |_| Ok(Arc::new(Echo)))  // 注册 YAML 中声明的工具
+    .build()
+    .await?;
+```
+
+### 两种方式的对比
+
+| 维度 | AgentBuilder（手写） | DeclAgentBuilder（声明式） |
+|------|---------------------|-------------------------|
+| 构建入口 | `AgentBuilder::new("name")` | `DeclAgentBuilder::new().from_yaml_file(path)` |
+| 系统指令 | `.instructions("...")` 硬编码字符串 | YAML 文件，修改无需重编译 |
+| 模型配置 | `.chat_client(client)` | `.with_model("gpt-4o")` |
+| 工具注入 | `.with_tool(Echo)` | `.with_tool("echo", factory)` |
+| 上下文注入 | `.add_context_provider_shared(cp)` | `.with_context(cp)` |
+| 产物 | `Arc<dyn IAgent>` | `Arc<dyn IAgent>` |
+
+### 何时使用哪种方式
+
+- **AgentBuilder**：快速原型、临时实验、工具数量少且指令简单的场景
+- **DeclAgentBuilder**：生产部署、指令需要频繁迭代、团队协作维护 Agent 配置的场景
+- 两种方式可以互相替代，因为它们产出的都是 `Arc<dyn IAgent>`，与框架其余部分完全兼容
+
+### 交互式体验：ReplRunner
+
+`ReplRunner` 是开箱即用的 REPL 运行器，提供最小化即可运行的编码体验：
+
+```rust
+use rust_agent_cli::ReplRunner;
+
+// 最小方式：一行启动
+ReplRunner::new(agent).run().await?;
+
+// 完整方式：带模型切换和重启能力
+ReplRunner::new(agent)
+    .prompt("🦀 > ")
+    .banner("My AI Chat — Type /help for commands")
+    .on_switch_model(move |model| {
+        Box::pin(async move {
+            DeclAgentBuilder::new()
+                .from_yaml_file("cli-agent.yaml")
+                .with_model(&model)
+                .build().await.map_err(Into::into)
+        })
+    })
+    .on_restart(move || {
+        Box::pin(async move {
+            DeclAgentBuilder::new()
+                .from_yaml_file("cli-agent.yaml")
+                .build().await.map_err(Into::into)
+        })
+    })
+    .run()
+    .await?;
+```
+
+内置命令：`/help` `/clear` `/think on/off` `/model <name>` `/restart` `/quit`。
+

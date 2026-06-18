@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use rust_agent_core::{ITool, ToolResult};
-use crate::client::{McpClient, McpConnectionConfig};
+use crate::client::{McpClient, McpConnectionOptions};
 use crate::types::ToolInfo;
 
 /// An ITool implementation that delegates to an MCP server via `tools/call`.
@@ -16,10 +16,10 @@ use crate::types::ToolInfo;
 /// # Example
 ///
 /// ```ignore
-/// use rust_agent_mcp::{McpClient, McpConnectionConfig, McpTool};
+/// use rust_agent_mcp::{McpClient, McpConnectionOptions, McpTool};
 /// use std::collections::HashMap;
 ///
-/// let config = McpConnectionConfig::stdio("my-mcp-server", vec![]);
+/// let config = McpConnectionOptions::stdio("my-mcp-server", vec![]);
 /// let client = McpClient::connect(config).await?;
 /// let tool_info = client.list_tools(None).await?.unwrap().tools.into_iter().next().unwrap();
 ///
@@ -36,7 +36,7 @@ pub struct McpTool {
 impl McpTool {
     /// Create an `McpTool` from a shared `McpClient` and a `ToolInfo`.
     ///
-    /// The resulting tool delegates `execute()` to `client.call_tool()`.
+    /// The resulting tool delegates `execute()` to `client.call()`.
     pub fn new(
         client: Arc<McpClient>,
         tool_info: &ToolInfo,
@@ -92,7 +92,7 @@ impl ITool for McpTool {
 
         let result = self
             .client
-            .call_tool(&self.server_tool_name, args_map)
+            .call(&self.server_tool_name, args_map)
             .await
             .map_err(|e| rust_agent_core::AgentError::ToolError(format!(
                 "MCP tool '{}' call failed: {}",
@@ -129,7 +129,7 @@ impl ITool for McpTool {
 /// # Example
 ///
 /// ```ignore
-/// let config = McpConnectionConfig::stdio("filesystem-server", vec!["/tmp"]);
+/// let config = McpConnectionOptions::stdio("filesystem-server", vec!["/tmp"]);
 /// let server = McpServerClient::connect(config).await?;
 /// let tools = server.discover_tools().await?;
 ///
@@ -139,14 +139,14 @@ impl ITool for McpTool {
 /// ```
 pub struct McpServerClient {
     client: Arc<McpClient>,
-    connection_config: McpConnectionConfig,
+    connection_config: McpConnectionOptions,
 }
 
 impl McpServerClient {
     /// Connect to an MCP server using the given configuration.
     ///
     /// Performs the full MCP initialize handshake.
-    pub async fn connect(config: McpConnectionConfig) -> Result<Self, crate::client::McpError> {
+    pub async fn connect(config: McpConnectionOptions) -> Result<Self, crate::client::McpError> {
         let client = McpClient::connect(config.clone()).await?;
         Ok(Self {
             client: Arc::new(client),
@@ -190,13 +190,13 @@ impl McpServerClient {
     }
 
     /// Get the connection configuration (for serialization/resumption).
-    pub fn connection_config(&self) -> &McpConnectionConfig {
+    pub fn connection_config(&self) -> &McpConnectionOptions {
         &self.connection_config
     }
 
     /// Internal constructor from pre-connected client.
     #[doc(hidden)]
-    pub fn from_client_inner(client: Arc<McpClient>, config: McpConnectionConfig) -> Self {
+    pub fn from_client_inner(client: Arc<McpClient>, config: McpConnectionOptions) -> Self {
         Self {
             client,
             connection_config: config,
@@ -221,11 +221,11 @@ impl std::fmt::Debug for McpServerClient {
 ///
 /// ```ignore
 /// let tools = rust_agent_mcp::discover_mcp_tools(
-///     McpConnectionConfig::stdio("my-server", vec![]),
+///     McpConnectionOptions::stdio("my-server", vec![]),
 /// ).await?;
 /// ```
 pub async fn discover_mcp_tools(
-    config: McpConnectionConfig,
+    config: McpConnectionOptions,
 ) -> Result<Vec<McpTool>, crate::client::McpError> {
     let server = McpServerClient::connect(config).await?;
     server.discover_tools().await

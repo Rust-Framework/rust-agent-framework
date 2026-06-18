@@ -20,7 +20,7 @@ use tokio::sync::mpsc::UnboundedSender;
 ///
 /// During execution:
 /// 1. Extracts the tool arguments from the workflow context (using state_map)
-/// 2. Calls `McpClient::call_tool()`
+/// 2. Calls `McpClient::call()`
 /// 3. Writes the result to the workflow context state_map
 /// 4. Sends progress events for observability
 pub struct McpRequestExecutor {
@@ -104,7 +104,7 @@ impl IExecutor for McpRequestExecutor {
         let result = self
             .server
             .client()
-            .call_tool(&self.tool_name, resolved_args.clone())
+            .call(&self.tool_name, resolved_args.clone())
             .await
             .map_err(|e| {
                 rust_agent_core::AgentError::WorkflowError(format!(

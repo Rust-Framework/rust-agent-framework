@@ -16,6 +16,7 @@ path = "src/main.rs"
 rust-agent-core = { workspace = true }
 rust-agent-framework = { workspace = true }
 rust-agent-client = { workspace = true }
+rust-agent-decl = { workspace = true, features = ["yaml"] }
 rust-agent-websearch = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }

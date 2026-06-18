@@ -230,6 +230,54 @@ pub struct AgentBuilder<C: IChatClient> {
 | `ToolResolver` | `resolve()`, `resolve_all()`, `register_factory()` |
 | `WorkflowResolver` | `resolve_workflow()` |
 
+### 声明式构建器
+
+| 类型 | 方法 |
+|------|------|
+| `DeclAgentBuilder` | `new()`, `from_yaml_file()`, `from_yaml_str()`, `with_model()`, `with_api_key()`, `with_tool()`, `with_context()`, `max_tool_rounds()`, `build()` |
+
+## rust-agent-cli
+
+CLI 交互 Crate，提供开箱即用的 REPL 组件。
+
+### ReplRunner
+
+| 方法 | 说明 |
+|------|------|
+| `ReplRunner::new(agent)` | 创建运行器，必传 Agent |
+| `.session(s)` | 设置会话（默认 `AgentSession::new()`） |
+| `.prompt(p)` | 设置提示符（默认 `"> "`） |
+| `.banner(b)` | 设置启动横幅 |
+| `.thinking(enable)` | 初始思考模式（默认 `true`） |
+| `.on_switch_model(f)` | 注册 `/model <name>` 回调 |
+| `.on_restart(f)` | 注册 `/restart` 回调 |
+| `.run()` | 启动 REPL 循环（阻塞式） |
+
+**内置命令**：`/help` `/clear` `/think on/off` `/model <name>` `/restart` `/quit` `/exit`
+
+## rust-agent-mcp
+
+MCP 协议客户端与工具适配器。
+
+```rust
+// 核心类型
+pub use client::{McpClient, McpConnectionOptions, McpError};
+pub use tool_adapter::{McpTool, McpServerClient, discover_mcp_tools};
+pub use context_provider::McpContextProvider;
+pub use transport::{Transport, TransportConfig, TransportError, create_transport};
+```
+
+| 类型 | 方法 | 说明 |
+|------|------|------|
+| `McpConnectionOptions` | `::stdio(cmd, args)`, `::sse(sse_url, post_url)` | 创建 MCP 连接配置 |
+| `McpClient` | `::connect(config)`, `.list_tools(cursor)`, `.call(name, args)`, `.list_resources(cursor)`, `.read_resource(uri)`, `.list_prompts(cursor)`, `.get_prompt(name, args)`, `.close()` | MCP 协议客户端 |
+| `McpServerClient` | `::connect(config)`, `.discover_tools()`, `.client()`, `.server_name()` | 连接管理和工具发现 |
+| `McpTool` | `::new(client, tool_info)`, 实现 `ITool` | MCP 工具的 ITool 适配器 |
+| `McpContextProvider` | `::new(server)`, `::new_shared(server)`, `.add_server(server)`, `.discover_all_tools()` | 动态 MCP 工具注入 |
+| `StdioTransport` | `::spawn(cmd, args)` | 子进程 stdio 传输 |
+| `SseTransport` | `::connect(sse_url, post_url)` | HTTP SSE 传输 |
+| `discover_mcp_tools` | `pub async fn(config) -> Result<Vec<McpTool>>` | 快速工具发现函数 |
+
 ## rust-agent-rhai
 
 Rhai 脚本引擎。

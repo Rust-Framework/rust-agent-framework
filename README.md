@@ -806,7 +806,6 @@ The agent checks the flag before each tool-loop iteration. When cancelled, the s
 | [rhai](crates/rhai/) | `rust-agent-rhai` | ~600 | Rhai scripting: `RhaiTool`, `RhaiExecutor` |
 | [wiki](crates/wiki/) | `rust-agent-wiki` | ~2000 | Wiki/document management: CRUD, graph, search, lint |
 | [cli](crates/cli/) | `rust-agent-cli` | ~500 | Interactive CLI binary |
-| [workflow-cli](crates/workflow-cli/) | `rust-agent-workflow-cli` | ~300 | Workflow pipeline verification CLI |
 | (*root*) | `rust-agent-framework` | — | Workspace root (this README) |
 
 ---

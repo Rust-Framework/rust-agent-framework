@@ -9,10 +9,10 @@
 //! ## Quick start
 //!
 //! ```ignore
-//! use rust_agent_mcp::{McpClient, McpConnectionConfig};
+//! use rust_agent_mcp::{McpClient, McpConnectionOptions};
 //!
 //! // Connect to a local MCP server via stdio
-//! let config = McpConnectionConfig::stdio("mcp-server", vec![]);
+//! let config = McpConnectionOptions::stdio("mcp-server", vec![]);
 //! let client = McpClient::connect(config).await?;
 //!
 //! // List tools
@@ -24,7 +24,7 @@
 //!
 //! // Call a tool
 //! use std::collections::HashMap;
-//! let result = client.call_tool("my_tool", HashMap::new()).await?;
+//! let result = client.call("my_tool", HashMap::new()).await?;
 //! println!("Result: {:?}", result.content);
 //! ```
 //!
@@ -43,7 +43,7 @@ pub mod tool_adapter;
 pub mod transport;
 pub mod types;
 
-pub use client::{McpClient, McpConnectionConfig, McpError};
+pub use client::{McpClient, McpConnectionOptions, McpError};
 pub use context_provider::McpContextProvider;
 pub use tool_adapter::{McpTool, McpServerClient, discover_mcp_tools};
 pub use transport::{Transport, TransportConfig, TransportError, create_transport};

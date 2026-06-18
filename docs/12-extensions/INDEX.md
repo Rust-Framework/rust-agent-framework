@@ -45,6 +45,7 @@ graph TB
 | [12.5](skills.md) | Agent 技能系统 | SKILL.md、AgentSkill、动态/目录加载 |
 | [12.6](rhai-scripts.md) | Rhai 脚本引擎 | RhaiRuntime、RhaiExecutor、RhaiTool |
 | [12.7](memory.md) | SkillMemory 记忆系统 | 后台记忆整合、MemoryAgent、ConsolidationWorker |
+| [12.8](mcp.md) | MCP 协议集成 | McpClient、McpTool、McpContextProvider、工具/资源/提示词操作 |
 
 ## 快速导航
 
@@ -54,6 +55,7 @@ graph TB
 - **想为 Agent 添加可复用技能？** → [12.5 技能系统](skills.md)
 - **想用脚本扩展 Agent？** → [12.6 Rhai 脚本](rhai-scripts.md)
 - **想让 Agent 拥有持久记忆？** → [12.7 记忆系统](memory.md)
+- **想让 Agent 集成 MCP 工具？** → [12.8 MCP 协议集成](mcp.md)
 
 ---
 

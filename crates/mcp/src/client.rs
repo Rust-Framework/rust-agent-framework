@@ -23,11 +23,11 @@ pub struct McpClient {
 
 /// MCP connection configuration: how to reach the server.
 #[derive(Debug, Clone)]
-pub struct McpConnectionConfig {
+pub struct McpConnectionOptions {
     pub transport: TransportConfig,
 }
 
-impl McpConnectionConfig {
+impl McpConnectionOptions {
     /// Create a config for a stdio subprocess MCP server (most common case).
     pub fn stdio(command: impl Into<String>, args: Vec<String>) -> Self {
         Self {
@@ -57,7 +57,7 @@ impl McpClient {
     /// 2. Sends `initialize` with client capabilities
     /// 3. Receives server capabilities
     /// 4. Sends `initialized` notification
-    pub async fn connect(config: McpConnectionConfig) -> Result<Self, McpError> {
+    pub async fn connect(config: McpConnectionOptions) -> Result<Self, McpError> {
         let transport = create_transport(config.transport).await?;
         let mut client = Self {
             transport,
@@ -223,7 +223,7 @@ impl McpClient {
     }
 
     /// Call a specific tool on the MCP server.
-    pub async fn call_tool(
+    pub async fn call(
         &self,
         name: &str,
         arguments: HashMap<String, serde_json::Value>,

@@ -40,6 +40,7 @@
 | [4.5](04-tool-system/run-command-tool.md) | RunCommand 命令执行工具 |
 | [4.6](04-tool-system/custom-tools.md) | 自定义工具开发指南 |
 | [4.7](04-tool-system/scope-tool.md) | IScopeTool 工作区感知 |
+| [4.8](04-tool-system/mcp-tools.md) | MCP 工具集成（McpTool / McpServerClient） |
 
 ## 第 5 章：上下文提供器
 
@@ -121,6 +122,7 @@
 | [12.5](12-extensions/skills.md) | Agent 技能系统 |
 | [12.6](12-extensions/rhai-scripts.md) | Rhai 脚本引擎 |
 | [12.7](12-extensions/memory.md) | SkillMemory 记忆系统 |
+| [12.8](12-extensions/mcp.md) | MCP 协议集成 |
 
 ## 第 13 章：宿主服务
 

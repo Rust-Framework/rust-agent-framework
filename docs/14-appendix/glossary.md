@@ -118,6 +118,26 @@ RAG 检索器接口，根据查询文本检索相关的文档块。
 
 微软 AI Agent 框架，RAF 的设计参考和兼容目标。
 
+### MCP (Model Context Protocol)
+
+模型上下文协议，一个开放协议，定义 AI Agent 与外部工具服务器之间的标准化交互方式。基于 JSON-RPC 2.0，支持工具调用、资源访问和提示词获取。
+
+### McpClient
+
+MCP 协议客户端，封装 MCP 服务器连接，提供 `tools/list`、`tools/call`、`resources/list`、`resources/read`、`prompts/list`、`prompts/get` 等操作。
+
+### McpTool
+
+MCP 工具的 ITool 适配器，将 MCP 服务器的工具适配为 RAF 的 `ITool` 接口，使 MCP 工具可以被 ToolRegistry 注册和 FunctionInvokingChatClient 调用。
+
+### McpServerClient
+
+MCP 服务器的连接管理和工具发现客户端，封装 `McpClient`，提供 `connect()` 和 `discover_tools()` 方法。
+
+### McpContextProvider
+
+MCP 上下文提供器，实现 `IContextProvider`，在 Agent 每次调用时自动发现并注入 MCP 工具。
+
 ### MemoryAgent
 
 后台记忆整合 Agent，由 SkillMemoryContextProvider 触发，定期整合对话记忆。

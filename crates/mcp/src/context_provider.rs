@@ -19,9 +19,9 @@ use crate::tool_adapter::McpServerClient;
 /// # Usage
 ///
 /// ```ignore
-/// use rust_agent_mcp::{McpContextProvider, McpServerClient, McpConnectionConfig};
+/// use rust_agent_mcp::{McpContextProvider, McpServerClient, McpConnectionOptions};
 ///
-/// let config = McpConnectionConfig::stdio("my-mcp-server", vec![]);
+/// let config = McpConnectionOptions::stdio("my-mcp-server", vec![]);
 /// let server = McpServerClient::connect(config).await?;
 ///
 /// let mut builder = AgentBuilder::new("my-agent")

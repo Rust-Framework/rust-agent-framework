@@ -278,3 +278,5 @@ impl DbQuery {
 ## 下一步
 
 内置工具熟悉后，请进入 **[第 2 章：核心架构](../02-core-architecture/INDEX.md)**，深入了解框架的分层设计和类型系统。
+
+> 如需集成外部工具（如 MCP 服务器），请参阅 **[MCP 工具集成](../04-tool-system/mcp-tools.md)**。MCP 可以将任意第三方工具无缝接入 Agent 的工具调用循环。

@@ -283,3 +283,61 @@ analysis = true
 # 或指定声明式 Agent 目录
 agents_dir = "./my_agents"
 ```
+
+## MCP 集成
+
+### Q: 如何让 Agent 使用 MCP 工具？
+
+最简方式是通过 `AgentBuilderMcpExt::with_mcp_server()`：
+
+```rust
+use rust_agent_decl::AgentBuilderMcpExt;
+use rust_agent_mcp::McpConnectionOptions;
+
+let agent = AgentBuilder::new("my_agent")
+    .chat_client(client)
+    .with_mcp_server(McpConnectionOptions::stdio("mcp-server", vec![]))
+    .await?
+    .build()?;
+```
+
+### Q: 如何连接远程 MCP 服务器？
+
+使用 SSE 传输：
+
+```rust
+let config = McpConnectionOptions::sse(
+    "https://mcp.example.com/sse",
+    "https://mcp.example.com/messages",
+);
+let client = McpClient::connect(config).await?;
+```
+
+### Q: 如何同时连接多个 MCP 服务器？
+
+```rust
+let fs = McpServerClient::connect(McpConnectionOptions::stdio("filesystem", vec!["/work"])).await?;
+let gh = McpServerClient::connect(McpConnectionOptions::stdio("github", vec![])).await?;
+
+let agent = AgentBuilder::new("multi-mcp")
+    .chat_client(client)
+    .add_context_provider(McpContextProvider::new(fs).add_server(gh))
+    .build()?;
+```
+
+### Q: 如何在 YAML 中声明 MCP 工具？
+
+```yaml
+kind: prompt
+name: mcp-agent
+model:
+  id: deepseek-v3
+  connection:
+    kind: key
+    api_key: $DEEPSEEK_API_KEY
+tools:
+  - kind: mcp
+    name: read_file
+    server_url: "stdio://filesystem-server"
+    tool_name: read_file
+```

@@ -29,7 +29,7 @@
 | 第 9 章 | [ChatClient 管道](09-chat-client-pipeline/) | 装饰器模式、工具调用循环、LLM 提供商 |
 | 第 10 章 | [宏与声明式配置](10-macros-declarative/) | #[tool] 宏、JSON/YAML/TOML 配置 |
 | 第 11 章 | [多智能体编排](11-multi-agent/) | Builder 体系、六种编排模式、引擎化执行、IAgent 统一门面、检查点 |
-| 第 12 章 | [扩展能力](12-extensions/) | 网络搜索、RAG、Wiki、技能系统、Rhai 脚本 |
+| 第 12 章 | [扩展能力](12-extensions/) | 网络搜索、RAG、Wiki、技能系统、Rhai 脚本、MCP 集成 |
 | 第 13 章 | [宿主服务](13-host-service/) | ACP 协议、Stdio/WebSocket 传输、智能体注册 |
 | 第 14 章 | [附录](14-appendix/) | Crate 地图、API 速查、术语表、常见问题 |
 

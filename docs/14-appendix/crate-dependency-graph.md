@@ -38,7 +38,6 @@ graph TD
 
     subgraph "应用层"
         CLI[rust-agent-cli]
-        WFCLI[rust-agent-workflow-cli]
     end
 
     MACROS --> CORE
@@ -65,9 +64,6 @@ graph TD
     CLI --> FRAMEWORK
     CLI --> CLIENT
     CLI --> WORKFLOW
-    WFCLI --> CORE
-    WFCLI --> WORKFLOW
-    WFCLI --> RHAI
 ```
 
 ## 依赖关系表
@@ -86,8 +82,6 @@ graph TD
 | `rust-agent-wiki` | `crates/wiki/` | `rust-agent-core` |
 | `rust-agent-host` | `crates/host/` | `rust-agent-core`, `rust-agent-framework`, `rust-agent-client`, `rust-agent-decl` |
 | `rust-agent-cli` | `crates/cli/` | `rust-agent-core`, `rust-agent-framework`, `rust-agent-client`, `rust-agent-workflow` |
-| `rust-agent-workflow-cli` | `crates/workflow-cli/` | `rust-agent-core`, `rust-agent-workflow`, `rust-agent-rhai` |
-
 ## Crate 职责说明
 
 | Crate | 职责 |
@@ -104,8 +98,6 @@ graph TD
 | **rust-agent-wiki** | Wiki 引擎：空间管理、Tantivy 全文搜索、Petgraph 概念图 |
 | **rust-agent-host** | 宿主服务：ACP 服务器、Stdio/WebSocket 传输、SessionBridge、AgentRegistry |
 | **rust-agent-cli** | CLI 工具：命令行 Agent 交互 REPL |
-| **rust-agent-workflow-cli** | Workflow CLI：命令行工作流执行工具 |
-
 ## 外部关键依赖
 
 | Crate | 用途 |

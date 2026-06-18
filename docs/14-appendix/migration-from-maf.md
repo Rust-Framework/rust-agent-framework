@@ -22,6 +22,7 @@
 | `Workflow` / `WorkflowGraph` | `WorkflowGraph` | 工作流图 |
 | `AgentSchema` | `AgentSchema v1.0` | 声明式配置规范 |
 | `AgentDocument` | `AgentDocument` | 声明式文档类型 |
+| `MCP Tool / MCP Client` | `McpClient` / `McpTool` / `McpServerClient` | MCP 协议集成工具 |
 
 ### 类型系统差异
 

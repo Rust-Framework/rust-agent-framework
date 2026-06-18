@@ -2,7 +2,7 @@
 
 RAF workspace 包含 15 个 crate，按职责分为三层：核心层（必选）、运行时层（常用）和扩展层（可选）。本章提供完整的依赖关系图和各 crate 的详细说明。
 
-## 全部 15 个 Crate
+## 全部 16 个 Crate
 
 | Crate 名称 | 路径 | 职责 | 分类 |
 |-----------|------|------|------|
@@ -17,12 +17,12 @@ RAF workspace 包含 15 个 crate，按职责分为三层：核心层（必选�
 | `rust-agent-rhai` | `crates/rhai` | Rhai 脚本引擎工具 | 扩展层 |
 | `rust-agent-decl` | `crates/decl` | 声明式 Agent DSL | 扩展层 |
 | `rust-agent-wiki` | `crates/wiki` | Wiki 知识检索 | 扩展层 |
-| `rust-agent-cli` | `crates/cli` | CLI 交互界面 | 工具 |
-| `rust-agent-workflow-cli` | `crates/workflow-cli` | 工作流 CLI | 工具 |
+| `rust-agent-mcp` | `crates/mcp` | MCP 协议客户端与工具适配 | 扩展层 |
+| `rust-agent-cli` | `crates/cli` | CLI 交互界面 + ReplRunner 组件 | 工具 |
 | `rust-agent-host` | `crates/host` | Agent 宿主运行环境 | 工具 |
 | (workspace root) | `/` | Workspace 配置和共享依赖 | 元 |
 
-> **注意**：虽然 `default-members` 包含了 13 个 crate（排除 `workflow-cli` 和 `host`），但 `rust-agent-core`、`rust-agent-client`、`rust-agent-framework` 三个是必选的"核心三件套"。
+> **注意**：虽然 `default-members` 包含了 13 个 crate（排除 `host`），但 `rust-agent-core`、`rust-agent-client`、`rust-agent-framework` 三个是必选的"核心三件套"。
 
 ## 依赖关系图
 
@@ -36,12 +36,12 @@ graph TB
         Workflow[rust-agent-workflow]
         Decl[rust-agent-decl]
         Wiki[rust-agent-wiki]
+        MCP[rust-agent-mcp]
         Host[rust-agent-host]
     end
 
     subgraph "工具层"
         CLI[rust-agent-cli]
-        WFCLI[rust-agent-workflow-cli]
     end
 
     subgraph "运行时层"
@@ -65,16 +65,16 @@ graph TB
     Framework --> |运行时| Workflow
     Framework --> |运行时| Decl
     Framework --> |运行时| Wiki
+    Framework --> |运行时| MCP
     Framework --> |运行时| Host
 
     WebSearch --> WebSearchLib
 
     Workflow --> |编排| Host
     Host --> |宿主| CLI
-    Host --> |宿主| WFCLI
 
     Framework --> |运行时| CLI
-    Framework --> |运行时| WFCLI
+    Decl --> |声明式构建| CLI
 ```
 
 ## 核心三件套
@@ -236,6 +236,25 @@ Wiki 知识检索，支持从 MediaWiki 等源获取结构化知识。
 rust-agent-wiki = { git = "...", package = "rust-agent-wiki" }
 ```
 
+### rust-agent-mcp
+
+MCP (Model Context Protocol) 协议客户端和工具适配器，支持连接外部 MCP 工具服务器。
+
+```toml
+rust-agent-mcp = { git = "...", package = "rust-agent-mcp" }
+```
+
+**外部依赖**：`tokio (process)`, `reqwest`, `serde`, `serde_json`（协议和传输实现所需）
+
+**导出**：
+
+```rust
+pub use client::{McpClient, McpConnectionOptions, McpError};
+pub use tool_adapter::{McpTool, McpServerClient, discover_mcp_tools};
+pub use context_provider::McpContextProvider;
+pub use transport::{Transport, TransportConfig, TransportError, create_transport};
+```
+
 ### rust-agent-macros
 
 `#[tool]` 过程宏，框架运行时层的辅助，简化 `ITool` 实现。
@@ -250,11 +269,21 @@ rust-agent-macros = { git = "...", package = "rust-agent-macros" }
 
 ### rust-agent-cli
 
-命令行交互界面，用于快速测试和交互式 Agent 会话。
+命令行交互界面，提供 `ReplRunner` 开箱即用组件和声明式 `DeclAgentBuilder` 集成。用于快速测试和交互式 Agent 会话。
 
-### rust-agent-workflow-cli
+| 导出 | 说明 |
+|------|------|
+| `ReplRunner` | 开箱即用的 REPL 运行器，支持 `/help` `/clear` `/think` `/model` `/restart` `/quit` 命令 |
 
-工作流特定 CLI，用于编排和执行工作流定义。
+### rust-agent-decl + rust-agent-cli（声明式全栈）
+
+用 YAML 定义 Agent，通过 `DeclAgentBuilder` 加载，配合 `ReplRunner` 零代码交互：
+
+```toml
+[dependencies]
+rust-agent-decl = { version = "...", features = ["yaml"] }
+rust-agent-cli = "..."
+```
 
 ### rust-agent-host
 

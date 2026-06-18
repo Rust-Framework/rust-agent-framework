@@ -37,7 +37,7 @@ pub trait ITool: AsAny + Send + Sync {
 }
 ```
 
-**扩展举例**：`WebSearch`、`WebFetch`、`RhaiTool` 都实现了 `ITool`，可以作为工具注册。
+**扩展举例**：`WebSearch`、`WebFetch`、`RhaiTool`、`McpTool` 都实现了 `ITool`，可以作为工具注册。
 
 ### IContextProvider — 上下文扩展点
 
@@ -78,7 +78,7 @@ pub struct ContextResult {
 }
 ```
 
-**扩展举例**：`SkillMemoryContextProvider`、`WebSearchContextProvider` 实现了 `IContextProvider`，在每次调用前自动注入记忆指令和搜索上下文。
+**扩展举例**：`SkillMemoryContextProvider`、`WebSearchContextProvider`、`McpContextProvider` 实现了 `IContextProvider`，在每次调用前自动注入记忆指令和搜索上下文。
 
 ## 扩展能力一览
 
@@ -91,6 +91,7 @@ pub struct ContextResult {
 | **Skills** | ✅ (工具) | ✅ | rust-agent-framework | 无额外依赖 |
 | **Rhai** | ✅ (RhaiTool) | ❌ | rust-agent-rhai | rhai |
 | **SkillMemory** | ❌ | ✅ | rust-agent-framework | 依赖主 Agent 的 ChatClient |
+| **MCP** | ✅ (McpTool) | ✅ (McpContextProvider) | rust-agent-mcp | tokio, reqwest |
 
 ## 注册扩展
 

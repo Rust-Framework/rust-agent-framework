@@ -162,7 +162,7 @@ let doc = AgentDocument::from_toml_file("agents/agent.toml")?;
 | `web_search` | ✅ 已实现 | WebSearch/WebFetch |
 | `custom` | ✅ 需注册工厂 | 通过 `register_factory()` 注册的自定义工具 |
 | `code_interpreter` | ❌ 未实现 | 需要沙箱执行环境 |
-| `mcp` | ❌ 未实现 | 需要 MCP 客户端集成 |
+| `mcp` | ✅ 已实现 | 通过 `rust-agent-mcp` crate 支持 MCP 服务器工具集成 |
 | `openapi` | ❌ 未实现 | 需要 OpenAPI 规范解析 + HTTP 客户端 |
 | `file_search` | ❌ 未实现 | 需要向量存储集成 |
 
@@ -181,6 +181,28 @@ resolver.register_factory("my_tool", |config| {
 });
 
 // 解析工具声明
+let tools = resolver.resolve_all(&agent_def.tools).await?;
+```
+
+### MCP 工具解析
+
+对于 `kind: mcp` 类型的工具声明，需要先注册 MCP 服务器：
+
+```rust
+use rust_agent_mcp::{McpServerClient, McpConnectionOptions};
+
+// 连接并注册 MCP 服务器
+let server = McpServerClient::connect(
+    McpConnectionOptions::stdio("mcp-filesystem-server", vec!["/work"]),
+).await?;
+resolver.register_mcp_server("stdio://filesystem-server", server);
+
+// 现在 YAML 中声明的 mcp 工具可以正常解析
+// tools:
+//   - kind: mcp
+//     name: read_file
+//     server_url: "stdio://filesystem-server"
+//     tool_name: read_file
 let tools = resolver.resolve_all(&agent_def.tools).await?;
 ```
 

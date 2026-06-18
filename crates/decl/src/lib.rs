@@ -49,6 +49,7 @@ pub mod tools;
 pub mod workflow_decl;
 
 pub mod compiler;
+pub mod decl_agent_builder;
 pub mod ext;
 pub mod resolver;
 
@@ -87,8 +88,11 @@ pub use resolver::{
     quick_agent, quick_workflow, ToolFactoryFn,
 };
 
+// ── DeclAgentBuilder ──
+pub use decl_agent_builder::DeclAgentBuilder;
+
 // ── Extension traits ──
-pub use ext::{AgentBuilderExt, ChatClientWrapper, ToolWrapper, WorkflowBuilderExt, AgentBuilderMcpExt};
+pub use ext::{AgentBuilderMcpExt, ChatClientWrapper, ToolWrapper};
 
 // ── Expression engine ──
 pub use expression::ExpressionEngine;
