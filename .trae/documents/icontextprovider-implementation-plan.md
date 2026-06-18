@@ -31,7 +31,7 @@ Agent 调用
 | 抽象基类 + virtual 方法 | `abstract class AIContextProvider` | `#[async_trait] trait IContextProvider` |
 | 多 Provider 链式执行 | `AIContextProviders = [...]` 按注册顺序执行 | `Vec<Arc<dyn IContextProvider>>` 顺序迭代 |
 | Session 级隔离状态 | `ProviderSessionState<T>` 帮助类，状态存在 `AgentSession` 中 | `AgentSession.provider_states: HashMap<String, Value>` |
-| 上下文注入载体 | `AIContext { Instructions, Messages, Tools }` | `ContextInjection` struct |
+| 上下文注入载体 | `AIContext { Instructions, Messages, Tools }` | `ContextResult` struct |
 | 两阶段生命周期 | `InvokingAsync` / `InvokedAsync` | `on_invoking()` / `on_invoked()` |
 | Provider 实例共享 | 一个 Provider 实例附着到一个 Agent，跨所有 Session 共享 | 同设计：`Arc<dyn IContextProvider>` 存储在 Agent 上 |
 | 序列化支持 | `SerializeAsync` / 反序列化构造函数 | 通过 `serde_json::Value` + `AgentSession.provider_states` 实现 |
@@ -115,7 +115,7 @@ ContextProviderAgent(providers,
 
 ## 三、详细变更清单
 
-### 变更 1：定义 `IContextProvider` trait + `ContextInjection`（core crate）
+### 变更 1：定义 `IContextProvider` trait + `ContextResult`（core crate）
 
 **文件**：`crates/core/src/context_provider.rs`（**新建**）
 
@@ -132,7 +132,7 @@ use crate::{AgentRunOptions, AgentResponse, ChatMessage, IAgent, ISession, ITool
 /// - messages: 注入到消息列表的额外消息
 /// - tools: 本次调用可用的动态工具
 #[derive(Debug, Default)]
-pub struct ContextInjection {
+pub struct ContextResult {
     pub instructions: Option<String>,
     pub messages: Vec<ChatMessage>,
     pub tools: Vec<Arc<dyn ITool>>,
@@ -158,7 +158,7 @@ pub trait IContextProvider: Send + Sync {
 
     /// Pre-invocation 钩子：在 Agent 调用 LLM 之前执行
     ///
-    /// Provider 可返回 `ContextInjection` 来动态注入 instructions、messages、tools。
+    /// Provider 可返回 `ContextResult` 来动态注入 instructions、messages、tools。
     /// 多个 Provider 的输出将被合并（instructions 追加，messages 拼入消息列表前端，
     /// tools 合并到可用工具集）。
     ///
@@ -173,7 +173,7 @@ pub trait IContextProvider: Send + Sync {
         session: &dyn ISession,
         messages: &[ChatMessage],
         options: &AgentRunOptions,
-    ) -> Result<ContextInjection>;
+    ) -> Result<ContextResult>;
 
     /// Post-invocation 钩子：在 Agent 收到 LLM 响应之后执行
     ///
@@ -283,7 +283,7 @@ pub struct SessionSnapshot {
 ```rust
 use async_trait::async_trait;
 use rust_agent_core::{
-    ChatMessage, ContextInjection, IAgent, IContextProvider,
+    ChatMessage, ContextResult, IAgent, IContextProvider,
     ISession, MessageRole, Result, AgentRunOptions, AgentResponse,
 };
 
@@ -320,8 +320,8 @@ impl IContextProvider for HistoryContextProvider {
         session: &dyn ISession,
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
-        let mut injection = ContextInjection::default();
+    ) -> Result<ContextResult> {
+        let mut injection = ContextResult::default();
         
         if self.load_messages {
             let history = session.get_messages().await.unwrap_or_default();
@@ -417,7 +417,7 @@ use futures_util::StreamExt;
 /// 替代原规划的 HistoryAgent 层，统一管理所有 IContextProvider 的执行。
 ///
 /// 生命周期：
-///   1. 顺序执行所有 providers.on_invoking()，合并 ContextInjection
+///   1. 顺序执行所有 providers.on_invoking()，合并 ContextResult
 ///   2. 组装完整消息列表：[新增instructions] + [provider消息] + [调用方消息]
 ///   3. 调用 inner agent
 ///   4. 流收集完成后顺序执行所有 providers.on_invoked()
@@ -712,7 +712,7 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
 ```rust
 pub mod context_provider;  // 新增
 
-pub use context_provider::{IContextProvider, ContextInjection};  // 新增
+pub use context_provider::{IContextProvider, ContextResult};  // 新增
 ```
 
 ### 变更 8：更新框架导出（framework crate）
@@ -757,12 +757,12 @@ pub mod history_provider;
 
 | 操作 | 文件 | 说明 |
 |------|------|------|
-| **新建** | `crates/core/src/context_provider.rs` | `IContextProvider` trait + `ContextInjection` |
+| **新建** | `crates/core/src/context_provider.rs` | `IContextProvider` trait + `ContextResult` |
 | **新建** | `crates/framework/src/agents/context_provider_agent.rs` | `ContextProviderAgent` 管道编排器 |
 | **新建** | `crates/framework/src/context_providers/mod.rs` | Provider 模块入口 |
 | **新建** | `crates/framework/src/context_providers/history_provider.rs` | `HistoryContextProvider` 实现 |
 | **修改** | `crates/core/src/session.rs` | ISession 新增 `provider_states` 支持 |
-| **修改** | `crates/core/src/lib.rs` | 导出 `IContextProvider`, `ContextInjection` |
+| **修改** | `crates/core/src/lib.rs` | 导出 `IContextProvider`, `ContextResult` |
 | **修改** | `crates/framework/src/lib.rs` | 导出 `ContextProviderAgent`, `HistoryContextProvider` |
 | **修改** | `crates/framework/src/agents/mod.rs` | 新增 `context_provider_agent` 模块 |
 | **修改** | `crates/framework/src/builder.rs` | `with_context_provider()` 方法 + 组装逻辑 |
@@ -795,7 +795,7 @@ CLI 当前使用 `AgentBuilder` 构建 agent，不依赖内部的 history 逻辑
 
 | 测试 | 文件 | 内容 |
 |------|------|------|
-| `ContextInjection::default()` | `context_provider.rs` | 验证默认空注入 |
+| `ContextResult::default()` | `context_provider.rs` | 验证默认空注入 |
 | `ProviderStateStore` CRUD | `session.rs` | 验证 get/set/remove/get_or_default |
 | `HistoryContextProvider` 单轮 | `history_provider.rs` | 验证 on_invoking 加载空历史 |
 | `HistoryContextProvider` 多轮 | `history_provider.rs` | 验证消息正确追加和持久化 |

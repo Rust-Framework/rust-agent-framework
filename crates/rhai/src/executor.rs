@@ -109,7 +109,7 @@ impl IExecutor for RhaiExecutor {
     async fn handle(
         &self,
         message: Arc<dyn std::any::Any + Send + Sync>,
-        ctx: &dyn IWorkflowContext,
+        ctx: Arc<dyn IWorkflowContext>,
         progress: UnboundedSender<NodeProgress>,
     ) -> Result<HandlerResult> {
         // 1. 提取输入数据
@@ -117,7 +117,7 @@ impl IExecutor for RhaiExecutor {
 
         // 2. 预加载上下文状态快照（异步操作，执行前完成）
         let node_id = ctx.current_node_id().to_string();
-        let context_snapshot = load_context_snapshot(ctx).await?;
+        let context_snapshot = load_context_snapshot(&*ctx).await?;
 
         // 3. 获取 runtime 锁，注入执行期变量和回调，执行脚本，然后立即释放锁
         let (result, pending_writes) = {

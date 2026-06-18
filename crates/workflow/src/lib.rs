@@ -56,14 +56,14 @@ pub use checkpoint::{
 pub use engine::{
     get_typed_variable, run_resumable, set_typed_variable, EventBus, ExhaustedAction,
     ExternalEvent, IWorkflowContext,
-    MessageEnvelope, NodeChunk, ResumeCommand, RetryBackoff, RetryCondition, RetryConfig,
+    MessageEnvelope, NodeChunk, ResumeCommand, RetryBackoff, RetryCondition, RetryOptions,
     UsageInfo, WorkflowConfig, WorkflowEngine, WorkflowEvent, WorkflowOutput, WorkflowRuntime,
 };
 
 // ── 执行器 ──
 pub use executor::{
-    AgentExecutor, CompensableExecutor, FunctionExecutor, HandlerResult, HumanTaskExecutor,
-    ICompensable, IExecutor, NodeProgress, SubFlowExecutor, TypeTag,
+    AgentExecutor, CompensableExecutor, ContextFunctionExecutor, FunctionExecutor, HandlerResult,
+    HumanTaskExecutor, ICompensable, IExecutor, NodeProgress, SubFlowExecutor, TypeTag,
 };
 
 // ── 图 ──

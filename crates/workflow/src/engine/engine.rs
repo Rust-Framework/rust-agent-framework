@@ -16,9 +16,10 @@ use super::config::WorkflowConfig;
 use super::edge_runner::{create_edge_runner, IEdgeRunner};
 use super::event::{NodeChunk, UsageInfo, WorkflowEvent};
 use super::message_envelope::MessageEnvelope;
-use super::retry::{ExhaustedAction, RetryConfig};
+use super::retry::{ExhaustedAction, RetryOptions};
 use super::runtime::ResumeCommand;
 use super::step_context::StepContext;
+use super::work_context::IWorkflowContext;
 
 /// 工作流输出
 #[derive(Debug)]
@@ -590,12 +591,12 @@ async fn execute_node_messages(
     event_tx: broadcast::Sender<WorkflowEvent>,
     total_prompt: Arc<std::sync::atomic::AtomicU32>,
     total_completion: Arc<std::sync::atomic::AtomicU32>,
-    retry_config: Option<RetryConfig>,
+    retry_config: Option<RetryOptions>,
     node_timeout: Option<Duration>,
 ) -> Result<(String, Vec<Arc<dyn std::any::Any + Send + Sync>>, bool)> {
-    let config = retry_config.unwrap_or(RetryConfig {
+    let config = retry_config.unwrap_or(RetryOptions {
         max_retries: 0,
-        ..RetryConfig::default()
+        ..RetryOptions::default()
     });
 
     let mut attempt = 0u32;
@@ -727,7 +728,7 @@ async fn execute_node_messages_once(
             };
 
             let result = executor
-                .handle(env.content.clone(), &work_ctx, progress_tx)
+                .handle(env.content.clone(), Arc::new(work_ctx) as Arc<dyn IWorkflowContext>, progress_tx)
                 .await?;
 
             Ok::<_, AgentError>((result, queued_msgs))
@@ -824,7 +825,7 @@ async fn run_compensations(
     let log = execution_log.lock().await.clone();
     for node_id in log.iter().rev() {
         if let Some(executor) = executor_map.get(node_id) {
-            let ctx = EngineWorkContext {
+            let ctx: Arc<dyn IWorkflowContext> = Arc::new(EngineWorkContext {
                 node_id: node_id.clone(),
                 session: session.clone(),
                 state_map: state_map.clone(),
@@ -839,8 +840,8 @@ async fn run_compensations(
                 },
                 halt_flag: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 timers: Arc::new(tokio::sync::Mutex::new(Vec::new())),
-            };
-            let _ = executor.compensate(&ctx).await;
+            });
+            let _ = executor.compensate(ctx).await;
         }
     }
 }

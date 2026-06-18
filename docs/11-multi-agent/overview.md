@@ -96,7 +96,7 @@ pub struct Node {
     pub id: String,
     pub executor: Arc<dyn IExecutor>,
     pub is_output: bool,
-    pub retry: Option<RetryConfig>,     // 节点重试策略
+    pub retry: Option<RetryOptions>,     // 节点重试策略
     pub timeout: Option<Duration>,      // 单节点超时
     pub loop_config: Option<LoopConfig>, // 循环配置（最大迭代次数、循环变量）
 }

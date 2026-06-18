@@ -15,6 +15,6 @@ pub use engine::{WorkflowEngine, WorkflowOutput};
 pub use event::{NodeChunk, UsageInfo, WorkflowEvent};
 pub use event_trigger::{EventBus, ExternalEvent};
 pub use message_envelope::MessageEnvelope;
-pub use retry::{ExhaustedAction, RetryBackoff, RetryCondition, RetryConfig};
+pub use retry::{ExhaustedAction, RetryBackoff, RetryCondition, RetryOptions};
 pub use runtime::{ResumeCommand, WorkflowRuntime, run_resumable};
 pub use work_context::{get_typed_variable, set_typed_variable, IWorkflowContext};

@@ -170,7 +170,7 @@ impl IContextProvider for WorkspaceContextProvider {
         session: &dyn ISession,
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
+    ) -> Result<ContextResult> {
         // 会话级持久化（仅首次，用于审计/调试）
         let state = ProviderState::<WorkspaceState>::new("WorkspaceContextProvider");
         let ws = state.get_or_init(session);
@@ -182,7 +182,7 @@ impl IContextProvider for WorkspaceContextProvider {
             });
         }
 
-        Ok(ContextInjection {
+        Ok(ContextResult {
             instructions: Some(self.build_instructions()),
             tools: self.tools.clone(),
             ..Default::default()
@@ -191,10 +191,10 @@ impl IContextProvider for WorkspaceContextProvider {
 }
 ```
 
-`ContextInjection` 返回的数据结构：
+`ContextResult` 返回的数据结构：
 
 ```rust
-pub struct ContextInjection {
+pub struct ContextResult {
     /// 注入 system prompt 的指令文本
     pub instructions: Option<String>,
     /// 注入执行层的工具列表

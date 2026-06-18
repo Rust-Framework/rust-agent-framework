@@ -10,7 +10,7 @@ use crate::engine::IWorkflowContext;
 #[async_trait]
 pub trait ICompensable: IExecutor {
     /// 补偿操作
-    async fn compensate_action(&self, ctx: &dyn IWorkflowContext) -> Result<()> {
+    async fn compensate_action(&self, ctx: Arc<dyn IWorkflowContext>) -> Result<()> {
         let _ = ctx;
         Ok(())
     }
@@ -36,7 +36,7 @@ impl<E, F> CompensableExecutor<E, F> {
 impl<E, F, Fut> IExecutor for CompensableExecutor<E, F>
 where
     E: IExecutor + Send + Sync,
-    F: for<'a> Fn(&'a dyn IWorkflowContext) -> Fut + Send + Sync,
+    F: Fn(Arc<dyn IWorkflowContext>) -> Fut + Send + Sync,
     Fut: std::future::Future<Output = Result<()>> + Send,
 {
     fn id(&self) -> &str {
@@ -86,13 +86,13 @@ where
     async fn handle(
         &self,
         message: Arc<dyn std::any::Any + Send + Sync>,
-        ctx: &dyn IWorkflowContext,
+        ctx: Arc<dyn IWorkflowContext>,
         progress: tokio::sync::mpsc::UnboundedSender<super::base::NodeProgress>,
     ) -> Result<super::base::HandlerResult> {
         self.inner.handle(message, ctx, progress).await
     }
 
-    async fn compensate(&self, ctx: &dyn IWorkflowContext) -> Result<()> {
+    async fn compensate(&self, ctx: Arc<dyn IWorkflowContext>) -> Result<()> {
         (self.compensate_fn)(ctx).await
     }
 }

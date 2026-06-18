@@ -25,7 +25,7 @@ graph TB
 
     subgraph "Agent 集成"
         SP[AgentSkillsProvider]
-        INJ[ContextInjection]
+        INJ[ContextResult]
         TOOL[技能工具]
     end
 

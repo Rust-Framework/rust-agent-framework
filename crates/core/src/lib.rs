@@ -22,7 +22,7 @@ pub use chat_client::ChatClientRunOptions;
 pub use chat_client::ChatClientBuilder;
 pub use chat_client::DelegatingChatClient;
 pub use compression::ICompressionStrategy;
-pub use context_provider::{ContextInjection, IContextProvider};
+pub use context_provider::{ContextResult, IContextProvider};
 pub use model_metadata::ModelMetadata;
 pub use run_options::AgentRunOptions;
 pub use run_options::ReasoningEffort;

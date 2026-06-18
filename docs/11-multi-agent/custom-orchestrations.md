@@ -42,7 +42,7 @@ builder = builder.add_node("node_id", my_executor);
 builder = builder.add_agent_node("agent_node", my_agent);
 
 // 带重试策略
-builder = builder.add_node("flaky", executor).with_retry(RetryConfig {
+builder = builder.add_node("flaky", executor).with_retry(RetryOptions {
     max_retries: 3,
     backoff: RetryBackoff::Exponential { base: Duration::from_secs(1), max: Duration::from_secs(30) },
     retry_on: RetryCondition::AllErrors,
@@ -210,7 +210,7 @@ use rust_agent_workflow::{
     WorkflowBuilder, WorkflowEngine,
     AgentExecutor, FunctionExecutor,
     VariableCondition, ExpressionCondition, ComparisonOp, LoopConfig,
-    ExhaustedAction, RetryBackoff, RetryConfig,
+    ExhaustedAction, RetryBackoff, RetryOptions,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -241,7 +241,7 @@ async fn build_analysis_workflow(
 
         // 4. 报告生成（AgentExecutor），带重试
         .add_agent_node("report", reporter)
-        .with_retry(RetryConfig {
+        .with_retry(RetryOptions {
             max_retries: 2,
             backoff: RetryBackoff::Fixed(Duration::from_secs(2)),
             retry_on: RetryCondition::AllErrors,

@@ -19,7 +19,7 @@ sequenceDiagram
     Note over Agent: ═══ Phase 1: Pre-invocation ═══
     loop 每个 ContextProvider
         Agent->>CP: on_invoking(agent, session, messages, options)
-        CP-->>Agent: ContextInjection{instructions, messages, tools}
+        CP-->>Agent: ContextResult{instructions, messages, tools}
     end
 
     Note over Agent: 组装消息列表
@@ -335,7 +335,7 @@ Phase 3 中的所有错误都会被 `tracing::warn!` 记录，但不会中断输
 
 ### 为什么 Provider 失败不中断流程？
 
-每个 Provider 的 `on_invoking()` 错误都会通过 `unwrap_or_default()` 吞没——返回空的 `ContextInjection`。这确保单个 Provider 的 bug 不会导致整个 Agent 不可用。
+每个 Provider 的 `on_invoking()` 错误都会通过 `unwrap_or_default()` 吞没——返回空的 `ContextResult`。这确保单个 Provider 的 bug 不会导致整个 Agent 不可用。
 
 ## 下一步
 

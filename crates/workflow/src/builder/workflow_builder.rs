@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use rust_agent_core::{IAgent, Result};
 
-use crate::engine::retry::RetryConfig;
+use crate::engine::retry::RetryOptions;
 use crate::executor::{AgentExecutor, IExecutor};
 use crate::graph::edge::{DirectEdgeData, Edge, EdgeId, FanInEdgeData, FanOutEdgeData, IEdgeCondition, IFanOutAssigner};
 use crate::graph::node::Node;
@@ -57,7 +57,7 @@ impl WorkflowBuilder {
     }
 
     /// 为最后一次 add_node 添加的节点设置重试策略
-    pub fn with_retry(mut self, config: RetryConfig) -> Self {
+    pub fn with_retry(mut self, config: RetryOptions) -> Self {
         if let Some((_, node)) = self.nodes.iter_mut().last() {
             node.retry = Some(config);
         }

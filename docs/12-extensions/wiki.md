@@ -184,7 +184,7 @@ impl IContextProvider for WikiContextProvider {
         _session: &dyn ISession,
         messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
+    ) -> Result<ContextResult> {
         let last_user_msg = messages.iter()
             .rev()
             .find(|m| m.role == "user");
@@ -198,7 +198,7 @@ impl IContextProvider for WikiContextProvider {
                     .collect::<Vec<_>>()
                     .join("\n\n");
 
-                return Ok(ContextInjection {
+                return Ok(ContextResult {
                     instructions: Some(format!(
                         "以下是与当前问题相关的 Wiki 知识:\n\n{}",
                         context
@@ -208,7 +208,7 @@ impl IContextProvider for WikiContextProvider {
             }
         }
 
-        Ok(ContextInjection::default())
+        Ok(ContextResult::default())
     }
 }
 ```

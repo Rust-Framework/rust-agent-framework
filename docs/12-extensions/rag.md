@@ -268,7 +268,7 @@ impl IContextProvider for RAGContextProvider {
         _session: &dyn ISession,
         messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
+    ) -> Result<ContextResult> {
         // 从最后一条用户消息中提取查询
         let last_user_msg = messages.iter()
             .rev()
@@ -278,7 +278,7 @@ impl IContextProvider for RAGContextProvider {
         if let Some(query) = last_user_msg {
             let results = self.retriever.retrieve(&query, 3).await?;
             let context = format_context(results);
-            return Ok(ContextInjection {
+            return Ok(ContextResult {
                 instructions: Some(format!(
                     "以下是相关知识库内容，请基于这些内容回答问题:\n\n{}",
                     context
@@ -287,7 +287,7 @@ impl IContextProvider for RAGContextProvider {
             });
         }
 
-        Ok(ContextInjection::default())
+        Ok(ContextResult::default())
     }
 }
 ```

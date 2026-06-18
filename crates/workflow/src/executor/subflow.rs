@@ -37,10 +37,10 @@ impl IExecutor for SubFlowExecutor {
     async fn handle(
         &self,
         message: Arc<dyn std::any::Any + Send + Sync>,
-        ctx: &dyn IWorkflowContext,
+        ctx: Arc<dyn IWorkflowContext>,
         _progress: UnboundedSender<NodeProgress>,
     ) -> Result<HandlerResult> {
-        let sub_graph = (self.flow_factory)(ctx);
+        let sub_graph = (self.flow_factory)(&*ctx);
         let engine = WorkflowEngine::new(sub_graph);
         let session = ctx.session().cloned();
 

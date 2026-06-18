@@ -538,7 +538,7 @@ AgentBuilder::new("agent")
 ```rust
 use async_trait::async_trait;
 use rust_agent_core::{
-    ContextInjection, IAgent, IContextProvider, ISession,
+    ContextResult, IAgent, IContextProvider, ISession,
     ChatMessage, AgentRunOptions,
 };
 
@@ -559,7 +559,7 @@ impl IContextProvider for RagProvider {
         session: &dyn ISession,
         messages: &[ChatMessage],
         options: &AgentRunOptions,
-    ) -> rust_agent_core::Result<ContextInjection> {
+    ) -> rust_agent_core::Result<ContextResult> {
         // 从最后一条用户消息中提取查询意图
         let query = messages.iter()
             .rev()
@@ -570,7 +570,7 @@ impl IContextProvider for RagProvider {
         // 检索相关文档（实现略）
         let docs = self.search(query)?;
 
-        Ok(ContextInjection {
+        Ok(ContextResult {
             // 注入指令：告诉 LLM 使用提供的文档回答
             instructions: Some(
                 "请仅基于以下参考文档回答问题。如果文档不包含相关信息，请如实告知。".into()

@@ -7,6 +7,7 @@ use rust_agent_workflow::graph::port::RequestPort;
 use rust_agent_workflow::executor::base::TypeTag;
 
 use crate::actions::ActionDecl;
+use crate::compiler::{compile_workflow, CompileContext};
 use crate::definition::{AgentDefinition, AgentKindData};
 use crate::error::DeclError;
 use crate::resolver::agent_resolver::AgentResolver;
@@ -16,11 +17,15 @@ use crate::workflow_decl::WorkflowAgentData;
 ///
 /// 此解析器将 MAF 动作列表 DSL 编译为可由工作流引擎执行的图。
 ///
-/// 当前支持动作的子集：
-/// - `InvokeAgent` → 创建 AgentExecutor 节点
-/// - `SendActivity` → 创建输出发射器
-/// - `SetVariable` → 创建状态变更节点
-/// 未来阶段将添加对 If、Foreach、ConditionGroup 等的完整支持。
+/// 全量支持 23 种 ActionDecl 动作类型：
+/// - 变量管理：SetVariable / SetMultipleVariables / SetTextVariable / ResetVariable / ClearAllVariables / ParseValue / EditTableV2
+/// - 控制流：If / ConditionGroup / Foreach / GotoAction / BreakLoop / ContinueLoop
+/// - AI 与输出：InvokeAgent / SendActivity / InvokeFunctionTool
+/// - 人机交互：Question / RequestExternalInput
+/// - HTTP/MCP：HttpRequestAction / InvokeMcpTool
+/// - 终端与对话：EndWorkflow / EndConversation / CreateConversation / AddConversationMessage
+///
+/// 编译架构：ActionDecl → CompileNode(IR) → WorkflowGraph
 pub struct WorkflowResolver<'a> {
     agent_resolver: &'a mut AgentResolver,
 }
@@ -32,104 +37,10 @@ impl<'a> WorkflowResolver<'a> {
     }
 
     /// 将 `WorkflowAgentData` 解析为 `WorkflowGraph`。
+    ///
+    /// 使用全新的双层编译引擎（参见 `crate::compiler`）。
     pub async fn resolve(&mut self, data: &WorkflowAgentData) -> crate::Result<WorkflowGraph> {
-        let mut builder = WorkflowBuilder::new();
-        let mut prev_node_id: Option<String> = None;
-
-        for action in &data.trigger.actions {
-            match action {
-                ActionDecl::InvokeAgent {
-                    id,
-                    agent,
-                    ..
-                } => {
-                    let node_id = id
-                        .clone()
-                        .unwrap_or_else(|| format!("node_{}_{}", agent.name, uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("0")));
-
-                    let agent_instance = self
-                        .agent_resolver
-                        .get_agent(&agent.name)
-                        .ok_or_else(|| {
-                            DeclError::Missing(format!(
-                                "Agent '{}' not found in registry (referenced by workflow action)",
-                                agent.name
-                            ))
-                        })?;
-
-                    let executor = AgentExecutor::new(&node_id, agent_instance);
-                    builder = builder.add_node(node_id.clone(), Arc::new(executor));
-
-                    // Wire sequential edges
-                    if let Some(ref prev) = prev_node_id {
-                        builder = builder.add_edge(prev.as_str(), &node_id);
-                    }
-                    prev_node_id = Some(node_id);
-                }
-
-                ActionDecl::SendActivity { id, .. } => {
-                    // SendActivity creates an output port node
-                    let node_id = id
-                        .clone()
-                        .unwrap_or_else(|| format!("output_{}", uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("0")));
-
-                    let request_port = RequestPort::new(
-                        &node_id,
-                        TypeTag::new("json"),
-                        TypeTag::new("json"),
-                        "",
-                    );
-                    builder = builder.add_port(request_port);
-                }
-
-                ActionDecl::SetVariable { id, variable, value, .. } => {
-                    // SetVariable creates a state mutation node
-                    // For now, we treat it as a no-op pass-through
-                    let _node_id = id
-                        .clone()
-                        .unwrap_or_else(|| format!("var_{}_{}", variable, uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("0")));
-                    // Track variable setting for the state store
-                    // (full implementation in a future phase)
-                    let _ = value; // Used when state mutation is fully implemented
-                }
-
-                // Control flow actions — not yet implemented in graph compiler
-                ActionDecl::If { .. }
-                | ActionDecl::ConditionGroup { .. }
-                | ActionDecl::Foreach { .. }
-                | ActionDecl::GotoAction { .. }
-                | ActionDecl::Question { .. }
-                | ActionDecl::RequestExternalInput { .. } => {
-                    return Err(DeclError::Unsupported(format!(
-                        "Action kind '{}' is not yet supported in the workflow graph compiler",
-                        action.kind_str()
-                    )));
-                }
-
-                _ => {
-                    // BreakLoop, ContinueLoop, EndWorkflow, EndConversation,
-                    // CreateConversation, AddConversationMessage, etc.
-                    // These are terminal/no-op actions that don't produce nodes.
-                }
-            }
-        }
-
-        // Set start node
-        if let Some(first_node) = prev_node_id.take() {
-            builder = builder.set_start(first_node);
-        } else {
-            // Find the first node from the builder
-            // In practice, set_start will fail if no node was added
-            return Err(DeclError::Validation(
-                "Workflow must have at least one InvokeAgent action".into(),
-            ));
-        }
-
-        let graph = builder.build().map_err(|e| {
-            DeclError::Resolution(format!("Failed to build workflow graph: {}", e))
-        })?;
-
-        Ok(graph)
+        compile_workflow(data, self.agent_resolver)
     }
 }
 

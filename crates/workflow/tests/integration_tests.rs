@@ -468,7 +468,7 @@ async fn test_node_retry_on_failure() {
     use futures_util::StreamExt;
     use rust_agent_workflow::{
         ExhaustedAction, HandlerResult, IExecutor, NodeProgress, RetryBackoff, RetryCondition,
-        RetryConfig, WorkflowEngine, WorkflowEvent,
+        RetryOptions, WorkflowEngine, WorkflowEvent,
     };
     use std::sync::atomic::{AtomicU32, Ordering};
     use std::time::Duration;
@@ -487,7 +487,7 @@ async fn test_node_retry_on_failure() {
         async fn handle(
             &self,
             _message: Arc<dyn std::any::Any + Send + Sync>,
-            _ctx: &dyn rust_agent_workflow::IWorkflowContext,
+            _ctx: Arc<dyn rust_agent_workflow::IWorkflowContext>,
             _progress: tokio::sync::mpsc::UnboundedSender<NodeProgress>,
         ) -> rust_agent_core::Result<HandlerResult> {
             let n = self.attempts.fetch_add(1, Ordering::SeqCst);
@@ -510,7 +510,7 @@ async fn test_node_retry_on_failure() {
                 attempts: attempt_count.clone(),
             }),
         )
-        .with_retry(RetryConfig {
+        .with_retry(RetryOptions {
             max_retries: 3,
             backoff: RetryBackoff::None,
             retry_on: RetryCondition::AllErrors,
@@ -660,13 +660,13 @@ async fn test_compensable_executor_on_failure() {
         async fn handle(
             &self,
             _message: Arc<dyn std::any::Any + Send + Sync>,
-            _ctx: &dyn rust_agent_workflow::IWorkflowContext,
+            _ctx: Arc<dyn rust_agent_workflow::IWorkflowContext>,
             _progress: tokio::sync::mpsc::UnboundedSender<NodeProgress>,
         ) -> rust_agent_core::Result<HandlerResult> {
             Err(rust_agent_core::AgentError::WorkflowError("boom".into()))
         }
 
-        async fn compensate(&self, _ctx: &dyn rust_agent_workflow::IWorkflowContext) -> rust_agent_core::Result<()> {
+        async fn compensate(&self, _ctx: Arc<dyn rust_agent_workflow::IWorkflowContext>) -> rust_agent_core::Result<()> {
             self.compensated.store(true, Ordering::SeqCst);
             Ok(())
         }

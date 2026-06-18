@@ -202,7 +202,7 @@ pub trait IContextProvider: Send + Sync {
     async fn on_invoking(
         &self, agent: &dyn IAgent, session: &dyn ISession,
         messages: &[ChatMessage], options: &AgentRunOptions,
-    ) -> Result<ContextInjection>;
+    ) -> Result<ContextResult>;
 
     // Post-invocation：持久化、通知、审计
     async fn on_invoked(
@@ -213,10 +213,10 @@ pub trait IContextProvider: Send + Sync {
 }
 ```
 
-**ContextInjection** 载体：
+**ContextResult** 载体：
 
 ```rust
-pub struct ContextInjection {
+pub struct ContextResult {
     pub instructions: Option<String>,       // 追加 System Prompt
     pub messages: Vec<ChatMessage>,        // 注入消息
     pub tools: Vec<Arc<dyn ITool>>,        // 动态工具
@@ -292,7 +292,7 @@ sequenceDiagram
 
     Note over A: Phase 1: Pre-invocation
     A->>CP: on_invoking() × N
-    CP-->>A: ContextInjection (instructions + messages + tools)
+    CP-->>A: ContextResult (instructions + messages + tools)
 
     Note over A: Phase 1.5: Compression
     A->>A: 检查 token 预算 → 压缩消息

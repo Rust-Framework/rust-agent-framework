@@ -17,7 +17,7 @@ use crate::memory::memory_context::build_turn_transcript;
 /// 持有 instructions、tools 和 context_providers 链。
 /// `InMemoryHistoryProvider` 由 AgentBuilder 默认注入。
 /// Provider 链按注册顺序执行，靠后的 Provider 可设置
-/// `ContextInjection.replace_messages = true` 来实现压缩/截断。
+/// `ContextResult.replace_messages = true` 来实现压缩/截断。
 pub struct ChatClientAgent {
     id: AgentId,
     metadata: AgentMetadata,

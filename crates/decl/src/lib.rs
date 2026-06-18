@@ -48,6 +48,7 @@ pub mod template;
 pub mod tools;
 pub mod workflow_decl;
 
+pub mod compiler;
 pub mod ext;
 pub mod resolver;
 

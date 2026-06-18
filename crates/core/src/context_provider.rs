@@ -11,17 +11,17 @@ use crate::{AgentResponse, AgentRunOptions, ChatMessage, IAgent, ISession, ITool
 /// - tools: 本次调用可用的动态工具
 /// - replace_messages: 若为 true，则**替换**已累积的消息；默认 false（追加）
 #[derive(Default)]
-pub struct ContextInjection {
+pub struct ContextResult {
     pub instructions: Option<String>,
     pub messages: Vec<ChatMessage>,
     pub tools: Vec<Arc<dyn ITool>>,
     pub replace_messages: bool,
 }
 
-impl std::fmt::Debug for ContextInjection {
+impl std::fmt::Debug for ContextResult {
     /// 格式化上下文注入内容用于调试输出
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ContextInjection")
+        f.debug_struct("ContextResult")
             .field("instructions", &self.instructions)
             .field("messages", &self.messages)
             .field("tools", &self.tools.len())
@@ -45,7 +45,7 @@ pub trait IContextProvider: Send + Sync {
         session: &dyn ISession,
         messages: &[ChatMessage],
         options: &AgentRunOptions,
-    ) -> Result<ContextInjection>;
+    ) -> Result<ContextResult>;
 
     async fn on_invoked(
         &self,

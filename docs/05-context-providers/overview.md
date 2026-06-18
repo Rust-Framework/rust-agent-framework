@@ -20,7 +20,7 @@ pub trait IContextProvider: Send + Sync {
         session: &dyn ISession,
         messages: &[ChatMessage],
         options: &AgentRunOptions,
-    ) -> Result<ContextInjection>;
+    ) -> Result<ContextResult>;
 
     async fn on_invoked(
         &self,
@@ -37,17 +37,17 @@ pub trait IContextProvider: Send + Sync {
 
 | 方法 | 调用时机 | 传入参数 | 用途 |
 |------|---------|----------|------|
-| `on_invoking()` | LLM 调用**之前** | Agent、Session、当前消息列表、运行选项 | 返回 `ContextInjection` 注入上下文 |
+| `on_invoking()` | LLM 调用**之前** | Agent、Session、当前消息列表、运行选项 | 返回 `ContextResult` 注入上下文 |
 | `on_invoked()` | LLM 调用**之后**（无论成功或失败） | Agent、Session、请求消息、响应或错误 | 持久化状态、日志记录、清理 |
 
 **`on_invoked()` 的 `error` 参数**：当 LLM 调用抛出 `AgentError` 时，`response` 为 `None`，`error` 为 `Some(err)`。这使得提供器可以记录失败、回滚状态。
 
-## ContextInjection 载体
+## ContextResult 载体
 
 ```rust
 /// 上下文注入载体 — Provider 在 Pre-invocation 阶段返回的上下文增强内容
 #[derive(Default)]
-pub struct ContextInjection {
+pub struct ContextResult {
     /// 追加到 system prompt 的指令文本
     pub instructions: Option<String>,
     /// 注入到消息列表的消息
@@ -77,15 +77,15 @@ sequenceDiagram
     participant LLM
 
     Engine->>P1: on_invoking(agent, session, messages, options)
-    P1-->>Engine: ContextInjection { instructions: None, messages: history, tools: [] }
+    P1-->>Engine: ContextResult { instructions: None, messages: history, tools: [] }
 
     Engine->>P2: on_invoking(agent, session, messages, options)
-    P2-->>Engine: ContextInjection { instructions: "## Skills\n...", messages: [], tools: [load_skill, ...] }
+    P2-->>Engine: ContextResult { instructions: "## Skills\n...", messages: [], tools: [load_skill, ...] }
 
     Engine->>P3: on_invoking(agent, session, messages, options)
-    P3-->>Engine: ContextInjection { instructions: "## Workspace\n...", messages: [], tools: [ReadFile, WriteFile, ...] }
+    P3-->>Engine: ContextResult { instructions: "## Workspace\n...", messages: [], tools: [ReadFile, WriteFile, ...] }
 
-    Note over Engine: 合并 ContextInjection<br/>instructions = P1 + P2 + P3<br/>messages = P1.messages (replace_messages 均为 false)<br/>tools = P1 + P2 + P3
+    Note over Engine: 合并 ContextResult<br/>instructions = P1 + P2 + P3<br/>messages = P1.messages (replace_messages 均为 false)<br/>tools = P1 + P2 + P3
 
     Note over Engine: 构建最终上下文
     Engine->>LLM: system_prompt + messages + tools 定义
@@ -115,14 +115,14 @@ struct CompressionProvider {
 impl IContextProvider for CompressionProvider {
     fn name(&self) -> &str { "CompressionProvider" }
 
-    async fn on_invoking(&self, agent: &dyn IAgent, session: &dyn ISession, ...) -> Result<ContextInjection> {
+    async fn on_invoking(&self, agent: &dyn IAgent, session: &dyn ISession, ...) -> Result<ContextResult> {
         // 加载完整历史
         let history = session.get_messages().await?;
 
         // 压缩（保留最近 N 条 + 摘要）
         let compressed = self.strategy.compress(&history);
 
-        Ok(ContextInjection {
+        Ok(ContextResult {
             messages: compressed,
             replace_messages: true,  // ← 替换前面的历史消息
             ..Default::default()
@@ -141,7 +141,7 @@ impl IContextProvider for CompressionProvider {
 flowchart TD
     START["agent.run(messages, options)"] --> TOUCH["session.touch_request_hash(messages)"]
     TOUCH --> PRE_PROV["按顺序调用所有 Provider.on_invoking()"]
-    PRE_PROV --> MERGE["合并 ContextInjection"]
+    PRE_PROV --> MERGE["合并 ContextResult"]
 
     MERGE --> BUILD["构建最终上下文:<br/>- system prompt + instructions<br/>- injected messages + request messages<br/>- registered tools + injected tools"]
 
@@ -158,7 +158,7 @@ flowchart TD
 ## 关键要点
 
 1. **提供器按注册顺序执行**——前面的提供器先注入，后面的提供器可以覆盖（通过 `replace_messages`）
-2. **`ContextInjection.tools` 是动态工具**——与 `AgentBuilder::with_tool()` 注册的工具合并
+2. **`ContextResult.tools` 是动态工具**——与 `AgentBuilder::with_tool()` 注册的工具合并
 3. **`instructions` 用换行拼接**——多个提供器的指令在 system prompt 中连续显示
 4. **`on_invoked` 总被调用**——无论 LLM 调用成功或失败，`error` 参数区分两种情况
 5. **提供器链天然支持压缩**——靠后的提供器设置 `replace_messages = true` 即可替换前面的消息

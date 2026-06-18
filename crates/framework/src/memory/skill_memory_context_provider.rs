@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextInjection, IAgent, IContextProvider,
+    AgentResponse, AgentRunOptions, ChatMessage, ContextResult, IAgent, IContextProvider,
     IChatClient, ISession, ITool, Result,
 };
 
@@ -112,8 +112,8 @@ impl IContextProvider for SkillMemoryContextProvider {
         _session: &dyn ISession,
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
-        Ok(ContextInjection {
+    ) -> Result<ContextResult> {
+        Ok(ContextResult {
             instructions: Some(self.build_advertise()),
             tools: self.build_tools(),
             ..Default::default()

@@ -255,7 +255,7 @@ Provider 按 `Vec` 中的索引顺序执行：
 [3] CompressionProvider       ← 压缩消息列表（replace_messages = true）
 ```
 
-后续 Provider 可设置 `ContextInjection.replace_messages = true` 来**替换**之前累积的消息——这天然支持压缩策略。
+后续 Provider 可设置 `ContextResult.replace_messages = true` 来**替换**之前累积的消息——这天然支持压缩策略。
 
 ## 构建器泛型参数
 

@@ -28,8 +28,8 @@ async fn on_invoking(
     session: &dyn ISession,
     _messages: &[ChatMessage],
     _options: &AgentRunOptions,
-) -> Result<ContextInjection> {
-    let mut injection = ContextInjection::default();
+) -> Result<ContextResult> {
+    let mut injection = ContextResult::default();
 
     if self.load_messages {
         let history = session.get_messages().await.unwrap_or_default();
@@ -135,7 +135,7 @@ sequenceDiagram
     User->>HP: on_invoking()
     HP->>Session: get_messages()
     Session-->>HP: Vec<ChatMessage> (历史消息)
-    HP-->>User: ContextInjection { messages: history }
+    HP-->>User: ContextResult { messages: history }
 
     User->>LLM: 发送请求（含历史 + 新消息）
     LLM-->>User: AgentResponse

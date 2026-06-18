@@ -3,14 +3,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextInjection, IAgent, IContextProvider,
+    AgentResponse, AgentRunOptions, ChatMessage, ContextResult, IAgent, IContextProvider,
     ISession, ITool, Result,
 };
 
 use super::agent_skill::AgentSkill;
-use super::script_runner::AgentSkillScriptRunner;
 
-use crate::tools::{LoadSkillTool, ReadSkillResourceTool, RunSkillScriptTool};
+use crate::tools::{LoadSkillTool, ReadSkillResourceTool};
 
 // ── AgentSkillsProvider ──
 
@@ -20,17 +19,15 @@ use crate::tools::{LoadSkillTool, ReadSkillResourceTool, RunSkillScriptTool};
 ///
 /// 注入：
 ///   1. advertise 文本（技能名称 + 描述 + 路径指引）
-///   2. load_skill / read_skill_resource / run_skill_script 工具（按需）
+///   2. load_skill / read_skill_resource 工具（按需）
 pub struct AgentSkillsProvider {
     pub skills: Vec<AgentSkill>,
-    script_runner: Option<Arc<dyn AgentSkillScriptRunner>>,
 }
 
 impl AgentSkillsProvider {
     pub fn new() -> Self {
         Self {
             skills: Vec::new(),
-            script_runner: None,
         }
     }
 
@@ -41,11 +38,6 @@ impl AgentSkillsProvider {
 
     pub fn with_skills(mut self, skills: impl IntoIterator<Item = AgentSkill>) -> Self {
         self.skills.extend(skills);
-        self
-    }
-
-    pub fn with_script_runner(mut self, runner: Arc<dyn AgentSkillScriptRunner>) -> Self {
-        self.script_runner = Some(runner);
         self
     }
 
@@ -87,7 +79,6 @@ impl AgentSkillsProvider {
         }
         Ok(Self {
             skills: all_skills,
-            script_runner: None,
         })
     }
 
@@ -102,13 +93,6 @@ impl AgentSkillsProvider {
     pub fn create_read_resource_tool(&self) -> Arc<dyn ITool> {
         Arc::new(ReadSkillResourceTool {
             skills: Arc::new(self.skills.clone()),
-        })
-    }
-
-    pub fn create_run_script_tool(&self) -> Arc<dyn ITool> {
-        Arc::new(RunSkillScriptTool {
-            skills: Arc::new(self.skills.clone()),
-            runner: self.script_runner.clone(),
         })
     }
 
@@ -139,9 +123,7 @@ impl AgentSkillsProvider {
             }
 
             if has_scripts && skill.has_scripts() {
-                text.push_str("  Scripts: use run_skill_script(\"");
-                text.push_str(&skill.metadata.name);
-                text.push_str("\", \"<path>\") to execute bundled scripts.\n");
+                text.push_str("  Scripts: use run_command(\"python scripts/<script>\") with workspace scope set to the skill directory.\n");
             }
         }
 
@@ -154,11 +136,6 @@ impl AgentSkillsProvider {
         let has_resources = self.skills.iter().any(|s| s.has_resources());
         if has_resources {
             tools.push(self.create_read_resource_tool());
-        }
-
-        let has_scripts = self.skills.iter().any(|s| s.has_scripts());
-        if has_scripts && self.script_runner.is_some() {
-            tools.push(self.create_run_script_tool());
         }
 
         tools
@@ -183,8 +160,8 @@ impl IContextProvider for AgentSkillsProvider {
         _session: &dyn ISession,
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
-        Ok(ContextInjection {
+    ) -> Result<ContextResult> {
+        Ok(ContextResult {
             instructions: Some(self.build_advertise()),
             tools: self.build_tools(),
             ..Default::default()
@@ -394,9 +371,4 @@ mod tests {
             .contains("Reference Content"));
     }
 
-    #[test]
-    fn test_subprocess_runner() {
-        let _runner = super::super::script_runner::SubprocessScriptRunner::new();
-        let _cmd = "echo hello";
-    }
 }

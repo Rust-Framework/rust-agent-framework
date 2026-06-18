@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::engine::retry::RetryConfig;
+use crate::engine::retry::RetryOptions;
 use crate::executor::IExecutor;
 
 /// 循环配置 — 用于标记循环回边允许的节点。
@@ -44,7 +44,7 @@ pub struct Node {
     pub executor: Arc<dyn IExecutor>,
     pub is_output: bool,
     /// 节点重试配置
-    pub retry: Option<RetryConfig>,
+    pub retry: Option<RetryOptions>,
     /// 单节点超时（覆盖全局配置）
     pub timeout: Option<Duration>,
     /// 循环配置 — 标记此节点为循环入口
@@ -68,7 +68,7 @@ impl Node {
         self
     }
 
-    pub fn with_retry(mut self, config: RetryConfig) -> Self {
+    pub fn with_retry(mut self, config: RetryOptions) -> Self {
         self.retry = Some(config);
         self
     }

@@ -54,7 +54,7 @@ pub trait IContextProvider: Send + Sync {
         session: &dyn ISession,
         messages: &[ChatMessage],
         options: &AgentRunOptions,
-    ) -> Result<ContextInjection>;
+    ) -> Result<ContextResult>;
 
     async fn on_invoked(
         &self,
@@ -67,10 +67,10 @@ pub trait IContextProvider: Send + Sync {
 }
 ```
 
-### ContextInjection — 注入载体
+### ContextResult — 注入载体
 
 ```rust
-pub struct ContextInjection {
+pub struct ContextResult {
     pub instructions: Option<String>,        // 追加到 system prompt
     pub messages: Vec<ChatMessage>,          // 注入到消息列表
     pub tools: Vec<Arc<dyn ITool>>,          // 动态工具

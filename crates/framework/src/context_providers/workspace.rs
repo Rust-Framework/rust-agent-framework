@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ApprovalRequiredTool, ChatMessage, ContextInjection,
+    AgentResponse, AgentRunOptions, ApprovalRequiredTool, ChatMessage, ContextResult,
     IAgent, IContextProvider, IScopeTool, ISession, ITool, ProviderState, Result, ScopePolicy,
     WorkspaceScope,
 };
@@ -156,7 +156,7 @@ impl IContextProvider for WorkspaceContextProvider {
         session: &dyn ISession,
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
+    ) -> Result<ContextResult> {
         // 会话级持久化（仅首次，用于审计/调试）
         let state = ProviderState::<WorkspaceState>::new("WorkspaceContextProvider");
         let ws = state.get_or_init(session);
@@ -171,7 +171,7 @@ impl IContextProvider for WorkspaceContextProvider {
             );
         }
 
-        Ok(ContextInjection {
+        Ok(ContextResult {
             instructions: Some(self.build_instructions()),
             tools: self.tools.clone(),
             ..Default::default()

@@ -48,7 +48,7 @@ where
     async fn handle(
         &self,
         message: Arc<dyn std::any::Any + Send + Sync>,
-        _ctx: &dyn IWorkflowContext,
+        _ctx: Arc<dyn IWorkflowContext>,
         _progress: UnboundedSender<NodeProgress>,
     ) -> Result<HandlerResult> {
         // Arc::downcast 返回 Result<Arc<I>, Arc<dyn Any>>

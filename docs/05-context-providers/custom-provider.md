@@ -7,7 +7,7 @@
 ```rust
 use async_trait::async_trait;
 use rust_agent_core::{
-    ContextInjection, IAgent, IContextProvider, ISession, ChatMessage,
+    ContextResult, IAgent, IContextProvider, ISession, ChatMessage,
     AgentRunOptions, AgentResponse, AgentError, Result,
 };
 
@@ -28,9 +28,9 @@ impl IContextProvider for MyContextProvider {
         _session: &dyn ISession,
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
+    ) -> Result<ContextResult> {
         // 注入指令、消息或工具
-        Ok(ContextInjection::default())
+        Ok(ContextResult::default())
     }
 
     async fn on_invoked(
@@ -54,7 +54,7 @@ impl IContextProvider for MyContextProvider {
 ```rust
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextInjection,
+    AgentResponse, AgentRunOptions, ChatMessage, ContextResult,
     IAgent, IContextProvider, ISession, ProviderState, Result,
 };
 use serde::{Deserialize, Serialize};
@@ -117,7 +117,7 @@ impl IContextProvider for UserProfileProvider {
         session: &dyn ISession,
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
+    ) -> Result<ContextResult> {
         // 获取或从 session 缓存中加载用户画像
         let profile = {
             let state = ProviderState::<UserProfile>::new("UserProfileProvider");
@@ -142,7 +142,7 @@ impl IContextProvider for UserProfileProvider {
             cached
         };
 
-        Ok(ContextInjection {
+        Ok(ContextResult {
             instructions: Some(self.build_instructions(&profile)),
             ..Default::default()
         })
@@ -197,7 +197,7 @@ let agent = AgentBuilder::new()
 ```rust
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextInjection,
+    AgentResponse, AgentRunOptions, ChatMessage, ContextResult,
     IAgent, IContextProvider, ISession, Result,
 };
 use std::sync::Arc;
@@ -254,7 +254,7 @@ impl IContextProvider for DatabaseContextProvider {
         _session: &dyn ISession,
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
+    ) -> Result<ContextResult> {
         let instructions = match self.execute_queries().await {
             Ok(ctx) => Some(ctx),
             Err(e) => {
@@ -263,7 +263,7 @@ impl IContextProvider for DatabaseContextProvider {
             }
         };
 
-        Ok(ContextInjection {
+        Ok(ContextResult {
             instructions,
             ..Default::default()
         })
@@ -305,7 +305,7 @@ let agent = AgentBuilder::new()
 ```rust
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextInjection,
+    AgentResponse, AgentRunOptions, ChatMessage, ContextResult,
     IAgent, IContextProvider, ISession, Result,
 };
 
@@ -335,17 +335,17 @@ impl IContextProvider for MessageLimitProvider {
         _session: &dyn ISession,
         messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
+    ) -> Result<ContextResult> {
         // 消息数在阈值内 → 不干扰
         if messages.len() <= self.max_messages {
-            return Ok(ContextInjection::default());
+            return Ok(ContextResult::default());
         }
 
         // 超出阈值 → 只保留最近 N 条消息
         let start = messages.len().saturating_sub(self.keep_recent);
         let truncated: Vec<ChatMessage> = messages[start..].to_vec();
 
-        Ok(ContextInjection {
+        Ok(ContextResult {
             instructions: Some(format!(
                 "[上下文压缩] 原始 {} 条消息，截断至最近 {} 条。",
                 messages.len(),
@@ -395,7 +395,7 @@ let agent = AgentBuilder::new()
 
 ## 最佳实践
 
-1. **错误不应阻断 Agent 调用**——`on_invoking` 失败时返回 `ContextInjection::default()` 比抛出错误更好
+1. **错误不应阻断 Agent 调用**——`on_invoking` 失败时返回 `ContextResult::default()` 比抛出错误更好
 2. **使用 `ProviderState` 缓存数据**——避免每次 `on_invoking` 都查询数据库
 3. **`on_invoked` 中的 `error` 传参**——可用于失败告警或状态回滚
 4. **命名清晰**——`name()` 返回的字符串应能唯一标识提供器

@@ -6,7 +6,7 @@
 
 | 小节 | 标题 | 核心内容 |
 |------|------|----------|
-| [5.1](overview.md) | IContextProvider 概述 | trait 定义、ContextInjection 载体、提供器链顺序执行、replace_messages 压缩语义 |
+| [5.1](overview.md) | IContextProvider 概述 | trait 定义、ContextResult 载体、提供器链顺序执行、replace_messages 压缩语义 |
 | [5.2](history-provider.md) | InMemoryHistoryProvider 历史管理 | on_invoking 加载历史、on_invoked 持久化 user 消息、消息计数优化 |
 | [5.3](skills-provider.md) | AgentSkillsProvider 技能注入 | AgentSkill 结构、目录扫描、advertise 文本、三个技能工具注入 |
 | [5.4](custom-provider.md) | 自定义上下文提供器 | 构建自定义 Provider、用户画像示例、数据库查询注入示例 |
@@ -27,7 +27,7 @@ graph TB
     end
 
     PRE --> P1
-    P4 -->|"ContextInjection {instructions, messages, tools}"| COMBINED["合并上下文"]
+    P4 -->|"ContextResult {instructions, messages, tools}"| COMBINED["合并上下文"]
     COMBINED --> LLM
 
     LLM --> RESP["AgentResponse"]
@@ -40,7 +40,7 @@ graph TB
 
 RAF 中，多个 `IContextProvider` 按注册顺序执行：
 
-1. **Pre-invocation（on_invoking）**：每个提供器返回 `ContextInjection`，框架收集并合并
+1. **Pre-invocation（on_invoking）**：每个提供器返回 `ContextResult`，框架收集并合并
 2. **LLM 调用**：合并后的指令、消息、工具被注入 Agent 上下文
 3. **Post-invocation（on_invoked）**：每个提供器在 LLM 响应后执行，可持久化状态、记录日志
 

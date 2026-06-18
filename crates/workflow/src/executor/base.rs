@@ -107,7 +107,7 @@ pub trait IExecutor: Send + Sync {
     }
 
     /// 补偿操作（Saga 回滚，默认无操作）
-    async fn compensate(&self, _ctx: &dyn IWorkflowContext) -> Result<()> {
+    async fn compensate(&self, _ctx: Arc<dyn IWorkflowContext>) -> Result<()> {
         Ok(())
     }
 
@@ -115,7 +115,7 @@ pub trait IExecutor: Send + Sync {
     async fn handle(
         &self,
         message: Arc<dyn std::any::Any + Send + Sync>,
-        ctx: &dyn IWorkflowContext,
+        ctx: Arc<dyn IWorkflowContext>,
         progress: tokio::sync::mpsc::UnboundedSender<NodeProgress>,
     ) -> Result<HandlerResult>;
 }

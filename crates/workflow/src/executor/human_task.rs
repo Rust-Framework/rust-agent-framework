@@ -48,7 +48,7 @@ impl IExecutor for HumanTaskExecutor {
     async fn handle(
         &self,
         message: Arc<dyn std::any::Any + Send + Sync>,
-        ctx: &dyn IWorkflowContext,
+        ctx: Arc<dyn IWorkflowContext>,
         _progress: UnboundedSender<NodeProgress>,
     ) -> Result<HandlerResult> {
         let is_resume = *self.awaiting.lock();
@@ -67,7 +67,7 @@ impl IExecutor for HumanTaskExecutor {
             return Ok(HandlerResult::None);
         }
 
-        let form = (self.task_builder)(ctx);
+        let form = (self.task_builder)(&*ctx);
         let form_arc: Arc<dyn std::any::Any + Send + Sync> = Arc::new(form.clone());
         ctx.yield_output(form_arc).await?;
         ctx.request_halt_with_payload(form).await;

@@ -45,7 +45,7 @@ flowchart TB
 一次 `run()` 调用的核心数据经过：
 
 1. **用户消息** → `run(messages, session, options)`
-2. **ContextProvider 链** 依次执行 `on_invoking()`，注入 `ContextInjection`
+2. **ContextProvider 链** 依次执行 `on_invoking()`，注入 `ContextResult`
 3. **消息合并**：[system + instructions] + [provider_messages] + [user_messages]
 4. **压缩检查**：若配置了策略且 token 超预算，压缩消息列表
 5. **LLM 调用**：`IChatClient::run(messages, tool_defs)` → SSE Stream

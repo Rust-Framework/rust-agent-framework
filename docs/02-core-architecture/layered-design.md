@@ -97,7 +97,7 @@ graph TB
 | `AgentRunOptions` | `run_options.rs` | 单次运行覆盖参数 |
 | `ChatClientRunOptions` | `chat_client.rs` | 聊天客户端运行选项 |
 | `WorkspaceScope` | `workspace.rs` | 工作区范围定义 |
-| `ContextInjection` | `context_provider.rs` | Provider 注入载体 |
+| `ContextResult` | `context_provider.rs` | Provider 注入载体 |
 | `BoxStream` | `stream.rs` | 流类型别名 |
 
 ### 为什么这一层如此重要？

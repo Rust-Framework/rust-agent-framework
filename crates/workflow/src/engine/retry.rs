@@ -33,7 +33,7 @@ pub enum ExhaustedAction {
 
 /// 节点重试配置
 #[derive(Debug, Clone)]
-pub struct RetryConfig {
+pub struct RetryOptions {
     /// 最大重试次数（默认 0 = 不重试）
     pub max_retries: u32,
     /// 退避策略
@@ -44,7 +44,7 @@ pub struct RetryConfig {
     pub on_exhausted: ExhaustedAction,
 }
 
-impl Default for RetryConfig {
+impl Default for RetryOptions {
     fn default() -> Self {
         Self {
             max_retries: 3,

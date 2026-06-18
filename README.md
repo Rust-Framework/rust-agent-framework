@@ -510,13 +510,13 @@ let agent = AgentBuilder::new("rag-agent")
     .build()?;
 ```
 
-Providers execute in registration order. The last provider can set `ContextInjection::replace_messages = true` to implement compression (truncation/sliding-window strategies).
+Providers execute in registration order. The last provider can set `ContextResult::replace_messages = true` to implement compression (truncation/sliding-window strategies).
 
 ### Implementing a Custom Provider
 
 ```rust
 use async_trait::async_trait;
-use rust_agent_core::{ContextInjection, IAgent, IContextProvider, ISession, ChatMessage, AgentRunOptions};
+use rust_agent_core::{ContextResult, IAgent, IContextProvider, ISession, ChatMessage, AgentRunOptions};
 
 struct MyRagProvider { docs_dir: String }
 
@@ -530,11 +530,11 @@ impl IContextProvider for MyRagProvider {
         _session: &dyn ISession,
         messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> rust_agent_core::Result<ContextInjection> {
+    ) -> rust_agent_core::Result<ContextResult> {
         let query = messages.last().map(|m| &m.content).unwrap_or(&String::new());
         let relevant_docs = self.search(query); // your retrieval logic
 
-        Ok(ContextInjection {
+        Ok(ContextResult {
             instructions: Some("Use the provided documents to answer.".into()),
             messages: vec![ChatMessage::user(format!("Relevant docs:\n{}", relevant_docs))],
             tools: vec![],
@@ -760,7 +760,7 @@ The agent checks the flag before each tool-loop iteration. When cancelled, the s
 | `ApprovalRequiredTool` | `core` | Wraps an `ITool` to require human approval |
 | `ToolCall` | `core` | Tool call descriptor (id, name, arguments) |
 | `AgentResponse` | `core` | Aggregated final response (text, tool_calls, finish_reason) |
-| `ContextInjection` | `core` | Context provider output (instructions, messages, tools) |
+| `ContextResult` | `core` | Context provider output (instructions, messages, tools) |
 | `ToolRegistry` | `core` | HashMap-backed tool registry |
 | `ChatClientBuilder` | `core` | Pipeline builder for composing chat client decorators |
 | `ChatClientRunOptions` | `core` | Options passed to `IChatClient::run()` |

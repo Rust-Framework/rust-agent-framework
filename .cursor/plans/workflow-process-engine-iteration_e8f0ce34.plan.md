@@ -108,7 +108,7 @@ cp.commit(
 
 ```rust
 // engine/retry.rs (新文件)
-pub struct RetryConfig {
+pub struct RetryOptions {
     pub max_retries: u32,           // 默认 0（不重试）
     pub backoff: RetryBackoff,      // Fixed / Exponential / None
     pub retry_on: RetryCondition,   // AllErrors / SpecificErrors
@@ -120,7 +120,7 @@ pub struct Node {
     pub id: String,
     pub executor: Arc<dyn IExecutor>,
     pub is_output: bool,
-    pub retry: Option<RetryConfig>,     // 新增
+    pub retry: Option<RetryOptions>,     // 新增
     pub timeout: Option<Duration>,      // 为 Phase 3 预留
 }
 ```
@@ -129,7 +129,7 @@ pub struct Node {
 
 **影响文件**:
 
-- `engine/retry.rs` — 新增 RetryConfig + retry loop 工具函数
+- `engine/retry.rs` — 新增 RetryOptions + retry loop 工具函数
 - `graph/node.rs` — Node 新增 retry 字段
 - `builder/workflow_builder.rs` — Builder 新增 `with_retry()` 方法
 - `engine/engine.rs` — 节点执行包装 retry loop
@@ -386,7 +386,7 @@ Phase 4 (P2): ████████      工作量 ~5天
 | -------------------------- | ----- | ------------------------------------------------------------------- |
 | `engine/config.rs`         | P3    | WorkflowConfig (global_timeout, max_parallel, default_node_timeout) |
 | `engine/runtime.rs`        | P2    | WorkflowRuntime (start/resume/wait/events/outputs)                  |
-| `engine/retry.rs`          | P1    | RetryConfig + retry_loop helper                                     |
+| `engine/retry.rs`          | P1    | RetryOptions + retry_loop helper                                     |
 | `executor/human_task.rs`   | P2    | HumanTaskExecutor (halt + 外部输入恢复)                                   |
 | `graph/condition.rs`       | P4    | ExpressionCondition / VariableCondition 内置实现                        |
 | `executor/compensation.rs` | P4    | ICompensable trait + CompensableExecutor wrapper                    |

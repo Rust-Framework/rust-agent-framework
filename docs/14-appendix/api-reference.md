@@ -38,7 +38,7 @@ pub trait ITool: AsAny + Send + Sync {
 ```rust
 pub trait IContextProvider: Send + Sync {
     fn name(&self) -> &str;
-    async fn on_invoking(&self, agent: &dyn IAgent, session: &dyn ISession, messages: &[ChatMessage], options: &AgentRunOptions) -> Result<ContextInjection>;
+    async fn on_invoking(&self, agent: &dyn IAgent, session: &dyn ISession, messages: &[ChatMessage], options: &AgentRunOptions) -> Result<ContextResult>;
     async fn on_invoked(&self, agent: &dyn IAgent, session: &dyn ISession, request_messages: &[ChatMessage], response: Option<&AgentResponse>, error: Option<&AgentError>) -> Result<()>;
 }
 ```
@@ -74,7 +74,7 @@ pub trait ISession: Send + Sync {
 |------|------|------|
 | `ChatMessage` | `role`, `content`, `name`, `tool_calls`, `tool_call_id` | 对话消息 |
 | `ToolResult` | `ok`, `data`, `error` | 工具执行结果 |
-| `ContextInjection` | `instructions`, `messages`, `tools`, `replace_messages` | 上下文注入 |
+| `ContextResult` | `instructions`, `messages`, `tools`, `replace_messages` | 上下文注入 |
 | `AgentRunOptions` | `max_rounds`, `temperature`, `max_tokens`, `instructions_override`, `stream` | 运行选项 |
 | `AgentResponseResult` | `contents: Vec<Content>` | Agent 响应块 |
 | `AgentMetadata` | `agent_type`, `key`, `description`, `tool_names`, `model_id`, `capability_tags` | Agent 元数据 |
@@ -180,7 +180,7 @@ pub struct AgentBuilder<C: IChatClient> {
 | `WorkflowEngine` | `new()`, `with_checkpoint_manager()`, `with_config()`, `run()`, `inject_event()` |
 | `WorkflowConfig` | `new()`, `with_global_timeout()`, `with_node_timeout()`, `with_max_parallel()` |
 | `WorkflowRuntime` | `start()`, `events()`, `outputs()`, `resume()`, `wait()` |
-| `RetryConfig` | `max_retries`, `backoff`, `retry_on`, `on_exhausted` |
+| `RetryOptions` | `max_retries`, `backoff`, `retry_on`, `on_exhausted` |
 | `EventBus` | `new()`, `publish()`, `subscribe()` |
 | `ExternalEvent` | `MessageReceived / SignalReceived / TimerElapsed` |
 | `WorkflowEvent` | 全生命周期事件枚举（`WorkflowStarted` ~ `WorkflowCompleted`） |

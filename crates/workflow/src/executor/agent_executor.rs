@@ -66,10 +66,10 @@ impl IExecutor for AgentExecutor {
     async fn handle(
         &self,
         message: Arc<dyn std::any::Any + Send + Sync>,
-        ctx: &dyn IWorkflowContext,
+        ctx: Arc<dyn IWorkflowContext>,
         progress: UnboundedSender<NodeProgress>,
     ) -> Result<HandlerResult> {
-        let messages = self.extract_messages(&message, ctx).await?;
+        let messages = self.extract_messages(&message, &*ctx).await?;
         let session = ctx.session().cloned();
 
         let stream = self.agent.run(messages, session, None).await?;

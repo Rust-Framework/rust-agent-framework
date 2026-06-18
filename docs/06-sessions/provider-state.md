@@ -82,7 +82,7 @@ state_key.save(session, &state)?;
 ```rust
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextInjection,
+    AgentResponse, AgentRunOptions, ChatMessage, ContextResult,
     IAgent, IContextProvider, ISession, ProviderState, Result,
 };
 use serde::{Deserialize, Serialize};
@@ -107,7 +107,7 @@ impl IContextProvider for CounterProvider {
         session: &dyn ISession,
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
+    ) -> Result<ContextResult> {
         let state_key = ProviderState::<CounterState>::new("CounterProvider");
 
         // 加载或初始化状态
@@ -117,7 +117,7 @@ impl IContextProvider for CounterProvider {
         // 保存更新后的状态
         state_key.save(session, &state)?;
 
-        Ok(ContextInjection {
+        Ok(ContextResult {
             instructions: Some(format!(
                 "[系统] 这是本次会话的第 {} 次调用。",
                 state.invocation_count

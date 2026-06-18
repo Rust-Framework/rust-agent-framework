@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use rust_agent_core::{
-    ChatMessage, ContextInjection, IAgent, IContextProvider, ISession, MessageRole, Result,
+    ChatMessage, ContextResult, IAgent, IContextProvider, ISession, MessageRole, Result,
     AgentRunOptions, AgentResponse,
 };
 
@@ -48,8 +48,8 @@ impl IContextProvider for InMemoryHistoryProvider {
         session: &dyn ISession,
         _messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
-        let mut injection = ContextInjection::default();
+    ) -> Result<ContextResult> {
+        let mut injection = ContextResult::default();
 
         if self.load_messages {
             let history = session.get_messages().await.unwrap_or_default();

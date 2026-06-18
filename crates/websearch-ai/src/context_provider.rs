@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextInjection, IAgent, IContextProvider,
+    AgentResponse, AgentRunOptions, ChatMessage, ContextResult, IAgent, IContextProvider,
     ISession, ITool, MessageRole, Result,
 };
 
@@ -217,7 +217,7 @@ impl IContextProvider for WebSearchContextProvider {
         _session: &dyn ISession,
         messages: &[ChatMessage],
         _options: &AgentRunOptions,
-    ) -> Result<ContextInjection> {
+    ) -> Result<ContextResult> {
         // 将当前 provider 的配置写入共享静态对象，供 WebSearch / WebFetch 工具读取
         crate::set_shared_config(WebSearchSharedConfig {
             proxy_url: self.proxy_url.clone(),
@@ -225,7 +225,7 @@ impl IContextProvider for WebSearchContextProvider {
             language: self.language.clone(),
         });
 
-        let mut injection = ContextInjection {
+        let mut injection = ContextResult {
             instructions: Some(self.build_advertise()),
             tools: self.build_tools(),
             ..Default::default()

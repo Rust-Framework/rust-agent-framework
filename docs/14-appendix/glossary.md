@@ -48,7 +48,7 @@ RAG 管道中的文档分块组件。支持递归分块和语义分块策略。
 
 工作流图中的条件路由组件。支持 `ExpressionCondition`（闭包）、`VariableCondition`（变量比较）和 `VariableEdgeCondition`（边变量比较）。
 
-### ContextInjection
+### ContextResult
 
 上下文注入载体，Provider 在 Pre-invocation 阶段返回的上下文增强内容，包含 instructions、messages 和 tools。
 

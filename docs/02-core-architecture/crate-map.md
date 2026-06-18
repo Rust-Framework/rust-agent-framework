@@ -98,7 +98,7 @@ rust-agent-core = { git = "...", package = "rust-agent-core" }
 pub use agent::IAgent;
 pub use chat_client::{IChatClient, ChatClientBuilder, DelegatingChatClient, ChatClientRunOptions};
 pub use compression::ICompressionStrategy;
-pub use context_provider::{ContextInjection, IContextProvider};
+pub use context_provider::{ContextResult, IContextProvider};
 pub use error::{AgentError, Result};
 pub use message::{
     AgentResponse, AgentResponseResult, AgentResponseUpdate, ChatMessage, Content,

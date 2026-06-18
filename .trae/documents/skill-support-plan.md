@@ -118,9 +118,9 @@ impl AgentSkillsProvider {
 impl IContextProvider for AgentSkillsProvider {
     fn name(&self) -> &str { "AgentSkillsProvider" }
 
-    async fn on_invoking(/* ... */) -> Result<ContextInjection> {
+    async fn on_invoking(/* ... */) -> Result<ContextResult> {
         // Advertise: 注入技能列表 + load_skill/read_skill_resource/run_skill_script 工具
-        Ok(ContextInjection {
+        Ok(ContextResult {
             instructions: Some(self.build_advertise_text()),
             tools: self.build_tools(),
             ..Default::default()

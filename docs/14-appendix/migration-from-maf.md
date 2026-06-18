@@ -12,7 +12,7 @@
 | `AIAgent` | `IAgent` | Agent 核心接口 |
 | `AIFunction` | `ITool` | 工具接口 |
 | `ApprovalRequiredAIFunction` | `ApprovalRequiredTool` | 需要审批的工具包装 |
-| `AIContext` / `AIContextProvider` | `ContextInjection` / `IContextProvider` | 上下文注入 |
+| `AIContext` / `AIContextProvider` | `ContextResult` / `IContextProvider` | 上下文注入 |
 | `AgentThread` / `ChatHistory` | `ISession` / `AgentSession` | 会话管理 |
 | `ChatClient` | `IChatClient` | LLM 客户端 |
 | `FunctionInvokingChatClient` | `FunctionInvokingChatClient` | 工具调用循环装饰器 |
