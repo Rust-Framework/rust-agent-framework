@@ -241,11 +241,17 @@ instructions: |
   Respond concisely in the user's language.
 
 tools:
-  - kind: web
-    name: web_search
+  - kind: web                    # 无 name → 注册全部 web 工具
   - kind: function
     name: echo
     description: Echoes back the input text
+
+contexts:                         # 声明式上下文提供器
+  - kind: memory
+    name: skill-memory
+    config:
+      directory: logs/memory
+      consolidationInterval: 1
 
 max_tool_rounds: 8
 ```
@@ -254,12 +260,20 @@ max_tool_rounds: 8
 
 ```rust
 use rust_agent_decl::DeclAgentBuilder;
+use std::sync::Arc;
 
+// 模型、API Key、contexts、tools 全部从 YAML 读取——无需代码硬编码
 let agent = DeclAgentBuilder::new()
     .from_yaml_file("cli-agent.yaml")
-    .with_model("deepseek-v4-flash")       // 可选：覆盖 YAML 中的模型
-    .with_api_key(&std::env::var("DEEPSEEK_API_KEY")?)
-    .with_tool("echo", |_| Ok(Arc::new(Echo)))  // 注册 YAML 中声明的工具
+    .with_tool("echo", |_| Ok(Arc::new(Echo)))  // 注册 YAML 中声明的自定义工具
+    .build()
+    .await?;
+
+// 运行时模型切换（保留 escape hatch）
+let agent_with_model = DeclAgentBuilder::new()
+    .from_yaml_file("cli-agent.yaml")
+    .with_model("deepseek-reasoner")             // 覆盖 YAML 中的模型
+    .with_tool("echo", |_| Ok(Arc::new(Echo)))
     .build()
     .await?;
 ```
@@ -272,7 +286,7 @@ let agent = DeclAgentBuilder::new()
 | 系统指令 | `.instructions("...")` 硬编码字符串 | YAML 文件，修改无需重编译 |
 | 模型配置 | `.chat_client(client)` | `.with_model("gpt-4o")` |
 | 工具注入 | `.with_tool(Echo)` | `.with_tool("echo", factory)` |
-| 上下文注入 | `.add_context_provider_shared(cp)` | `.with_context(cp)` |
+| 上下文注入 | `.add_context_provider_shared(cp)` | YAML `contexts` 段（memory/skills/mcp/workspace/knowledge/wiki）+ `.with_context(cp)` 外挂 |
 | 产物 | `Arc<dyn IAgent>` | `Arc<dyn IAgent>` |
 
 ### 何时使用哪种方式

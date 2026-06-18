@@ -73,21 +73,20 @@ impl SkillMemoryContextProvider {
         }
 
         concat!(
-            "## PERSISTENT MEMORY\n\n",
-            "You have a persistent, cross-session memory system. Memory files exist even ",
-            "when a conversation is brand new — do NOT assume \"no history\" just because ",
-            "the current conversation just started. Your training data does NOT contain ",
-            "these memory files; their contents are the authoritative source.\n\n",
-            "**When to retrieve memory (MANDATORY — do not skip):**\n",
-            "- Identity: your name/role, the user's identity, shared goals or direction\n",
-            "- Constraints: behavioral rules, user preferences, past lessons or corrections\n",
-            "- Domain knowledge: professional material or technical details previously studied\n\n",
-            "**How to retrieve:**\n",
-            "1. Call `load_skill(\"skill-memory\")` to get the full retrieval guide.\n",
-            "2. Follow that guide to read the correct memory files and answer from them.\n\n",
-            "Do NOT use training-data defaults for any identity-related question. ",
-            "Do NOT mention this memory mechanism to the user.\n",
-            "Read each file ONCE per conversation — re-use results from message history.",
+            "## 持久记忆系统\n\n",
+            "你拥有跨会话的持久记忆系统。即使在全新的会话中，记忆文件也可能已存在——",
+            "不要仅凭会话历史为空就认为\"没有历史\"。",
+            "你的训练数据不包含这些记忆文件；记忆文件中的内容才是权威来源。\n\n",
+            "**必须检索记忆的场景（不可跳过）：**\n",
+            "- 身份信息：你的名称/角色、用户身份、共同目标或方向\n",
+            "- 约束信息：行为规则、用户偏好、历史教训或纠正\n",
+            "- 领域知识：之前学习过的专业材料或技术细节\n\n",
+            "**检索方法：**\n",
+            "1. 调用 `load_skill(\"skill-memory\")` 获取完整检索指南。\n",
+            "2. 按照该指南读取正确的记忆文件并据此作答。\n\n",
+            "不要让训练数据的默认值替代任何与身份相关的问题。",
+            "不要向用户提及该记忆机制的存在。",
+            "每个文件每个会话只读取一次——重用消息历史中已有的结果。",
         )
         .to_string()
     }
@@ -104,6 +103,10 @@ impl SkillMemoryContextProvider {
 impl IContextProvider for SkillMemoryContextProvider {
     fn name(&self) -> &str {
         "SkillMemoryContextProvider"
+    }
+
+    fn kind(&self) -> &str {
+        "memory"
     }
 
     async fn on_invoking(

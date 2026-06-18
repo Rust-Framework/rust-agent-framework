@@ -129,6 +129,7 @@ pub fn scan_dirs(roots: &[impl AsRef<Path>]) -> Result<Self> {
 #[async_trait]
 impl IContextProvider for AgentSkillsProvider {
     fn name(&self) -> &str { "AgentSkillsProvider" }
+    fn kind(&self) -> &str { "skills" }
 
     async fn on_invoking(
         &self, _agent: &dyn IAgent, _session: &dyn ISession,

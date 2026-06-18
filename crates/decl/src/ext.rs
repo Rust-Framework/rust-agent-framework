@@ -108,4 +108,8 @@ impl ITool for ToolWrapper {
     async fn execute(&self, arguments: serde_json::Value) -> rust_agent_core::Result<rust_agent_core::ToolResult> {
         self.0.execute(arguments).await
     }
+
+    fn kind(&self) -> &str {
+        self.0.kind()
+    }
 }

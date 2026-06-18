@@ -28,7 +28,6 @@ use crate::definition::AgentKindData;
 use crate::document::AgentDocument;
 use crate::error::{DeclError, Result};
 use crate::ext::{ChatClientWrapper, ToolWrapper};
-use crate::resolver::agent_resolver::AgentResolver;
 use crate::resolver::connection_resolver;
 
 /// 工具工厂回调类型。
@@ -47,7 +46,8 @@ pub struct DeclAgentBuilder {
     model_id: Option<String>,
     api_key: Option<String>,
     tool_factories: Vec<(String, ToolFactoryCallback)>,
-    context_providers: Vec<Arc<dyn IContextProvider>>,
+    /// 代码注入的上下文提供器（通过 with_context() 添加）。
+    external_contexts: Vec<Arc<dyn IContextProvider>>,
     max_tool_rounds: Option<usize>,
 }
 
@@ -60,7 +60,7 @@ impl DeclAgentBuilder {
             model_id: None,
             api_key: None,
             tool_factories: Vec::new(),
-            context_providers: Vec::new(),
+            external_contexts: Vec::new(),
             max_tool_rounds: None,
         }
     }
@@ -104,10 +104,10 @@ impl DeclAgentBuilder {
         self
     }
 
-    /// 注入 ContextProvider（如 SkillMemory）。无法通过 YAML 声明的内容
-    /// 通过此方法在运行时注入。
+    /// 注入 ContextProvider 外挂。声明式上下文中未覆盖的 provider
+    /// 通过此方法在运行时注入，与 YAML 中 `contexts` 声明的 provider 合并。
     pub fn with_context(mut self, provider: Arc<dyn IContextProvider>) -> Self {
-        self.context_providers.push(provider);
+        self.external_contexts.push(provider);
         self
     }
 
@@ -154,33 +154,30 @@ impl DeclAgentBuilder {
             }
         }
 
-        // 3. 注册工具工厂并 resolve agent
-        let mut agent_resolver = AgentResolver::new();
-        {
-            let tool_resolver = agent_resolver.tool_resolver_mut();
-            for (name, factory) in &self.tool_factories {
-                let factory = Arc::clone(factory);
-                tool_resolver.register_factory(name, move |args| factory(args));
-            }
-        }
-
-        let agent = agent_resolver.resolve(&def).await?;
-
-        // 5. 如无 context_provider，直接返回
-        if self.context_providers.is_empty() {
-            return Ok(agent);
-        }
-
-        // 6. 有 context_provider → 通过 AgentBuilder 混合构建
         let prompt_data = match &def.kind_data {
             AgentKindData::Prompt(data) => data,
             _ => return Err(DeclError::Unsupported("Expected prompt agent".into())),
         };
 
+        // 3. 构建声明式上下文提供器（从 YAML contexts 段）
+        let mut all_context_providers: Vec<Arc<dyn IContextProvider>> = Vec::new();
+
+        // 3a. 从 YAML 声明构建
+        for decl in &prompt_data.contexts {
+            if let Some(provider) = self.build_provider_from_decl(decl) {
+                all_context_providers.push(provider);
+            }
+        }
+
+        // 3b. 合并代码注入的 provider（with_context()）
+        all_context_providers.extend(self.external_contexts.iter().map(Arc::clone));
+
+        // 4. 解析 chat_client
         let chat_client = connection_resolver::resolve_chat_client(&prompt_data.model)?;
         let instructions = prompt_data.instructions.clone();
         let tools_list = prompt_data.tools.clone();
 
+        // 5. 通过 AgentBuilder 统一构建（始终走 context_provider 路径）
         let mut builder = AgentBuilder::new(&def.name)
             .chat_client(ChatClientWrapper(chat_client))
             .instructions(&instructions);
@@ -189,10 +186,11 @@ impl DeclAgentBuilder {
             builder = builder.with_description(&def.description);
         }
 
-        for cp in &self.context_providers {
+        for cp in &all_context_providers {
             builder = builder.add_context_provider_shared(Arc::clone(cp));
         }
 
+        // 6. 解析工具
         let mut tool_resolver = crate::resolver::tool_resolver::ToolResolver::new();
         for (name, factory) in &self.tool_factories {
             let factory = Arc::clone(factory);
@@ -208,6 +206,114 @@ impl DeclAgentBuilder {
         }
 
         Ok(builder.build()?)
+    }
+
+    /// 从声明式配置构建单个上下文提供器。
+    fn build_provider_from_decl(
+        &self,
+        decl: &crate::context_provider_config::ContextProviderDecl,
+    ) -> Option<Arc<dyn IContextProvider>> {
+        use crate::context_provider_config::ContextProviderDecl;
+
+        match decl {
+            // ── memory ──
+            ContextProviderDecl::Memory { name, config } if name == "skill-memory" => {
+                let dir = config
+                    .get("directory")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("logs/memory");
+                let enabled = config
+                    .get("enabled")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                let interval = config
+                    .get("consolidationInterval")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(3) as usize;
+
+                let memory_dir = std::path::PathBuf::from(dir);
+                std::fs::create_dir_all(&memory_dir).ok();
+
+                let sm = rust_agent_framework::memory::SkillMemoryContextProvider::new(&memory_dir)
+                    .with_enabled(enabled)
+                    .with_consolidation_interval(interval);
+                Some(Arc::new(sm))
+            }
+
+            // ── skills ──
+            ContextProviderDecl::Skills { name: _skill_name, config } => {
+                let dir = config
+                    .get("directory")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                tracing::warn!(
+                    "Skills declarative provider not yet implemented; skill: {}, directory: {}",
+                    _skill_name, dir
+                );
+                None
+            }
+
+            // ── mcp ──
+            ContextProviderDecl::Mcp { name: _server_name, config } => {
+                let server_url = config
+                    .get("serverUrl")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                tracing::warn!(
+                    "MCP declarative provider not yet implemented; server: {}, url: {}",
+                    _server_name, server_url
+                );
+                None
+            }
+
+            // ── workspace ──
+            ContextProviderDecl::Workspace { name: _ws_name, config } => {
+                let root = config
+                    .get("root")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(".");
+                let _policy = config
+                    .get("policy")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("read");
+                tracing::warn!(
+                    "Workspace declarative provider not yet implemented; name: {}, root: {}",
+                    _ws_name, root
+                );
+                None
+            }
+
+            // ── knowledge (RAG) ──
+            ContextProviderDecl::Knowledge { name: _kb_name, config } => {
+                let source = config
+                    .get("source")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                tracing::warn!(
+                    "Knowledge (RAG) declarative provider not yet implemented; name: {}, source: {}",
+                    _kb_name, source
+                );
+                None
+            }
+
+            // ── wiki ──
+            ContextProviderDecl::Wiki { name: _wiki_name, config } => {
+                let source = config
+                    .get("source")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                tracing::warn!(
+                    "Wiki declarative provider not yet implemented; name: {}, source: {}",
+                    _wiki_name, source
+                );
+                None
+            }
+
+            ContextProviderDecl::Memory { .. } => {
+                tracing::debug!("Unknown memory provider name (expected 'skill-memory')");
+                None
+            }
+        }
     }
 
     #[cfg(feature = "yaml")]

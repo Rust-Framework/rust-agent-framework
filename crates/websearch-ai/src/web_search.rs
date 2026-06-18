@@ -28,10 +28,10 @@ pub(crate) fn build_search_config(count: usize) -> rust_websearch::SearchConfig 
     config
 }
 
-#[tool(description = "Searches the web using DuckDuckGo/Bing/SearXNG multi-backend engine and returns a list of results with title, URL, and snippet.")]
+#[tool(description = "使用 DuckDuckGo/Bing/SearXNG 多后端搜索引擎进行网页搜索，返回标题、URL 和摘要列表。", kind = "web")]
 async fn web_search(
-    #[param(desc = "Search query")] query: String,
-    #[param(desc = "Maximum number of results to return (default: 5, max: 10)")] count: Option<i64>,
+    #[param(desc = "搜索关键词")] query: String,
+    #[param(desc = "返回结果的最大数量（默认: 5，最大: 10）")] count: Option<i64>,
 ) -> rust_agent_core::ToolResult {
     let count = count.unwrap_or(DEFAULT_COUNT).clamp(1, MAX_COUNT) as usize;
     let config = build_search_config(count);

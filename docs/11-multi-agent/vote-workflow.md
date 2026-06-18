@@ -1,4 +1,4 @@
-# 11.10 VoteWorkflow 投票聚合
+# 11.6 VoteWorkflow 投票聚合
 
 `VoteWorkflow` 实现了投票聚合编排模式——多个 Voter Agent 并行对同一问题独立投票，结果通过聚合器（Aggregator）合并为最终决策。适用于需要多方共识的决策场景。
 

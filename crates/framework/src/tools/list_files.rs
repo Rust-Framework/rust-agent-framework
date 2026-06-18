@@ -5,7 +5,6 @@ use rust_agent_macros::tool;
 
 use super::path_guard::resolve_safe;
 
-#[tool(description = "Lists files and directories at the given path. Returns name, type (file/dir/symlink), and size for each entry.")]
 pub struct ListFiles {
     pub scope: Option<Arc<WorkspaceScope>>,
 }
@@ -18,19 +17,15 @@ impl IScopeTool for ListFiles {
     }
 }
 
+#[tool(
+    description = "列出指定路径下的文件和目录。返回每个条目的名称、类型（file/dir/symlink）和大小。",
+    kind = "file"
+)]
 impl ListFiles {
     async fn call(
         &self,
-        arguments: serde_json::Value,
+        #[param(desc = "目录的绝对路径")] path: String,
     ) -> rust_agent_core::Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args {
-            path: String,
-        }
-        let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
-        })?;
-
         let base_dir = self
             .scope
             .as_ref()
@@ -38,7 +33,7 @@ impl ListFiles {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let scope_root = self.scope.as_ref().map(|s| s.root.as_path());
 
-        let (resolved, scope_status) = match resolve_safe(&base_dir, &args.path, scope_root) {
+        let (resolved, scope_status) = match resolve_safe(&base_dir, &path, scope_root) {
             Ok(r) => r,
             Err(e) => {
                 return Ok(ToolResult::error(format!("Path resolution failed: {}", e)));
@@ -96,7 +91,7 @@ impl ListFiles {
         });
 
         Ok(ToolResult::success(serde_json::json!({
-            "path": args.path,
+            "path": path,
             "entries": items,
             "count": items.len(),
             "scope": scope_status.to_label(),

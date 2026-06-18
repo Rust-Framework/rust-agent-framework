@@ -1,4 +1,4 @@
-# 11.9 MagenticWorkflow 自主编排
+# 11.7 MagenticWorkflow 自主编排
 
 `MagenticWorkflow` 实现了自主多 Agent 编排模式（对齐 MAF Magentic-One）——一个 Orchestrator Agent 通过推理-行动循环（ReAct loop）自主分解任务，动态调度子 Agent 和工具完成复杂目标。
 

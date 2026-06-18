@@ -37,6 +37,7 @@
 pub mod actions;
 pub mod connection;
 pub mod container_agent;
+pub mod context_provider_config;
 pub mod definition;
 pub mod document;
 pub mod error;
@@ -90,6 +91,9 @@ pub use resolver::{
 
 // ── DeclAgentBuilder ──
 pub use decl_agent_builder::DeclAgentBuilder;
+
+// ── Context Provider Config ──
+pub use context_provider_config::ContextProviderDecl;
 
 // ── Extension traits ──
 pub use ext::{AgentBuilderMcpExt, ChatClientWrapper, ToolWrapper};

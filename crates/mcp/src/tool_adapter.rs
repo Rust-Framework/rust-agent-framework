@@ -116,6 +116,10 @@ impl ITool for McpTool {
             "raw_content": result.content,
         })))
     }
+
+    fn kind(&self) -> &str {
+        "mcp"
+    }
 }
 
 // ── McpServerClient ────────────────────────────────────────────────────────

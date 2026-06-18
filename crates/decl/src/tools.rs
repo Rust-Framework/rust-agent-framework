@@ -13,14 +13,16 @@ use crate::schema::PropertySchema;
 /// | `function` | `echo`, `add`                     | `with_tool()` 注册的用户工具    |
 /// | `custom`   | `my_plugin`                       | `register_factory()` 注册      |
 /// | `web`      | `web_search`, `web_fetch`         | `WebSearch`, `WebFetch`       |
-/// | `file`     | `read_file`, `write_file`, ...    | 11 个文件系统工具               |
+/// | `file`     | `read_file`, `write_file`, ...    | 10 个文件系统工具               |
+/// | `shell`    | `run_command`                     | `RunCommand` (平台感知)        |
+/// | `skills`   | `load_skill`, `read_skill_resource` | `LoadSkillTool`, `ReadSkillResourceTool` |
 /// | `code`     | `code_interpreter`                | 沙箱代码执行                    |
 /// | `mcp`      | —                                 | MCP 远程工具                   |
 /// | `openapi`  | —                                 | OpenAPI 规范工具               |
 ///
 /// # 关于 description
 ///
-/// `web`、`file`、`code` 类别的工具 description 已内置在 `#[tool]` 宏中，
+/// `web`、`file`、`shell`、`skills`、`code` 类别的工具 description 已内置在 `#[tool]` 宏中，
 /// YAML 只需写 `name` 即可，不需要重复 description。
 /// `function` 和 `custom` 类别由用户声明，description 在 YAML 中提供。
 ///
@@ -76,10 +78,12 @@ pub enum ToolDecl {
     /// Web 工具：`web_search`、`web_fetch`。
     ///
     /// description 由 `#[tool]` 宏内建，YAML 无需提供。
+    /// 省略 name 时注册全部 web 工具。
     #[serde(rename = "web")]
     Web {
-        /// 工具名 — `"web_search"` 或 `"web_fetch"`。
-        name: String,
+        /// 工具名 — `"web_search"` 或 `"web_fetch"`。省略时注册全部。
+        #[serde(default)]
+        name: Option<String>,
         /// 可选描述（覆盖内建描述）。
         #[serde(default, skip_serializing_if = "String::is_empty")]
         description: String,
@@ -88,10 +92,12 @@ pub enum ToolDecl {
     /// 文件系统工具：`read_file`、`write_file` 等 11 个。
     ///
     /// description 由 `#[tool]` 宏内建，YAML 无需提供。
+    /// 省略 name 时注册全部文件系统工具。
     #[serde(rename = "file")]
     File {
-        /// 工具名 — 如 `"read_file"`、`"write_file"`。
-        name: String,
+        /// 工具名 — 如 `"read_file"`、`"write_file"`。省略时注册全部。
+        #[serde(default)]
+        name: Option<String>,
         /// 可选描述（覆盖内建描述）。
         #[serde(default, skip_serializing_if = "String::is_empty")]
         description: String,
@@ -100,10 +106,12 @@ pub enum ToolDecl {
     /// 代码执行工具：`code_interpreter`。
     ///
     /// description 由 `#[tool]` 宏内建，YAML 无需提供。
+    /// 省略 name 时注册全部代码工具。
     #[serde(rename = "code")]
     Code {
-        /// 工具名 — `"code_interpreter"`。
-        name: String,
+        /// 工具名 — `"code_interpreter"`。省略时注册全部。
+        #[serde(default)]
+        name: Option<String>,
         /// 可选描述（覆盖内建描述）。
         #[serde(default, skip_serializing_if = "String::is_empty")]
         description: String,
@@ -141,13 +149,14 @@ pub struct ToolBinding {
 
 impl ToolDecl {
     /// 获取工具名称（所有带 name 字段的变体）。
+    /// Web/File/Code 的 name 为 Option，此时返回 None。
     pub fn name(&self) -> Option<&str> {
         match self {
             ToolDecl::Function { name, .. } => Some(name),
             ToolDecl::Custom { name, .. } => Some(name),
-            ToolDecl::Web { name, .. } => Some(name),
-            ToolDecl::File { name, .. } => Some(name),
-            ToolDecl::Code { name, .. } => Some(name),
+            ToolDecl::Web { name, .. } => name.as_deref(),
+            ToolDecl::File { name, .. } => name.as_deref(),
+            ToolDecl::Code { name, .. } => name.as_deref(),
             ToolDecl::Mcp { name, .. } => Some(name),
             ToolDecl::OpenApi { name, .. } => Some(name),
         }
@@ -188,7 +197,7 @@ impl ToolDecl {
     /// 创建 web 声明。
     pub fn web(name: impl Into<String>) -> Self {
         ToolDecl::Web {
-            name: name.into(),
+            name: Some(name.into()),
             description: String::new(),
         }
     }
@@ -196,7 +205,7 @@ impl ToolDecl {
     /// 创建 file 声明。
     pub fn file(name: impl Into<String>) -> Self {
         ToolDecl::File {
-            name: name.into(),
+            name: Some(name.into()),
             description: String::new(),
         }
     }
@@ -208,6 +217,16 @@ impl ToolDecl {
             server_url: Some(server_url.into()),
             tool_name: Some(tool_name.into()),
             approval_mode: None,
+        }
+    }
+
+    /// 是否需要展开为该分类下全部工具（无 name 的 web/file/code）。
+    pub fn needs_expansion(&self) -> bool {
+        match self {
+            ToolDecl::Web { name, .. } => name.is_none(),
+            ToolDecl::File { name, .. } => name.is_none(),
+            ToolDecl::Code { name, .. } => name.is_none(),
+            _ => false,
         }
     }
 }

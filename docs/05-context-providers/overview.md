@@ -14,6 +14,10 @@
 pub trait IContextProvider: Send + Sync {
     fn name(&self) -> &str;
 
+    /// 提供器分类——与 ContextProviderDecl 的 kind 标签对应。
+    /// "memory" | "skills" | "mcp" | "workspace" | "knowledge" | "wiki"
+    fn kind(&self) -> &str { "unknown" }
+
     async fn on_invoking(
         &self,
         agent: &dyn IAgent,
@@ -114,6 +118,8 @@ struct CompressionProvider {
 
 impl IContextProvider for CompressionProvider {
     fn name(&self) -> &str { "CompressionProvider" }
+
+    fn kind(&self) -> &str { "compression" }
 
     async fn on_invoking(&self, agent: &dyn IAgent, session: &dyn ISession, ...) -> Result<ContextResult> {
         // 加载完整历史

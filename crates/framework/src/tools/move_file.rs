@@ -5,7 +5,6 @@ use rust_agent_macros::tool;
 
 use super::path_guard::{resolve_safe, resolve_safe_new, ScopeStatus};
 
-#[tool(description = "Moves or renames a file or directory.")]
 pub struct MoveFile {
     pub scope: Option<Arc<WorkspaceScope>>,
 }
@@ -18,20 +17,16 @@ impl IScopeTool for MoveFile {
     }
 }
 
+#[tool(
+    description = "移动或重命名文件或目录。",
+    kind = "file"
+)]
 impl MoveFile {
     async fn call(
         &self,
-        arguments: serde_json::Value,
+        #[param(desc = "源文件的绝对路径")] from: String,
+        #[param(desc = "目标文件的绝对路径")] to: String,
     ) -> rust_agent_core::Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args {
-            from: String,
-            to: String,
-        }
-        let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
-        })?;
-
         let base_dir = self
             .scope
             .as_ref()
@@ -40,7 +35,7 @@ impl MoveFile {
         let scope_root = self.scope.as_ref().map(|s| s.root.as_path());
 
         let (resolved_from, from_scope) =
-            match resolve_safe(&base_dir, &args.from, scope_root) {
+            match resolve_safe(&base_dir, &from, scope_root) {
                 Ok(r) => r,
                 Err(e) => {
                     return Ok(ToolResult::error(format!(
@@ -50,7 +45,7 @@ impl MoveFile {
                 }
             };
         let (resolved_to, to_scope) =
-            match resolve_safe_new(&base_dir, &args.to, scope_root) {
+            match resolve_safe_new(&base_dir, &to, scope_root) {
                 Ok(r) => r,
                 Err(e) => {
                     return Ok(ToolResult::error(format!(
@@ -100,8 +95,8 @@ impl MoveFile {
 
         match std::fs::rename(&resolved_from, &resolved_to) {
             Ok(_) => Ok(ToolResult::success(serde_json::json!({
-                "from": args.from,
-                "to": args.to,
+                "from": from,
+                "to": to,
                 "moved": true,
                 "scope": scope_label,
             }))),

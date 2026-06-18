@@ -214,6 +214,10 @@ impl ITool for DatabaseTool {
         "执行参数化 SQL 查询并返回结果"
     }
 
+    fn kind(&self) -> &str {
+        "function"
+    }
+
     fn parameters(&self) -> serde_json::Value {
         json!({
             "type": "object",
@@ -551,6 +555,10 @@ struct RagProvider {
 impl IContextProvider for RagProvider {
     fn name(&self) -> &str {
         "RagProvider"
+    }
+
+    fn kind(&self) -> &str {
+        "knowledge"
     }
 
     async fn on_invoking(

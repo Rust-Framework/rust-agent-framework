@@ -4,19 +4,25 @@
 
 ## 架构概览
 
-`#[tool]` 宏支持两种使用模式：
+`#[tool]` 宏支持三种使用模式：
 
 ```mermaid
 flowchart TD
     A["#[tool] 输入"] --> B{语法分析}
-    B -->|ItemFn| C["异步函数模式"]
-    B -->|DeriveInput| D["结构体模式"]
-    C --> E[生成 PascalCase 结构体]
-    C --> F[生成 Args 反序列化器]
-    C --> G[生成 ITool impl]
-    C --> H[生成 JSON Schema]
-    D --> I[原样保留结构体]
-    D --> J[生成委托 ITool impl]
+    B -->|ItemFn| C["异步函数模式<br/>（无状态工具）"]
+    B -->|ItemImpl| D["impl 块模式<br/>（有状态工具，推荐）"]
+    B -->|DeriveInput| E["结构体模式<br/>（兼容旧写法）"]
+    C --> F[生成 PascalCase 结构体]
+    C --> G[生成 Args 反序列化器]
+    C --> H[生成 ITool impl]
+    C --> I[生成完整 JSON Schema]
+    D --> J[保留原始 impl 块]
+    D --> K[生成 CallArgs 反序列化器]
+    D --> L[生成 ITool impl]
+    D --> M[生成完整 JSON Schema]
+    E --> N[原样保留结构体]
+    E --> O[生成委托 ITool impl]
+    E --> P[parameters() 返回空 schema]
 ```
 
 ## 异步函数模式
@@ -26,14 +32,14 @@ flowchart TD
 1. 将函数名转换为 PascalCase 作为工具结构体名
 2. 为每个参数生成 `#[derive(Deserialize)]` 的反序列化结构体
 3. 从参数类型和 `#[param]` 属性中提取 JSON Schema
-4. 生成完整的 `ITool` trait 实现
+4. 生成完整的 `ITool` trait 实现（含 `kind()`）
 
 ### 基础示例
 
 ```rust
 use rust_agent_macros::tool;
 
-#[tool(description = "将两个数字相加")]
+#[tool(description = "将两个数字相加", kind = "function")]
 async fn add(
     #[param(desc = "第一个加数")] a: i64,
     #[param(desc = "第二个加数")] b: i64,
@@ -69,7 +75,7 @@ impl Add {
 #[async_trait::async_trait]
 impl rust_agent_core::ITool for Add {
     fn name(&self) -> &str {
-        "add"  // 原始函数名
+        "add"
     }
 
     fn description(&self) -> &str {
@@ -77,9 +83,10 @@ impl rust_agent_core::ITool for Add {
     }
 
     fn parameters(&self) -> serde_json::Value {
-        // 自动生成的 JSON Schema
         let mut props = serde_json::Map::new();
-        // ... 类型映射代码 ...
+        // 自动生成包含 a、b 的 properties，含 description、
+        // type（"integer"）、required: ["a", "b"]
+        // ...
     }
 
     async fn execute(
@@ -92,6 +99,10 @@ impl rust_agent_core::ITool for Add {
             ))?;
         Ok(self.call(args.a, args.b).await)
     }
+
+    fn kind(&self) -> &str {
+        "function"
+    }
 }
 ```
 
@@ -99,16 +110,17 @@ impl rust_agent_core::ITool for Add {
 
 | 原始元素 | 生成结果 | 说明 |
 |----------|---------|------|
-| 函数名 `snake_case` | 结构体名 `PascalCase` | 例如 `read_file` → `ReadFile` |
+| 函数名 `snake_case` | 结构体名 `PascalCase` | 例如 `web_search` → `WebSearch` |
 | 参数 `name: Type` | `Args` 结构体字段 | 自动 `#[derive(Deserialize)]` |
 | `#[param(desc = "...")]` | Schema `description` 字段 | 注入到 JSON Schema 属性中 |
 | `Option<T>` 参数 | 可选参数（非 required） | `is_option_type` 检测 |
+| `#[tool(kind = "...")]` | `kind()` 返回值 | 默认 `"function"` |
 | 返回 `ToolResult` | `ITool::execute` 返回值 | 自动包装 |
 
 ### 带可选参数的工具
 
 ```rust
-#[tool(description = "搜索文件系统中的文件")]
+#[tool(description = "搜索文件系统中的文件", kind = "file")]
 async fn search_file(
     #[param(desc = "搜索模式（glob）")] pattern: String,
     #[param(desc = "搜索起始目录")] directory: Option<String>,
@@ -123,9 +135,124 @@ async fn search_file(
 
 生成的 JSON Schema 中 `directory` 和 `recursive` 因为类型是 `Option<T>` 而不会出现在 `required` 数组中。
 
-## 结构体模式
+## impl 块模式（推荐用于有状态工具）
+
+当工具需要持有内部状态（如 `WorkspaceScope`、`Arc<Vec<AgentSkill>>` 等），而又希望获得自动生成的 JSON Schema 时，使用 impl 块模式。
+
+**优势：**
+- 自动生成完整 JSON Schema（含参数名、类型、描述、required）
+- 消除手写 `Args` 结构体和 `serde_json::from_value` 样板代码
+- `call` 方法直接使用 typed 参数，无需手动反序列化
+- 结构体可以持有状态并实现 `IScopeTool` 等其他 trait
+
+### 完整示例
+
+```rust
+use std::sync::Arc;
+use rust_agent_core::{IScopeTool, ITool, ScopePolicy, ToolResult, WorkspaceScope};
+use rust_agent_macros::tool;
+
+pub struct ReadFile {
+    pub scope: Option<Arc<WorkspaceScope>>,
+}
+
+// IScopeTool 在另一个 impl 块中手动实现
+impl IScopeTool for ReadFile {
+    fn create_scoped(&self, scope: Arc<WorkspaceScope>) -> Arc<dyn ITool> {
+        Arc::new(ReadFile { scope: Some(scope) })
+    }
+}
+
+#[tool(
+    description = "Reads a file from the local filesystem. Supports line range via offset/limit.",
+    kind = "file"
+)]
+impl ReadFile {
+    async fn call(
+        &self,
+        #[param(desc = "Absolute path to the file")] path: String,
+        #[param(desc = "Starting line number (1-based, optional)")] offset: Option<i64>,
+        #[param(desc = "Maximum number of lines to read (optional)")] limit: Option<i64>,
+    ) -> rust_agent_core::Result<ToolResult> {
+        // 直接使用 path、offset、limit 参数 —— 无需手动反序列化！
+        let base_dir = self.scope.as_ref()
+            .map(|s| s.root.clone())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        // ... 业务逻辑 ...
+        Ok(ToolResult::success(serde_json::json!({"content": "..."})))
+    }
+}
+```
+
+**宏展开后生成：**
+
+```rust
+// ── 参数反序列化结构体 ──
+#[derive(serde::Deserialize)]
+#[allow(non_snake_case)]
+#[doc(hidden)]
+struct ReadFileCallArgs {
+    pub path: String,
+    pub offset: Option<i64>,
+    pub limit: Option<i64>,
+}
+
+// ── ITool 实现 ──
+#[async_trait::async_trait]
+impl rust_agent_core::ITool for ReadFile {
+    fn name(&self) -> &str {
+        "read_file"   // CamelCase → snake_case
+    }
+
+    fn description(&self) -> &str {
+        "Reads a file from the local filesystem..."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        // 自动生成的 JSON Schema：
+        // {
+        //   "type": "object",
+        //   "properties": {
+        //     "path": { "type": "string", "description": "Absolute path to the file" },
+        //     "offset": { "type": "integer", "description": "Starting line number..." },
+        //     "limit": { "type": "integer", "description": "Maximum number of lines..." }
+        //   },
+        //   "required": ["path"]
+        // }
+    }
+
+    async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult> {
+        let args: ReadFileCallArgs = serde_json::from_value(arguments)?;
+        self.call(args.path, args.offset, args.limit).await
+    }
+
+    fn kind(&self) -> &str {
+        "file"
+    }
+}
+
+// 原始 impl 块被保留（#[param] 属性被自动剥离）
+impl ReadFile {
+    async fn call(&self, path: String, offset: Option<i64>, limit: Option<i64>) -> Result<ToolResult> {
+        // ... 用户代码 ...
+    }
+}
+```
+
+### impl 块模式的约束
+
+| 约束 | 说明 |
+|------|------|
+| 必须是 inherent impl | 不能是 `impl Trait for Struct` |
+| 不能是泛型 impl | 不支持 `impl<T> MyTool<T>` |
+| 必须包含 `async fn call` | 方法名必须是 `call`，第一个参数必须是 `&self` |
+| `#[tool]` 放在 impl 块上 | 而不是放在 struct 定义上 |
+
+## 结构体模式（兼容旧写法，不推荐）
 
 当 `#[tool]` 应用在结构体上时，宏假设结构体已经手动实现了 `call(&self, arguments: serde_json::Value) -> Result<ToolResult>` 方法，宏只负责生成委托的 `ITool` 实现。
+
+**注意**：struct 模式下 `parameters()` 返回空的 JSON Schema，因为宏无法从结构体字段推断参数信息。**新代码推荐使用 impl 块模式。**
 
 ### 示例
 
@@ -133,9 +260,9 @@ async fn search_file(
 use std::sync::Arc;
 use rust_agent_core::WorkspaceScope;
 
-#[tool(description = "读取本地文件系统中的文件内容")]
+#[tool(description = "读取本地文件系统中的文件内容", kind = "file")]
 pub struct ReadFile {
-    scope: Option<Arc<WorkspaceScope>>,
+    pub scope: Option<Arc<WorkspaceScope>>,
 }
 
 impl ReadFile {
@@ -146,7 +273,7 @@ impl ReadFile {
         // 手动实现参数解析和执行逻辑
         let path = arguments["path"].as_str()
             .ok_or_else(|| rust_agent_core::AgentError::ToolError("Missing path".into()))?;
-        // ... 范围感知的文件读取逻辑 ...
+        // ...
         Ok(rust_agent_core::ToolResult::success(
             serde_json::json!({"content": "..."})
         ))
@@ -160,7 +287,7 @@ impl ReadFile {
 #[async_trait::async_trait]
 impl rust_agent_core::ITool for ReadFile {
     fn name(&self) -> &str {
-        stringify!(ReadFile)  // "ReadFile"
+        "read_file"        // CamelCase → snake_case
     }
 
     fn description(&self) -> &str {
@@ -169,6 +296,7 @@ impl rust_agent_core::ITool for ReadFile {
 
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({"type": "object", "properties": {}})
+        // ⚠️ 空 schema —— 建议迁移到 impl 块模式
     }
 
     async fn execute(
@@ -177,21 +305,40 @@ impl rust_agent_core::ITool for ReadFile {
     ) -> rust_agent_core::Result<rust_agent_core::ToolResult> {
         self.call(arguments).await
     }
+
+    fn kind(&self) -> &str {
+        "file"
+    }
 }
 ```
 
-结构体模式适用于需要更复杂参数校验、自定义 Schema 生成或持有内部状态（如 `WorkspaceScope`）的场景。
+## `kind` 配置
+
+`#[tool]` 宏支持 `kind = "..."` 属性，控制 `ITool::kind()` 返回值，映射到 `ToolDecl` 分类标签：
+
+| kind | 适用场景 |
+|------|---------|
+| `"function"` | 用户注册的函数工具（默认） |
+| `"custom"` | 工厂注册的自定义工具 |
+| `"web"` | 网络搜索/抓取工具 |
+| `"file"` | 文件系统工具 |
+| `"shell"` | Shell 命令执行 |
+| `"skills"` | 技能加载和资源工具 |
+| `"code"` | 代码解释器/沙箱 |
+| `"mcp"` | MCP 远程工具 |
+| `"openapi"` | OpenAPI 规范工具 |
 
 ## 内部实现细节
 
-### `parse_description` — 描述解析
+### `parse_attr` — 属性解析
 
-从 `#[tool(description = "...")]` 属性中提取描述字符串。也支持 `desc` 作为 `description` 的简写别名。
+从 `#[tool(description = "...", kind = "...")]` 属性中提取描述和分类字符串。也支持 `desc` 作为 `description` 的简写别名。
 
 ```rust
-fn parse_description(attr: TokenStream) -> String {
-    // 解析 Meta::NameValue，检查 path 是否为 "description" 或 "desc"
-    // 提取 Lit::Str 的值
+fn parse_attr(attr: TokenStream) -> (String, String) {
+    // 解析 Punctuated<MetaNameValue, Token![,]>
+    // 提取 "description"/"desc" 和 "kind" 的值
+    // kind 默认值为 "function"
 }
 ```
 
@@ -206,9 +353,22 @@ fn parse_description(attr: TokenStream) -> String {
 5. **Args 结构体**：为参数自动派生 `Deserialize`
 6. **代码拼接**：组合以上部分成完整的 TokenStream
 
+### `expand_tool_impl` — impl 块模式展开
+
+核心生成逻辑为：
+
+1. **验证**：确认是 inherent impl（非 trait impl）、非泛型、包含 `async fn call`
+2. **提取 struct 名**：从 `impl <Name>` 的 `self_ty` 中解析
+3. **查找 call 方法**：遍历 `items`，匹配 `ImplItem::Fn` 且 `sig.ident == "call"`
+4. **提取参数**：跳过 receiver（`&self`），提取后续参数的 ident、Type、`#[param(desc)]` 注解
+5. **Schema 生成**：复用函数模式的 Schema 生成逻辑（`rust_type_to_schema_tokens`）
+6. **`Args` 结构体**：生成 `{Name}CallArgs` 私有结构体
+7. **剥离 `#[param]`**：在重新发出的 `impl` 块中自动去除 `#[param]` 属性
+8. **代码拼接**：生成 `ITool` impl + 原始 impl 块
+
 ### `expand_tool_struct` — 结构体模式展开
 
-更简单：保留原始结构体定义，仅添加 `ITool` trait 实现，将 `execute` 委托给 `self.call(arguments)`。
+更简单：保留原始结构体定义，仅添加 `ITool` trait 实现，将 `execute` 委托给 `self.call(arguments)`。`parameters()` 返回空 schema。
 
 ### `extract_param_desc` — 参数描述提取
 
@@ -216,21 +376,7 @@ fn parse_description(attr: TokenStream) -> String {
 
 ### `is_option_type` — 可选类型检测
 
-通过检查类型路径的最后一个段是否为 `Option` 来判断参数是否可选：
-
-```rust
-fn is_option_type(ty: &syn::Type) -> bool {
-    if let syn::Type::Path(type_path) = ty {
-        type_path.path.segments.last()
-            .map(|s| s.ident == "Option")
-            .unwrap_or(false)
-    } else {
-        false
-    }
-}
-```
-
-检测结果为 `true` 的参数不会出现在 `required` 数组中。
+通过检查类型路径的最后一个段是否为 `Option` 来判断参数是否可选。
 
 ### `rust_type_to_schema_tokens` — 类型到 Schema 转换
 
@@ -241,6 +387,13 @@ fn is_option_type(ty: &syn::Type) -> bool {
 3. 基本类型 — `String` → `"string"`、`i64` → `"integer"`、`f64` → `"number"`、`bool` → `"boolean"`
 
 详细映射表请参阅 [10.2 类型映射](macro-type-mapping.md)。
+
+### `struct_name_to_tool_name` — 结构体名到工具名转换
+
+将 CamelCase 结构体名转换为 snake_case 工具名：
+- `ReadFile` → `"read_file"`
+- `LoadSkillTool` → `"load_skill"`（自动剥离 `_tool` 后缀）
+- `RunCommand` → `"run_command"`
 
 ## 在 Agent 中使用
 

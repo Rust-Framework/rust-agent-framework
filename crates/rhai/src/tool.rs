@@ -132,6 +132,10 @@ impl ITool for RhaiTool {
         // 结果封装为 ToolResult
         Ok(rust_agent_core::ToolResult::success(result))
     }
+
+    fn kind(&self) -> &str {
+        "custom"
+    }
 }
 
 #[cfg(test)]

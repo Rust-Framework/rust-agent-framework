@@ -88,13 +88,31 @@ impl ToolResolver {
             }
 
             // ── Web 工具 ──
-            ToolDecl::Web { name, .. } => self.resolve_web(name),
+            ToolDecl::Web { name, .. } => match name.as_deref() {
+                Some(n) => self.resolve_web(n),
+                None => Err(DeclError::Unsupported(
+                    "kind: web without name — use resolve_category() for bulk registration"
+                        .into(),
+                )),
+            },
 
             // ── 文件系统工具 ──
-            ToolDecl::File { name, .. } => self.resolve_file(name),
+            ToolDecl::File { name, .. } => match name.as_deref() {
+                Some(n) => self.resolve_file(n),
+                None => Err(DeclError::Unsupported(
+                    "kind: file without name — use resolve_category() for bulk registration"
+                        .into(),
+                )),
+            },
 
             // ── 代码执行工具 ──
-            ToolDecl::Code { name, .. } => self.resolve_code(name),
+            ToolDecl::Code { name, .. } => match name.as_deref() {
+                Some(n) => self.resolve_code(n),
+                None => Err(DeclError::Unsupported(
+                    "kind: code without name — use resolve_category() for bulk registration"
+                        .into(),
+                )),
+            },
 
             // ── MCP ──
             ToolDecl::Mcp { name, server_url, tool_name, .. } => {
@@ -108,13 +126,50 @@ impl ToolResolver {
         }
     }
 
-    /// 解析列表中的所有工具声明。
+    /// 解析列表中的所有工具声明。带 name-expansion 支持。
     pub async fn resolve_all(&self, tools: &[ToolDecl]) -> crate::Result<Vec<Arc<dyn ITool>>> {
-        let mut resolved = Vec::with_capacity(tools.len());
+        let mut resolved = Vec::new();
         for tool in tools {
-            resolved.push(self.resolve(tool).await?);
+            match tool.needs_expansion() {
+                true => resolved.extend(self.resolve_category(tool).await?),
+                false => resolved.push(self.resolve(tool).await?),
+            }
         }
         Ok(resolved)
+    }
+
+    /// 判断是否需要展开为该分类下全部工具（委托给 ToolDecl::needs_expansion）。
+    pub fn needs_expansion(&self, tool: &ToolDecl) -> bool {
+        tool.needs_expansion()
+    }
+
+    /// 按分类展开全部工具——kind: web 无 name 时展开为 web_search + web_fetch 等。
+    pub async fn resolve_category(&self, tool: &ToolDecl) -> crate::Result<Vec<Arc<dyn ITool>>> {
+        match tool {
+            ToolDecl::Web { .. } => Ok(vec![
+                self.resolve_web("web_search")?,
+                self.resolve_web("web_fetch")?,
+            ]),
+            ToolDecl::File { .. } => Ok(vec![
+                self.resolve_file("read_file")?,
+                self.resolve_file("write_file")?,
+                self.resolve_file("edit_file")?,
+                self.resolve_file("list_files")?,
+                self.resolve_file("inspect_file")?,
+                self.resolve_file("make_directory")?,
+                self.resolve_file("remove_path")?,
+                self.resolve_file("move_file")?,
+                self.resolve_file("find_files")?,
+                self.resolve_file("search_file")?,
+                self.resolve_file("run_command")?,
+            ]),
+            ToolDecl::Code { .. } => Err(DeclError::Unsupported(
+                "code_interpreter requires sandbox execution environment".into(),
+            )),
+            _ => Err(DeclError::Unsupported(
+                "resolve_category only supported for web/file/code tools".into(),
+            )),
+        }
     }
 
     // ── 内部方法 ──

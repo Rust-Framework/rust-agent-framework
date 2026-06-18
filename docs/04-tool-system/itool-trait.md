@@ -32,6 +32,15 @@ pub trait ITool: AsAny + Send + Sync {
     fn requires_approval(&self) -> bool {
         false
     }
+
+    /// 工具分类——与 ToolDecl 的 kind 标签对应。
+    ///
+    /// 返回: `"web"` | `"file"` | `"code"` | `"function"` | `"custom"` | `"mcp"` | `"openapi"`
+    ///
+    /// 默认返回 `"unknown"`，内置工具和宏生成的结构体应覆写此方法。
+    fn kind(&self) -> &str {
+        "unknown"
+    }
 }
 ```
 
@@ -44,6 +53,7 @@ pub trait ITool: AsAny + Send + Sync {
 | `parameters()` | `serde_json::Value` | 返回工具参数的 JSON Schema 对象，描述参数类型、必填/可选、描述信息 | 每次 `run()` 构建 function definitions 时 |
 | `execute()` | `Result<ToolResult>` | 执行工具的核心逻辑，接收 LLM 反序列化后的参数 JSON | LLM 决定调用工具后，由 `FunctionInvokingChatClient` 触发 |
 | `requires_approval()` | `bool` | 标记是否需要人工审批；默认 `false` | 每次执行前由框架检查 |
+| `kind()` | `&str` | 返回工具分类字符串：`"web"` / `"file"` / `"function"` 等；默认 `"unknown"` | YAML 声明式分类、运行时查询 |
 
 ### 方法设计的深层考量
 

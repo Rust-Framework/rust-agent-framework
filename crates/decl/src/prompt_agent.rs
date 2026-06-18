@@ -42,6 +42,12 @@ pub struct PromptAgentData {
     /// 嵌套的子 Agent 声明（递归 `AgentDefinition` 条目）。
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "subAgents")]
     pub sub_agents: Vec<AgentDefinition>,
+
+    /// 声明式上下文列表（框架扩展，非 MAF）。
+    /// 支持 memory/skills/mcp/workspace/knowledge/wiki。
+    /// history 属于内置默认（InMemoryHistoryProvider），websearch 属于工具。
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "contexts")]
+    pub contexts: Vec<crate::context_provider_config::ContextProviderDecl>,
 }
 
 fn is_default_max_tool_rounds(v: &usize) -> bool {
@@ -59,6 +65,7 @@ impl PromptAgentData {
             additional_instructions: None,
             max_tool_rounds: default_max_tool_rounds(),
             sub_agents: Vec::new(),
+            contexts: Vec::new(),
         }
     }
 

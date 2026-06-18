@@ -5,7 +5,6 @@ use rust_agent_macros::tool;
 
 use super::path_guard::{resolve_safe_new, ScopeStatus};
 
-#[tool(description = "Creates a directory and all parent directories if they don't exist (like mkdir -p).")]
 pub struct MakeDirectory {
     pub scope: Option<Arc<WorkspaceScope>>,
 }
@@ -18,19 +17,15 @@ impl IScopeTool for MakeDirectory {
     }
 }
 
+#[tool(
+    description = "创建目录及其所有父目录（类似 mkdir -p）。",
+    kind = "file"
+)]
 impl MakeDirectory {
     async fn call(
         &self,
-        arguments: serde_json::Value,
+        #[param(desc = "要创建的目录的绝对路径")] path: String,
     ) -> rust_agent_core::Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args {
-            path: String,
-        }
-        let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
-        })?;
-
         let base_dir = self
             .scope
             .as_ref()
@@ -39,7 +34,7 @@ impl MakeDirectory {
         let scope_root = self.scope.as_ref().map(|s| s.root.as_path());
 
         let (resolved, scope_status) =
-            match resolve_safe_new(&base_dir, &args.path, scope_root) {
+            match resolve_safe_new(&base_dir, &path, scope_root) {
                 Ok(r) => r,
                 Err(e) => {
                     return Ok(ToolResult::error(format!("Path resolution failed: {}", e)));
@@ -58,7 +53,7 @@ impl MakeDirectory {
 
         match std::fs::create_dir_all(&resolved) {
             Ok(_) => Ok(ToolResult::success(serde_json::json!({
-                "path": args.path,
+                "path": path,
                 "created": true,
                 "scope": scope_status.to_label(),
             }))),

@@ -101,6 +101,8 @@ pub struct CounterProvider;
 impl IContextProvider for CounterProvider {
     fn name(&self) -> &str { "CounterProvider" }
 
+    fn kind(&self) -> &str { "custom" }
+
     async fn on_invoking(
         &self,
         _agent: &dyn IAgent,

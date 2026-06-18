@@ -103,12 +103,12 @@ impl AgentSkillsProvider {
             return String::new();
         }
 
-        let mut text = String::from("## Available Skills\n");
+        let mut text = String::from("## 可用技能\n");
 
         let has_resources = self.skills.iter().any(|s| s.has_resources());
         let has_scripts = self.skills.iter().any(|s| s.has_scripts());
 
-        text.push_str("Use load_skill(name) to get full instructions for any skill listed below.\n\n");
+        text.push_str("使用 load_skill(name) 获取下方任意技能的完整操作指引。\n\n");
 
         for skill in &self.skills {
             text.push_str(&format!(
@@ -117,13 +117,13 @@ impl AgentSkillsProvider {
             ));
 
             if has_resources && skill.has_resources() {
-                text.push_str("  Resources: use read_skill_resource(\"");
+                text.push_str("  资源文件：使用 read_skill_resource(\"");
                 text.push_str(&skill.metadata.name);
-                text.push_str("\", \"<path>\") to read reference documents.\n");
+                text.push_str("\", \"<path>\") 来读取参考文档。\n");
             }
 
             if has_scripts && skill.has_scripts() {
-                text.push_str("  Scripts: use run_command(\"python scripts/<script>\") with workspace scope set to the skill directory.\n");
+                text.push_str("  脚本：使用 run_command(\"python scripts/<script>\")，并将工作区范围设为该技能目录。\n");
             }
         }
 
@@ -152,6 +152,10 @@ impl Default for AgentSkillsProvider {
 impl IContextProvider for AgentSkillsProvider {
     fn name(&self) -> &str {
         "AgentSkillsProvider"
+    }
+
+    fn kind(&self) -> &str {
+        "skills"
     }
 
     async fn on_invoking(
@@ -246,7 +250,7 @@ mod tests {
             .with_skill(skill_b);
 
         let text = provider.build_advertise();
-        assert!(text.contains("## Available Skills"));
+        assert!(text.contains("可用技能"));
         assert!(text.contains("alpha"));
         assert!(text.contains("Alpha skill"));
         assert!(text.contains("beta"));

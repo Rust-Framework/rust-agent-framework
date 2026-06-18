@@ -150,6 +150,10 @@ impl IContextProvider for WorkspaceContextProvider {
         "WorkspaceContextProvider"
     }
 
+    fn kind(&self) -> &str {
+        "workspace"
+    }
+
     async fn on_invoking(
         &self,
         _agent: &dyn IAgent,

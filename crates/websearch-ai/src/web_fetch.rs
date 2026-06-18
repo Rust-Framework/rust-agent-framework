@@ -20,12 +20,12 @@ pub(crate) fn build_fetch_config() -> rust_websearch::FetchConfig {
     config
 }
 
-#[tool(description = "Fetches content from a URL and returns it as Markdown.")]
+#[tool(description = "获取指定 URL 的内容并转换为 Markdown 格式。", kind = "web")]
 async fn web_fetch(
-    #[param(desc = "The URL to fetch")] url: String,
-    #[param(desc = "Maximum content length in bytes (default: 50000)")] max_length: Option<usize>,
-    #[param(desc = "Extra wait time in milliseconds after page load for SPA hydration (default: 0, max: 10000)")] settle_ms: Option<u64>,
-    #[param(desc = "Content cleaning mode: 'auto' (default), 'aggressive', 'minimal', 'raw'")] clean_mode: Option<String>,
+    #[param(desc = "要获取的 URL")] url: String,
+    #[param(desc = "最大内容长度（字节，默认: 50000）")] max_length: Option<usize>,
+    #[param(desc = "页面加载后额外等待的毫秒数，用于 SPA 页面渲染（默认: 0，最大: 10000）")] settle_ms: Option<u64>,
+    #[param(desc = "内容清洗模式：'auto'（默认）、'aggressive'（激进）、'minimal'（最小）、'raw'（原始）")] clean_mode: Option<String>,
 ) -> rust_agent_core::ToolResult {
     let mut config = build_fetch_config();
     if let Some(max_len) = max_length {

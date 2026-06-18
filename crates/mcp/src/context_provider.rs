@@ -95,6 +95,10 @@ impl IContextProvider for McpContextProvider {
         "McpContextProvider"
     }
 
+    fn kind(&self) -> &str {
+        "mcp"
+    }
+
     async fn on_invoking(
         &self,
         _agent: &dyn IAgent,

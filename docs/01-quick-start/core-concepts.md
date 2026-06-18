@@ -111,7 +111,7 @@ pub trait ITool: AsAny + Send + Sync {
     fn parameters(&self) -> serde_json::Value; // JSON Schema 参数定义
     async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult>;
     fn requires_approval(&self) -> bool;       // 是否需要人工审批
-}
+    fn kind(&self) -> &str;                   // 工具分类：web/file/function/custom/mcp 等
 ```
 
 **ToolResult** 结构体：
@@ -197,6 +197,7 @@ ContextProvider 是框架的核心扩展点，在 Agent 调用生命周期的两
 #[async_trait]
 pub trait IContextProvider: Send + Sync {
     fn name(&self) -> &str;
+    fn kind(&self) -> &str;                   // 提供器分类：memory/skills/mcp/workspace/knowledge/wiki
 
     // Pre-invocation：注入指令、消息、工具
     async fn on_invoking(

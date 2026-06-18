@@ -92,9 +92,9 @@ use rust_agent_framework::{tool, AgentBuilder};
 use std::sync::Arc;
 
 // Define a custom tool with the #[tool] macro
-#[tool(description = "Echoes back the input text")]
-async fn echo(#[param(desc = "Text to echo")] text: String) -> String {
-    text
+#[tool(description = "Echoes back the input text", kind = "function")]
+async fn echo(#[param(desc = "Text to echo")] text: String) -> rust_agent_core::ToolResult {
+    rust_agent_core::ToolResult::success(serde_json::json!({"echo": text}))
 }
 
 #[tokio::main]
@@ -164,13 +164,17 @@ Tools are defined with the `#[tool]` attribute macro. It auto-generates the `ITo
 ```rust
 use rust_agent_framework::tool;
 
-#[tool(description = "Get the current temperature for a city")]
+#[tool(description = "Get the current temperature for a city", kind = "function")]
 async fn get_weather(
     #[param(desc = "City name")] city: String,
     #[param(desc = "Unit: celsius or fahrenheit")] unit: Option<String>,
-) -> String {
+) -> rust_agent_core::ToolResult {
     let unit = unit.as_deref().unwrap_or("celsius");
-    format!("Temperature in {}: 22°{}", city, unit)
+    rust_agent_core::ToolResult::success(serde_json::json!({
+        "city": city,
+        "temperature": 22,
+        "unit": unit,
+    }))
 }
 ```
 
@@ -209,6 +213,7 @@ struct MyDatabaseTool;
 impl ITool for MyDatabaseTool {
     fn name(&self) -> &str { "db_query" }
     fn description(&self) -> &str { "Execute a parameterized SQL query" }
+    fn kind(&self) -> &str { "function" }
     fn parameters(&self) -> serde_json::Value {
         json!({
             "type": "object",
@@ -218,10 +223,10 @@ impl ITool for MyDatabaseTool {
             "required": ["sql"]
         })
     }
-    async fn execute(&self, arguments: serde_json::Value) -> Result<String> {
+    async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult> {
         let sql = arguments["sql"].as_str().unwrap_or("");
         // ... execute query ...
-        Ok("Query result".into())
+        Ok(ToolResult::success(json!({"result": "Query executed"})))
     }
 }
 ```
@@ -523,6 +528,7 @@ struct MyRagProvider { docs_dir: String }
 #[async_trait]
 impl IContextProvider for MyRagProvider {
     fn name(&self) -> &str { "MyRagProvider" }
+    fn kind(&self) -> &str { "knowledge" }
 
     async fn on_invoking(
         &self,
@@ -617,39 +623,52 @@ if let Some(sub) = agent.get_subagent(&AgentId::new("reviewer")) {
 
 The `rust-agent-decl` crate enables defining agents and workflows entirely in JSON, YAML, or TOML — no Rust code required.
 
-### JSON Configuration
+### YAML Configuration (CLI)
 
-```json
-{
-  "agents": {
-    "my-agent": {
-      "model": {
-        "provider": "deepseek",
-        "name": "deepseek-chat",
-        "api_key_env": "DEEPSEEK_API_KEY"
-      },
-      "instructions": "You are a helpful assistant.",
-      "tools": [
-        { "type": "builtin", "name": "read_file" },
-        { "type": "builtin", "name": "run_command", "require_approval": true },
-        { "type": "rhai", "name": "calculate", "script": "args.x + args.y" }
-      ],
-      "context_providers": [
-        { "type": "history" },
-        { "type": "skills", "root_dir": "./skills" }
-      ]
-    }
-  }
-}
+The CLI uses MAF AgentSchema v1.0 YAML for fully declarative agent construction:
+
+```yaml
+kind: prompt
+name: cli-agent
+displayName: CLI Assistant
+model:
+  id: deepseek-v4-flash
+  provider: deepseek
+  connection:
+    kind: key
+    api_key: $DEEPSEEK_API_KEY   # env-var syntax supported
+instructions: |
+  You are a helpful assistant.
+
+contexts:                         # declarative context providers
+  - kind: memory
+    name: skill-memory
+    config:
+      directory: logs/memory
+      consolidationInterval: 1
+
+tools:
+  - kind: web                    # no name → register all web tools
+  - kind: file                   # no name → register all 11 file tools
+  - kind: function
+    name: echo
+    description: Echoes back the input text
+
+max_tool_rounds: 8
 ```
 
 ### Loading Declarations
 
 ```rust
-use rust_agent_decl::{AgentDecl, load_from_file};
+use rust_agent_decl::DeclAgentBuilder;
+use std::sync::Arc;
 
-let decl: AgentDecl = load_from_file("agent-config.json")?;
-let agent: Arc<dyn IAgent> = decl.resolve()?;
+// Build agent entirely from YAML — model, API key, tools, contexts all declarative
+let agent: Arc<dyn IAgent> = DeclAgentBuilder::new()
+    .from_yaml_file("cli-agent.yaml")
+    .with_tool("echo", |_| Ok(Arc::new(Echo)))
+    .build()
+    .await?;
 
 // Use the agent normally
 let stream = agent.run(messages, Some(session), None).await?;
@@ -665,30 +684,41 @@ All tools are defined with the `#[tool]` macro and located in `crates/framework/
 
 ### File Operations
 
-| Tool | Description |
-|---|---|
-| `read_file` | Read file contents with optional line range (max 512KB) |
-| `write_file` | Create or overwrite a file |
-| `edit_file` | Exact string replacement in a file |
-| `list_files` | List directory contents |
-| `inspect_file` | Inspect file metadata (type, size, permissions) |
-| `make_directory` | Create directories recursively |
-| `remove_path` | Remove files or directories |
-| `move_file` | Move or rename a file |
-| `find_files` | Find files by glob pattern |
-| `search_file` | Search file contents with regex |
+| Tool | Kind | Description |
+|------|------|-------------|
+| `read_file` | `file` | Read file contents with optional line range (max 512KB) |
+| `write_file` | `file` | Create or overwrite a file |
+| `edit_file` | `file` | Exact string replacement in a file |
+| `list_files` | `file` | List directory contents |
+| `inspect_file` | `file` | Inspect file metadata (type, size, permissions) |
+| `make_directory` | `file` | Create directories recursively |
+| `remove_path` | `file` | Remove files or directories |
+| `move_file` | `file` | Move or rename a file |
+| `find_files` | `file` | Find files by glob pattern |
+| `search_file` | `file` | Search file contents with regex |
 
-### Shell & Web
+### Shell & Web & Skills
 
-| Tool | Description |
-|---|---|
-| `run_command` | Execute a shell command (100KB output cap) |
-| `web_search` | Perform web searches (DuckDuckGo, Bing, SearXNG) |
-| `web_fetch` | Fetch and convert web page content to Markdown |
+| Tool | Kind | Description |
+|------|------|-------------|
+| `run_command` | `shell` | Execute a shell command (100KB output cap, platform-aware) |
+| `web_search` | `web` | Perform web searches (DuckDuckGo, Bing, SearXNG) |
+| `web_fetch` | `web` | Fetch and convert web page content to Markdown |
+| `load_skill` | `skills` | Load a skill's full instructions from SKILL.md |
+| `read_skill_resource` | `skills` | Read a resource file from a loaded skill |
 
 ### Registering Built-in Tools
 
+All 15 built-in tools can be registered individually or by category:
+
 ```rust
+// Register by category via YAML (no name = all tools in category)
+// tools:
+//   - kind: web       → registers web_search + web_fetch
+//   - kind: file      → registers all 10 file tools
+//   - kind: skills    → registers load_skill + read_skill_resource
+
+// Register individually in code
 use rust_agent_framework::{AgentBuilder, tools::{ReadFile, WriteFile, RunCommand}};
 use rust_agent_core::ApprovalRequiredTool;
 use std::sync::Arc;
@@ -739,9 +769,9 @@ The agent checks the flag before each tool-loop iteration. When cancelled, the s
 |---|---|---|
 | `IAgent` | `core` | Agent interface: `run()`, `reset()`, `get_subagent()`, `create_session()` |
 | `IChatClient` | `core` | LLM provider client: streaming `run()` with options |
-| `ITool` | `core` | Tool interface: `name()`, `description()`, `parameters()`, `execute()`, `requires_approval()` |
+| `ITool` | `core` | Tool interface: `name()`, `description()`, `parameters()`, `execute()`, `requires_approval()`, `kind()` |
 | `ISession` | `core` | Conversation session: add/get messages, metadata, serialization |
-| `IContextProvider` | `core` | Pre/post-invocation hooks: inject instructions, messages, tools |
+| `IContextProvider` | `core` | Pre/post-invocation hooks: inject instructions, messages, tools; `name()`, `kind()` |
 | `ICompressionStrategy` | `core` | Message compression for context window management |
 | `ITokenCounter` | `core` | Token counting for budget enforcement |
 | `ISessionStore` | `core` | Session persistence to disk/database |

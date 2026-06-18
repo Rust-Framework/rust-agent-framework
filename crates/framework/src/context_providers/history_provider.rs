@@ -42,6 +42,10 @@ impl IContextProvider for InMemoryHistoryProvider {
         "InMemoryHistoryProvider"
     }
 
+    fn kind(&self) -> &str {
+        "history"
+    }
+
     async fn on_invoking(
         &self,
         _agent: &dyn IAgent,

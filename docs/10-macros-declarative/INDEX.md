@@ -8,7 +8,7 @@
 
 | 小节 | 标题 | 内容概要 |
 |------|------|---------|
-| [10.1](tool-macro.md) | `#[tool]` 属性宏详解 | 异步函数模式与结构体模式，自动生成 ITool 实现、参数反序列化器、JSON Schema |
+| [10.1](tool-macro.md) | `#[tool]` 属性宏详解 | 异步函数模式、impl 块模式、结构体模式，自动生成 ITool 实现、参数反序列化器、JSON Schema、kind 分类
 | [10.2](macro-type-mapping.md) | Rust 类型到 JSON Schema 映射 | 完整类型映射表，`#[param]` 属性，`Option<T>` 检测，数组与嵌套泛型 |
 | [10.3](declarative-config.md) | 声明式 Agent/Workflow 配置 | `rust-agent-decl` 核心类型，多格式支持，ToolResolver 工具解析，便捷函数 |
 | [10.4](agent-schema.md) | AgentSchema v1.0 规范 | Agent 类型体系，模型配置，工具绑定，连接定义，模板引擎，完整示例 |

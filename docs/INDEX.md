@@ -96,7 +96,7 @@
 | [10.3](10-macros-declarative/declarative-config.md) | 声明式 Agent/Workflow 配置 |
 | [10.4](10-macros-declarative/agent-schema.md) | AgentSchema v1.0 规范 |
 
-## 第 11 章：多智能体编排与业务流程引擎
+## 第 11 章：多智能体编排技术
 
 | 小节 | 标题 |
 |------|------|
@@ -104,51 +104,57 @@
 | [11.2](11-multi-agent/sequential-workflow.md) | SequentialWorkflow 顺序编排 |
 | [11.3](11-multi-agent/concurrent-workflow.md) | ConcurrentWorkflow 并发编排 |
 | [11.4](11-multi-agent/handoff-workflow.md) | HandoffWorkflow 交接编排 |
-| [11.5](11-multi-agent/custom-orchestrations.md) | 自定义编排（WorkflowBuilder） |
-| [11.6](11-multi-agent/checkpoints.md) | 检查点与断点续传 |
-| [11.7](11-multi-agent/workflow-as-agent.md) | IAgent 统一门面 |
-| [11.8](11-multi-agent/group-chat-workflow.md) | GroupChatWorkflow 群聊编排 |
-| [11.9](11-multi-agent/magentic-workflow.md) | MagenticWorkflow 自主编排 |
-| [11.10](11-multi-agent/vote-workflow.md) | VoteWorkflow 投票聚合 |
-| [11.11](11-multi-agent/process-definition.md) | 流程定义与编译（ProcessDefinition DSL） |
-| [11.12](11-multi-agent/process-instance.md) | 流程实例与状态管理 |
-| [11.13](11-multi-agent/standard-activities.md) | 标准活动节点（8 种 IExecutor） |
-| [11.14](11-multi-agent/saga-compensation.md) | SAGA 事务与补偿链 |
-| [11.15](11-multi-agent/agent-team-pool.md) | Agent 团队与池化管理 |
-| [11.16](11-multi-agent/advanced-gateways-events.md) | 增强网关、事件与定时调度 |
-| [11.17](11-multi-agent/observability.md) | 消息关联、审计与 SLA |
+| [11.5](11-multi-agent/group-chat-workflow.md) | GroupChatWorkflow 群聊编排 |
+| [11.6](11-multi-agent/vote-workflow.md) | VoteWorkflow 投票聚合 |
+| [11.7](11-multi-agent/magentic-workflow.md) | MagenticWorkflow 自主编排 |
+| [11.8](11-multi-agent/custom-orchestrations.md) | 自定义编排（WorkflowBuilder） |
+| [11.9](11-multi-agent/checkpoints.md) | 检查点与断点续传 |
+| [11.10](11-multi-agent/workflow-as-agent.md) | IAgent 统一门面 |
 
-## 第 12 章：扩展能力
+## 第 12 章：业务流程编排引擎
 
 | 小节 | 标题 |
 |------|------|
-| [12.1](12-extensions/overview.md) | 扩展体系概述 |
-| [12.2](12-extensions/websearch.md) | 网络搜索（WebSearch / WebFetch） |
-| [12.3](12-extensions/rag.md) | 检索增强生成（RAG） |
-| [12.4](12-extensions/wiki.md) | Wiki 知识引擎 |
-| [12.5](12-extensions/skills.md) | Agent 技能系统 |
-| [12.6](12-extensions/rhai-scripts.md) | Rhai 脚本引擎 |
-| [12.7](12-extensions/memory.md) | SkillMemory 记忆系统 |
-| [12.8](12-extensions/mcp.md) | MCP 协议集成 |
+| [12.1](12-process-engine/overview.md) | 业务流程引擎概述 |
+| [12.2](12-process-engine/process-definition.md) | 流程定义与编译（ProcessDefinition DSL） |
+| [12.3](12-process-engine/standard-activities.md) | 标准活动节点（8 种 IExecutor） |
+| [12.4](12-process-engine/process-instance.md) | 流程实例与状态管理 |
+| [12.5](12-process-engine/advanced-gateways-events.md) | 增强网关、事件与定时调度 |
+| [12.6](12-process-engine/saga-compensation.md) | SAGA 事务与补偿链 |
+| [12.7](12-process-engine/agent-team-pool.md) | Agent 团队与池化管理 |
+| [12.8](12-process-engine/observability.md) | 消息关联、审计与 SLA |
 
-## 第 13 章：宿主服务
-
-| 小节 | 标题 |
-|------|------|
-| [13.1](13-host-service/overview.md) | Host Service 概述 |
-| [13.2](13-host-service/acp-protocol.md) | ACP 协议与消息格式 |
-| [13.3](13-host-service/transports.md) | 传输层（Stdio / WebSocket） |
-| [13.4](13-host-service/agent-registry.md) | Agent 注册与发现 |
-| [13.5](13-host-service/multi-agent-orchestration.md) | 三层多智能体编排模型 |
-| [13.6](13-host-service/tagged-streaming.md) | 标签化流式输出 |
-
-## 第 14 章：附录
+## 第 13 章：扩展能力
 
 | 小节 | 标题 |
 |------|------|
-| [14.1](14-appendix/api-reference.md) | API 速查表 |
-| [14.2](14-appendix/crate-dependency-graph.md) | Crate 依赖关系图 |
-| [14.3](14-appendix/glossary.md) | 术语表 |
-| [14.4](14-appendix/faq.md) | 常见问题 |
-| [14.5](14-appendix/migration-from-maf.md) | 从 MAF 迁移指南 |
-| [14.6](14-appendix/performance-tuning.md) | 性能调优指南 |
+| [13.1](13-extensions/overview.md) | 扩展体系概述 |
+| [13.2](13-extensions/websearch.md) | 网络搜索（WebSearch / WebFetch） |
+| [13.3](13-extensions/rag.md) | 检索增强生成（RAG） |
+| [13.4](13-extensions/wiki.md) | Wiki 知识引擎 |
+| [13.5](13-extensions/skills.md) | Agent 技能系统 |
+| [13.6](13-extensions/rhai-scripts.md) | Rhai 脚本引擎 |
+| [13.7](13-extensions/memory.md) | SkillMemory 记忆系统 |
+| [13.8](13-extensions/mcp.md) | MCP 协议集成 |
+
+## 第 14 章：宿主服务
+
+| 小节 | 标题 |
+|------|------|
+| [14.1](14-host-service/overview.md) | Host Service 概述 |
+| [14.2](14-host-service/acp-protocol.md) | ACP 协议与消息格式 |
+| [14.3](14-host-service/transports.md) | 传输层（Stdio / WebSocket） |
+| [14.4](14-host-service/agent-registry.md) | Agent 注册与发现 |
+| [14.5](14-host-service/multi-agent-orchestration.md) | 三层多智能体编排模型 |
+| [14.6](14-host-service/tagged-streaming.md) | 标签化流式输出 |
+
+## 第 15 章：附录
+
+| 小节 | 标题 |
+|------|------|
+| [15.1](15-appendix/api-reference.md) | API 速查表 |
+| [15.2](15-appendix/crate-dependency-graph.md) | Crate 依赖关系图 |
+| [15.3](15-appendix/glossary.md) | 术语表 |
+| [15.4](15-appendix/faq.md) | 常见问题 |
+| [15.5](15-appendix/migration-from-maf.md) | 从 MAF 迁移指南 |
+| [15.6](15-appendix/performance-tuning.md) | 性能调优指南 |

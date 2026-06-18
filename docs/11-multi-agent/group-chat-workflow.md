@@ -1,4 +1,4 @@
-# 11.8 GroupChatWorkflow 群聊编排
+# 11.5 GroupChatWorkflow 群聊编排
 
 `GroupChatWorkflow` 实现了多 Agent 轮流讨论的协作模式——多个参与者按顺序或由协调者调度依次发言，参与者可以看到完整的对话历史后进行回复，直到满足终止条件。
 

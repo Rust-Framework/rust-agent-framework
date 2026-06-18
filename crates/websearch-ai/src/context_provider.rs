@@ -110,11 +110,11 @@ impl WebSearchContextProvider {
     // ── advertise 文本 ──
 
     pub fn build_advertise(&self) -> String {
-        let mut text = String::from("## Web Search Capability\n\n");
-        text.push_str("You have web search and web page fetching capabilities:\n\n");
-        text.push_str("- **web_search(query, count?)**: Search the web and get results with titles, URLs, and snippets.\n");
-        text.push_str("- **web_fetch(url, max_length?, settle_ms?)**: Fetch full page content as Markdown from any URL.\n\n");
-        text.push_str("**Workflow tip**: Use web_search to discover information and URLs, then web_fetch to get full page content. If web_search returns no results, try different keywords or search in English.\n");
+        let mut text = String::from("## 网页搜索能力\n\n");
+        text.push_str("你拥有网页搜索和页面抓取能力：\n\n");
+        text.push_str("- **web_search(query, count?)**：搜索网页，返回包含标题、URL 和摘要的结果列表。\n");
+        text.push_str("- **web_fetch(url, max_length?, settle_ms?)**：获取任意 URL 的完整页面内容并转为 Markdown。\n\n");
+        text.push_str("**工作流提示**：先用 web_search 发现信息和 URL，再用 web_fetch 获取完整页面内容。如果 web_search 无结果，请尝试不同的关键词或用英文搜索。\n");
         text
     }
 
@@ -156,11 +156,11 @@ impl WebSearchContextProvider {
                 );
 
                 let mut text = format!(
-                    "## Web Search Results for: \"{}\"\n\n",
+                    "## 网页搜索结果：「{}」\n\n",
                     query
                 );
                 text.push_str(&format!(
-                    "Found {} result(s):\n\n",
+                    "找到 {} 条结果：\n\n",
                     count
                 ));
 
@@ -171,16 +171,16 @@ impl WebSearchContextProvider {
                         r.title
                     ));
                     text.push_str(&format!("- **URL**: {}\n", r.url));
-                    text.push_str(&format!("- **Snippet**: {}\n\n", r.snippet));
+                    text.push_str(&format!("- **摘要**: {}\n\n", r.snippet));
                 }
 
                 text.push_str("---\n");
-                text.push_str("*Tip: Use web_fetch(url) to get full content from any URL above. Use web_search(query) to search for more information.*\n");
+                text.push_str("*提示：使用 web_fetch(url) 获取上方任意 URL 的完整内容。使用 web_search(query) 搜索更多信息。*\n");
 
                 // 截断过长的结果
                 if text.len() > SEARCH_INSTRUCTION_CAP {
                     let truncation_note = format!(
-                        "\n\n*(Results truncated to {} characters. Use web_search with a more specific query for narrower results.)*",
+                        "\n\n*（结果已截断至 {} 字符。请使用更精确的查询以获得更精准的结果。）*",
                         SEARCH_INSTRUCTION_CAP
                     );
                     text.truncate(SEARCH_INSTRUCTION_CAP - truncation_note.len());
@@ -209,6 +209,10 @@ impl Default for WebSearchContextProvider {
 impl IContextProvider for WebSearchContextProvider {
     fn name(&self) -> &str {
         "WebSearchContextProvider"
+    }
+
+    fn kind(&self) -> &str {
+        "websearch"
     }
 
     async fn on_invoking(
@@ -315,7 +319,7 @@ mod tests {
     fn test_build_advertise() {
         let provider = WebSearchContextProvider::new();
         let text = provider.build_advertise();
-        assert!(text.contains("Web Search Capability"));
+        assert!(text.contains("网页搜索能力"));
         assert!(text.contains("web_search"));
         assert!(text.contains("web_fetch"));
     }

@@ -28,23 +28,24 @@
 | 第 8 章 | [工作区管理](08-workspace-management/) | WorkspaceScope、路径守卫、跨范围审批 |
 | 第 9 章 | [ChatClient 管道](09-chat-client-pipeline/) | 装饰器模式、工具调用循环、LLM 提供商 |
 | 第 10 章 | [宏与声明式配置](10-macros-declarative/) | #[tool] 宏、JSON/YAML/TOML 配置 |
-| 第 11 章 | [多智能体编排](11-multi-agent/) | Builder 体系、六种编排模式、引擎化执行、IAgent 统一门面、检查点 |
-| 第 12 章 | [扩展能力](12-extensions/) | 网络搜索、RAG、Wiki、技能系统、Rhai 脚本、MCP 集成 |
-| 第 13 章 | [宿主服务](13-host-service/) | ACP 协议、Stdio/WebSocket 传输、智能体注册 |
-| 第 14 章 | [附录](14-appendix/) | Crate 地图、API 速查、术语表、常见问题 |
+| 第 11 章 | [多智能体编排技术](11-multi-agent/) | 六种编排模式、图驱动引擎、检查点、IAgent 门面 |
+| 第 12 章 | [业务流程编排引擎](12-process-engine/) | 流程定义 DSL、标准活动节点、SAGA 补偿、Agent 池化 |
+| 第 13 章 | [扩展能力](13-extensions/) | 网络搜索、RAG、Wiki、技能系统、Rhai 脚本、MCP 集成 |
+| 第 14 章 | [宿主服务](14-host-service/) | ACP 协议、Stdio/WebSocket 传输、Agent 注册 |
+| 第 15 章 | [附录](15-appendix/) | Crate 地图、API 速查、术语表、常见问题 |
 
 ## 快速导航
 
 - [完整目录索引](INDEX.md)
 - [第 1 章：快速入门](01-quick-start/)
-- [API 速查表](14-appendix/api-reference.md)
+- [API 速查表](15-appendix/api-reference.md)
 
 ## 阅读建议
 
 - **首次使用 RAF**: 建议从第 1 章开始，按顺序阅读前 4 章
 - **已有 Agent 开发经验**: 可直接跳到第 4 章（工具系统）或第 9 章（ChatClient 管道）
-- **构建生产系统**: 建议完整阅读第 7 章（审批）、第 8 章（工作区管理）、第 13 章（宿主服务）
-- **设计复杂工作流**: 重点阅读第 11 章（多智能体编排）
+- **构建生产系统**: 建议完整阅读第 7 章（审批）、第 8 章（工作区管理）、第 14 章（宿主服务）
+- **设计复杂工作流**: 重点阅读第 11 章（多智能体编排）和第 12 章（业务流程编排引擎）
 
 ---
 

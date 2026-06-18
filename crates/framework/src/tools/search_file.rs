@@ -8,7 +8,6 @@ use super::path_guard::resolve_safe;
 const MAX_MATCHES: usize = 200;
 const MAX_LINE_DISPLAY: usize = 300;
 
-#[tool(description = "Searches file contents using a regex pattern. Returns matching lines with file path and line number.")]
 pub struct SearchFile {
     pub scope: Option<Arc<WorkspaceScope>>,
 }
@@ -21,23 +20,19 @@ impl IScopeTool for SearchFile {
     }
 }
 
+#[tool(
+    description = "使用正则表达式搜索文件内容。返回匹配的行及文件路径和行号。",
+    kind = "file"
+)]
 impl SearchFile {
     async fn call(
         &self,
-        arguments: serde_json::Value,
+        #[param(desc = "正则表达式模式")] pattern: String,
+        #[param(desc = "递归搜索的目录")] directory: String,
+        #[param(desc = "过滤器文件的 glob 模式（如 '*.rs'）")] include: Option<String>,
+        #[param(desc = "忽略大小写搜索（默认: false）")] case_insensitive: Option<bool>,
     ) -> rust_agent_core::Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args {
-            pattern: String,
-            directory: String,
-            include: Option<String>,
-            case_insensitive: Option<bool>,
-        }
-        let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
-        })?;
-
-        let case_insensitive = args.case_insensitive.unwrap_or(false);
+        let case_insensitive = case_insensitive.unwrap_or(false);
         let base_dir = self
             .scope
             .as_ref()
@@ -46,7 +41,7 @@ impl SearchFile {
         let scope_root = self.scope.as_ref().map(|s| s.root.as_path());
 
         let (resolved_dir, scope_status) =
-            match resolve_safe(&base_dir, &args.directory, scope_root) {
+            match resolve_safe(&base_dir, &directory, scope_root) {
                 Ok(r) => r,
                 Err(e) => {
                     return Ok(ToolResult::error(format!("Path resolution failed: {}", e)));
@@ -54,14 +49,14 @@ impl SearchFile {
             };
 
         let regex = if case_insensitive {
-            match regex::bytes::RegexBuilder::new(&format!("(?i){}", args.pattern))
+            match regex::bytes::RegexBuilder::new(&format!("(?i){}", pattern))
                 .build()
             {
                 Ok(r) => r,
                 Err(e) => return Ok(ToolResult::error(format!("Invalid regex: {}", e))),
             }
         } else {
-            match regex::bytes::Regex::new(&args.pattern) {
+            match regex::bytes::Regex::new(&pattern) {
                 Ok(r) => r,
                 Err(e) => return Ok(ToolResult::error(format!("Invalid regex: {}", e))),
             }
@@ -79,7 +74,7 @@ impl SearchFile {
                         .unwrap_or(false)
             });
 
-        let include_pattern = args.include.as_ref().map(|inc| {
+        let include_pattern = include.as_ref().map(|inc| {
             format!(
                 "{}/{}",
                 resolved_dir
@@ -147,8 +142,8 @@ impl SearchFile {
         let truncated = matches.len() >= MAX_MATCHES;
 
         Ok(ToolResult::success(serde_json::json!({
-            "pattern": args.pattern,
-            "directory": args.directory,
+            "pattern": pattern,
+            "directory": directory,
             "matches": matches,
             "total": matches.len(),
             "truncated": truncated,

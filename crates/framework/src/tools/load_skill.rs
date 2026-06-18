@@ -1,24 +1,23 @@
 use std::sync::Arc;
 
-use rust_agent_core::{ToolResult};
+use rust_agent_core::ToolResult;
 use rust_agent_macros::tool;
 
 use crate::context_providers::agent_skill::AgentSkill;
 
-#[tool(description = "Load a skill's full instructions from SKILL.md. Call this when a user's task matches a skill's domain to get detailed step-by-step guidance.")]
 pub struct LoadSkillTool {
     pub skills: Arc<Vec<AgentSkill>>,
 }
 
+#[tool(
+    description = "加载 SKILL.md 中的技能完整指引。当用户任务匹配某个技能领域时，调用此工具获取详细的分步操作指导。",
+    kind = "skills"
+)]
 impl LoadSkillTool {
     async fn call(
         &self,
-        arguments: serde_json::Value,
+        #[param(desc = "要加载的技能名称")] skill_name: String,
     ) -> rust_agent_core::Result<ToolResult> {
-        let skill_name = arguments["skill_name"].as_str().ok_or_else(|| {
-            rust_agent_core::AgentError::ToolError("Missing 'skill_name' argument".into())
-        })?;
-
         let skill = self
             .skills
             .iter()

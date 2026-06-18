@@ -7,7 +7,6 @@ use super::path_guard::{resolve_safe_new, ScopeStatus};
 
 const MAX_CONTENT_SIZE: usize = 1_000_000;
 
-#[tool(description = "Creates a new file or overwrites an existing file with the given content.")]
 pub struct WriteFile {
     pub scope: Option<Arc<WorkspaceScope>>,
 }
@@ -20,24 +19,20 @@ impl IScopeTool for WriteFile {
     }
 }
 
+#[tool(
+    description = "创建新文件或覆盖已有文件写入指定内容。",
+    kind = "file"
+)]
 impl WriteFile {
     async fn call(
         &self,
-        arguments: serde_json::Value,
+        #[param(desc = "文件的绝对路径")] path: String,
+        #[param(desc = "要写入文件的内容")] content: String,
     ) -> rust_agent_core::Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args {
-            path: String,
-            content: String,
-        }
-        let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
-        })?;
-
-        if args.content.len() > MAX_CONTENT_SIZE {
+        if content.len() > MAX_CONTENT_SIZE {
             return Ok(ToolResult::error(format!(
                 "Content size {} exceeds maximum of {} bytes",
-                args.content.len(),
+                content.len(),
                 MAX_CONTENT_SIZE,
             )));
         }
@@ -50,7 +45,7 @@ impl WriteFile {
         let scope_root = self.scope.as_ref().map(|s| s.root.as_path());
 
         let (resolved, scope_status) =
-            match resolve_safe_new(&base_dir, &args.path, scope_root) {
+            match resolve_safe_new(&base_dir, &path, scope_root) {
                 Ok(r) => r,
                 Err(e) => {
                     return Ok(ToolResult::error(format!("Path resolution failed: {}", e)));
@@ -78,10 +73,10 @@ impl WriteFile {
             }
         }
 
-        match std::fs::write(&resolved, &args.content) {
+        match std::fs::write(&resolved, &content) {
             Ok(_) => Ok(ToolResult::success(serde_json::json!({
-                "path": args.path,
-                "bytes_written": args.content.len(),
+                "path": path,
+                "bytes_written": content.len(),
                 "scope": scope_status.to_label(),
             }))),
             Err(e) => Ok(ToolResult::error(format!("Failed to write file: {}", e))),

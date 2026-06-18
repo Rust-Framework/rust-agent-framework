@@ -6,7 +6,6 @@ use rust_agent_macros::tool;
 
 use super::path_guard::{resolve_safe, ScopeStatus};
 
-#[tool(description = "Deletes a file or directory at the specified path.")]
 pub struct RemovePath {
     pub scope: Option<Arc<WorkspaceScope>>,
 }
@@ -19,19 +18,15 @@ impl IScopeTool for RemovePath {
     }
 }
 
+#[tool(
+    description = "删除指定路径的文件或目录。",
+    kind = "file"
+)]
 impl RemovePath {
     async fn call(
         &self,
-        arguments: serde_json::Value,
+        #[param(desc = "要删除的文件或目录的绝对路径")] path: String,
     ) -> rust_agent_core::Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args {
-            path: String,
-        }
-        let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
-        })?;
-
         let base_dir = self
             .scope
             .as_ref()
@@ -39,7 +34,7 @@ impl RemovePath {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let scope_root = self.scope.as_ref().map(|s| s.root.as_path());
 
-        let (resolved, scope_status) = match resolve_safe(&base_dir, &args.path, scope_root) {
+        let (resolved, scope_status) = match resolve_safe(&base_dir, &path, scope_root) {
             Ok(r) => r,
             Err(e) => {
                 return Ok(ToolResult::error(format!("Path resolution failed: {}", e)));
@@ -56,7 +51,7 @@ impl RemovePath {
             }
         }
 
-        // Guard: refuse to delete base_dir itself or dangerous paths
+        // Guard: 禁止删除 base_dir 本身或危险路径
         let canonical_base = base_dir
             .canonicalize()
             .unwrap_or_else(|_| base_dir.clone());
@@ -93,7 +88,7 @@ impl RemovePath {
 
         match result {
             Ok(_) => Ok(ToolResult::success(serde_json::json!({
-                "path": args.path,
+                "path": path,
                 "deleted": true,
                 "scope": scope_status.to_label(),
             }))),

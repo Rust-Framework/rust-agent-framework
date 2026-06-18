@@ -54,7 +54,7 @@ let agent = resolver.resolve(&decl).await?;
   "instructions": "你是一个资深代码审查专家...",
   "model": { ... },
   "tools": [ ... ],
-  "context_providers": [ ... ],
+  "contexts": [ ... ],
   "compression": { ... },
   "token_counter": { ... },
   "properties": { ... },
@@ -75,7 +75,7 @@ let agent = resolver.resolve(&decl).await?;
 | `instructions` | `string` | 否 | `""` | 系统指令（System Prompt） |
 | `model` | `object` | **是** | — | 模型配置（见 ModelConfig） |
 | `tools` | `array` | 否 | `[]` | 工具引用列表（见 ToolRef） |
-| `context_providers` | `array` | 否 | `[]` | 上下文提供器（见 ContextProviderDecl） |
+| `contexts` | `array` | 否 | `[]` | 上下文提供器列表（见 ContextProviderDecl） |
 | `compression` | `object` | 否 | `null` | 压缩策略（见 CompressionDecl） |
 | `token_counter` | `object` | 否 | `null` | Token 计数器（见 TokenCounterDecl） |
 | `properties` | `object` | 否 | `{}` | 自定义键值属性 |
@@ -131,7 +131,16 @@ let agent = resolver.resolve(&decl).await?;
 
 #### 1. 内置工具 (`builtin`)
 
-框架预置的 13 个工具，零配置开箱即用。
+框架预置的 13 个工具，零配置开箱即用。可按分类批量注册（省略 `name` 即注册该分类全部工具）：
+
+```yaml
+# YAML 声明式
+tools:
+  - kind: web      # 无 name → 注册 web_search + web_fetch
+  - kind: file     # 无 name → 注册全部 11 个文件工具
+  - kind: web
+    name: web_search   # 指定 name → 仅注册单个工具
+```
 
 ```json
 { "type": "builtin", "name": "read_file" }
@@ -187,10 +196,37 @@ let agent = resolver.resolve(&decl).await?;
 
 ### ContextProviderDecl — 上下文提供器
 
-| 类型 | 说明 |
-|------|------|
-| `in_memory_history` | 内置内存历史记录（默认启用） |
-| `memory` | 基于向量数据库的语义记忆（需配置 IVectorStore） |
+通过 `(kind, name)` 二元组声明式配置，支持 6 种分类：
+
+```yaml
+contexts:
+  - kind: memory
+    name: skill-memory
+    config:
+      directory: logs/memory
+      consolidationInterval: 1
+  - kind: skills
+    name: antd-skill
+    config:
+      directory: skills/antd-skill
+  - kind: workspace
+    name: default
+    config:
+      root: .
+      policy: read
+```
+
+| kind | name 示例 | 说明 | 典型 config 键 |
+|------|-----------|------|---------------|
+| `memory` | `skill-memory` | 持久化跨会话记忆系统 | `directory`, `enabled`, `consolidationInterval` |
+| `skills` | `antd-skill` | 按需加载的技能文件（SKILL.md） | `directory` |
+| `mcp` | `mymcp-server` | MCP 远程工具服务器 | `serverUrl` |
+| `workspace` | `default` | 工作区根目录 + 访问策略 | `root`, `policy` |
+| `knowledge` | `my-rag` | RAG 知识库检索 | `source` |
+| `wiki` | `my-wiki` | Wiki 知识库 | `source` |
+
+> `history`（InMemoryHistoryProvider）由 AgentBuilder 内置自动注入，无需声明。
+> `websearch` 属于工具（`tools → kind: web`），不在此处配置。
 
 ---
 
@@ -296,6 +332,7 @@ struct WeatherTool;
 impl ITool for WeatherTool {
     fn name(&self) -> &str { "weather_lookup" }
     fn description(&self) -> &str { "Get current weather for a city." }
+    fn kind(&self) -> &str { "function" }
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",

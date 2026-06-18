@@ -1,4 +1,4 @@
-# 11.7 IAgent 统一门面
+# 11.10 IAgent 统一门面
 
 RAF 的核心设计哲学之一是"编排即 Agent"——任何工作流编排模式都可以通过统一的 `XXXWorkflowBuilder.build() → Workflow.as_agent() → IAgent` 链路收敛为 `IAgent` 接口。前端与编排系统只与 `IAgent` 交互，编排细节完全透明。
 

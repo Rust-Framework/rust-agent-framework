@@ -54,6 +54,10 @@ impl ITool for ApprovalRequiredTool {
     fn requires_approval(&self) -> bool {
         true  // ← 唯一的行为差异
     }
+
+    fn kind(&self) -> &str {
+        self.inner.kind()  // ← 透传分类
+    }
 }
 ```
 

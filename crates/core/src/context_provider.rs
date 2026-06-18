@@ -37,7 +37,17 @@ impl std::fmt::Debug for ContextResult {
 /// 来替换前面 Provider 累积的消息。这天然支持压缩策略（截断/摘要等）。
 #[async_trait]
 pub trait IContextProvider: Send + Sync {
+    /// 提供器唯一标识名。
     fn name(&self) -> &str;
+
+    /// 提供器分类——与 ContextProviderDecl 的 kind 标签对应。
+    ///
+    /// 返回: `"memory"` | `"skills"` | `"mcp"` | `"workspace"` | `"websearch"` | `"history"` | ...
+    ///
+    /// 默认返回 `"unknown"`，子类可覆写。
+    fn kind(&self) -> &str {
+        "unknown"
+    }
 
     async fn on_invoking(
         &self,

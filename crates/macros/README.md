@@ -4,38 +4,84 @@ Proc-macro helpers for the rust-agent-framework ecosystem. Provides the `#[tool]
 
 ## The `#[tool]` Macro
 
-A single-attribute macro that eliminates boilerplate when defining tools. Supports two patterns:
+A single-attribute macro that eliminates boilerplate when defining tools. Supports three patterns:
 
-### Pattern 1: Async Function
+### Pattern 1: Async Function (stateless tools)
 
 ```rust
 use rust_agent_framework::tool;
 
-#[tool(description = "Adds two numbers")]
+#[tool(description = "Adds two numbers", kind = "function")]
 async fn add(
     #[param(desc = "First number")] a: i64,
     #[param(desc = "Second number")] b: i64,
-) -> String {
-    format!("{}", a + b)
+) -> rust_agent_core::ToolResult {
+    rust_agent_core::ToolResult::success(serde_json::json!({"result": a + b}))
 }
-
-// Generates:
-// - struct Add;                    (PascalCase of fn name)
-// - struct AddArgs { a: i64, b: i64 }  (for deserialization)
-// - impl ITool for Add { ... }     (with auto-generated JSON Schema)
 ```
 
-What the macro generates:
-- A unit struct with the PascalCase-ified function name (`Add`)
-- An args struct for `serde_json::from_value` deserialization
-- `ITool` implementation with:
-  - `name()` → original function name (`"add"`)
-  - `description()` → from `description = "..."` attribute
-  - `parameters()` → auto-generated JSON Schema from parameter types and `#[param(desc = "...")]` annotations
-  - `execute()` → deserializes args, calls `call()`, returns `Result<String>`
-- A public `call()` method on the struct that delegates to the original function
+Generates:
+- A unit struct `Add` (PascalCase of fn name)
+- `AddArgs` struct for deserialization
+- `impl ITool for Add` with auto-generated JSON Schema from parameter types and `#[param(desc)]` annotations
 
-Type mapping to JSON Schema:
+### Pattern 2: Impl Block (recommended for stateful tools)
+
+```rust
+pub struct ReadFile {
+    pub scope: Option<Arc<WorkspaceScope>>,
+}
+
+#[tool(
+    description = "Reads a file from the local filesystem.",
+    kind = "file"
+)]
+impl ReadFile {
+    async fn call(
+        &self,
+        #[param(desc = "Absolute path to the file")] path: String,
+        #[param(desc = "Starting line number")] offset: Option<i64>,
+    ) -> rust_agent_core::Result<ToolResult> {
+        // Business logic uses typed parameters directly — no manual deserialization
+    }
+}
+```
+
+Generates:
+- `ReadFileCallArgs` struct (hidden, auto-derives `Deserialize`)
+- `impl ITool for ReadFile` with complete `parameters()` JSON Schema including parameter names, types, descriptions, and required fields
+- Re-emits the original `impl ReadFile` block (with `#[param]` attrs stripped)
+
+### Pattern 3: Struct (backward-compatible, legacy)
+
+```rust
+#[tool(description = "My custom tool", kind = "custom")]
+struct MyTool;
+
+impl MyTool {
+    pub async fn call(&self, arguments: serde_json::Value) -> rust_agent_core::Result<ToolResult> {
+        // Manual deserialization required; parameters() returns empty schema
+    }
+}
+```
+
+## `kind` Configuration
+
+The `kind = "..."` attribute controls `ITool::kind()` output, mapping to `ToolDecl` categories:
+
+| kind | Use case |
+|------|----------|
+| `"function"` | User-registered function tools (default) |
+| `"custom"` | Factory-registered custom tools |
+| `"web"` | Web search/fetch tools |
+| `"file"` | File system tools |
+| `"shell"` | Shell command execution |
+| `"skills"` | Skill loading and resource tools |
+| `"code"` | Code interpreter / sandbox |
+| `"mcp"` | MCP remote tools |
+| `"openapi"` | OpenAPI spec tools |
+
+## Type Mapping to JSON Schema
 
 | Rust Type | JSON Schema Type |
 |---|---|
@@ -47,27 +93,9 @@ Type mapping to JSON Schema:
 | `Vec<T>` | `{"type": "array", "items": <T schema>}` |
 | Other | `"string"` (fallback) |
 
-### Pattern 2: Unit Struct
-
-```rust
-#[tool(description = "My custom tool")]
-struct MyTool;
-
-// You must implement call() manually.
-// IMPORTANT: call() must return Result<String> to match ITool::execute's signature.
-impl MyTool {
-    pub async fn call(&self, arguments: serde_json::Value) -> rust_agent_core::Result<String> {
-        // custom logic
-        Ok(format!("Processed: {}", arguments))
-    }
-}
-
-// Macro generates impl ITool for MyTool { ... }
-```
-
 ## Usage
 
-The macro is re-exported from `rust-agent-framework`, so most users shouldn't depend on this crate directly:
+The macro is re-exported from `rust-agent-framework`:
 
 ```rust
 use rust_agent_framework::tool;
@@ -84,14 +112,12 @@ rust-agent-macros = "0.1"
 
 The macro uses `syn` for full AST parsing and `quote` for token generation:
 
-1. Parses the attribute for `description = "..."` (also accepts `desc = "..."`)
-2. Parses the item as either `ItemFn` or `DeriveInput`
-3. For functions: extracts parameter names, types, and `#[param(desc = "...")]` annotations
-4. Generates JSON Schema property map per parameter
-5. Generates `async fn call(&self, params) -> ReturnType` method
-6. Generates `#[async_trait] impl ITool for Struct { ... }`
-
-String escaping and whitespace handling in JSON values use `serde_json::Value::String()`, avoiding manual quote escaping.
+1. Parses the attribute for `description = "..."` (also accepts `desc = "..."`) and `kind = "..."`.
+2. Parses the item as `ItemFn`, `ItemImpl`, or `DeriveInput`.
+3. For functions / impl blocks: extracts parameter names, types, and `#[param(desc = "...")]` annotations.
+4. Generates JSON Schema property map per parameter.
+5. Generates `async fn call(&self, params) -> ReturnType` method (fn mode) or preserves user-written call method (impl mode).
+6. Generates `#[async_trait] impl ITool for Struct { ... }`.
 
 ## Dependencies
 

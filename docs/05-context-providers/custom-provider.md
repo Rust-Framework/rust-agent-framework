@@ -22,6 +22,10 @@ impl IContextProvider for MyContextProvider {
         "MyContextProvider"
     }
 
+    fn kind(&self) -> &str {
+        "custom"
+    }
+
     async fn on_invoking(
         &self,
         _agent: &dyn IAgent,
@@ -109,6 +113,10 @@ impl UserProfileProvider {
 impl IContextProvider for UserProfileProvider {
     fn name(&self) -> &str {
         "UserProfileProvider"
+    }
+
+    fn kind(&self) -> &str {
+        "custom"
     }
 
     async fn on_invoking(
@@ -248,6 +256,10 @@ impl IContextProvider for DatabaseContextProvider {
         "DatabaseContextProvider"
     }
 
+    fn kind(&self) -> &str {
+        "knowledge"
+    }
+
     async fn on_invoking(
         &self,
         _agent: &dyn IAgent,
@@ -327,6 +339,10 @@ impl MessageLimitProvider {
 impl IContextProvider for MessageLimitProvider {
     fn name(&self) -> &str {
         "MessageLimitProvider"
+    }
+
+    fn kind(&self) -> &str {
+        "custom"
     }
 
     async fn on_invoking(

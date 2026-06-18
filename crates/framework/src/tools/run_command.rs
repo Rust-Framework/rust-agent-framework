@@ -40,32 +40,32 @@ impl ITool for RunCommand {
     /// 平台感知的描述——让 LLM 知道当前执行环境，构建正确的命令。
     fn description(&self) -> &str {
         if cfg!(windows) {
-            "Executes a shell command via cmd /c on Windows. \
-             Use cmd syntax: dir, del, type, set, &&, ||, >, <. \
-             For PowerShell, prefix with powershell -Command \"...\". \
-             output_level: 'error'(errors only), 'warning'(errors+warnings), 'info'(smart summary, default), 'all'(full output)."
+            "通过 cmd /c 在 Windows 上执行 Shell 命令。\
+             使用 cmd 语法：dir、del、type、set、&&、||、>、<。\
+             PowerShell 请加前缀 powershell -Command \"...\"。\
+             output_level 参数：'error'（仅错误）、'warning'（错误+警告）、'info'（智能摘要，默认）、'all'（完整输出）。"
         } else {
-            "Executes a shell command via sh -c on Unix (Linux/macOS). \
-             Use POSIX shell syntax: ls, rm, grep, |, >, &&, $VAR. \
-             For scripts, write the interpreter explicitly: python3 script.py. \
-             output_level: 'error'(errors only), 'warning'(errors+warnings), 'info'(smart summary, default), 'all'(full output)."
+            "通过 sh -c 在 Unix（Linux/macOS）上执行 Shell 命令。\
+             使用 POSIX shell 语法：ls、rm、grep、|、>、&&、$VAR。\
+             脚本请显式写解释器：python3 script.py。\
+             output_level 参数：'error'（仅错误）、'warning'（错误+警告）、'info'（智能摘要，默认）、'all'（完整输出）。"
         }
     }
 
     /// 平台感知的参数 schema。
     fn parameters(&self) -> serde_json::Value {
         let command_desc = if cfg!(windows) {
-            "Shell command (via cmd /c). Use && to chain, > to redirect, 2>&1 to merge stderr. One-line string."
+            "Shell 命令（通过 cmd /c）。使用 && 连接、> 重定向、2>&1 合并 stderr。单行字符串。"
         } else {
-            "Shell command (via sh -c). Use && to chain, > to redirect, 2>&1 to merge stderr. $VAR expansion supported. One-line string."
+            "Shell 命令（通过 sh -c）。使用 && 连接、> 重定向、2>&1 合并 stderr。支持 $VAR 变量展开。单行字符串。"
         };
         serde_json::json!({
             "type": "object",
             "properties": {
                 "command": { "type": "string", "description": command_desc },
-                "working_dir": { "type": "string", "description": "Working directory (optional; absolute or relative to workspace root). Defaults to workspace root." },
-                "timeout_secs": { "type": "integer", "description": "Timeout in seconds (optional; defaults to 30)." },
-                "output_level": { "type": "string", "description": "Output verbosity (optional; default 'info'): 'error', 'warning', 'info', 'all'." }
+                "working_dir": { "type": "string", "description": "工作目录（可选；绝对路径或相对于工作区根目录的路径）。默认使用工作区根目录。" },
+                "timeout_secs": { "type": "integer", "description": "超时时间（秒，可选；默认为 30 秒）。" },
+                "output_level": { "type": "string", "description": "输出详细程度（可选；默认 'info'）：'error'、'warning'、'info'、'all'。" }
             },
             "required": ["command"]
         })
@@ -73,6 +73,10 @@ impl ITool for RunCommand {
 
     async fn execute(&self, arguments: serde_json::Value) -> rust_agent_core::Result<ToolResult> {
         self.call(arguments).await
+    }
+
+    fn kind(&self) -> &str {
+        "file"
     }
 }
 

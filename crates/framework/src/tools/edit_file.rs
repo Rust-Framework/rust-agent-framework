@@ -5,7 +5,6 @@ use rust_agent_macros::tool;
 
 use super::path_guard::{resolve_safe, ScopeStatus};
 
-#[tool(description = "Performs exact string replacement in an existing file. Provide old_str (the exact text to find) and new_str (the replacement). The old_str must uniquely match a contiguous block of lines in the file.")]
 pub struct EditFile {
     pub scope: Option<Arc<WorkspaceScope>>,
 }
@@ -18,21 +17,17 @@ impl IScopeTool for EditFile {
     }
 }
 
+#[tool(
+    description = "精确替换已有文件中的字符串。提供 old_str（要查找的原文本）和 new_str（替换为新文本）。old_str 必须在文件中唯一匹配一个连续块。",
+    kind = "file"
+)]
 impl EditFile {
     async fn call(
         &self,
-        arguments: serde_json::Value,
+        #[param(desc = "要编辑的文件的绝对路径")] path: String,
+        #[param(desc = "文件中待替换的原文本（须唯一且连续，含空白和换行）")] old_str: String,
+        #[param(desc = "替换后的新文本")] new_str: String,
     ) -> rust_agent_core::Result<ToolResult> {
-        #[derive(serde::Deserialize)]
-        struct Args {
-            path: String,
-            old_str: String,
-            new_str: String,
-        }
-        let args: Args = serde_json::from_value(arguments).map_err(|e| {
-            rust_agent_core::AgentError::ToolError(format!("Argument deserialization failed: {}", e))
-        })?;
-
         let base_dir = self
             .scope
             .as_ref()
@@ -40,7 +35,7 @@ impl EditFile {
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let scope_root = self.scope.as_ref().map(|s| s.root.as_path());
 
-        let (resolved, scope_status) = match resolve_safe(&base_dir, &args.path, scope_root) {
+        let (resolved, scope_status) = match resolve_safe(&base_dir, &path, scope_root) {
             Ok(r) => r,
             Err(e) => {
                 return Ok(ToolResult::error(format!("Path resolution failed: {}", e)));
@@ -62,12 +57,12 @@ impl EditFile {
             Err(e) => return Ok(ToolResult::error(format!("Failed to read file: {}", e))),
         };
 
-        if args.old_str.is_empty() {
+        if old_str.is_empty() {
             return Ok(ToolResult::error("old_str must not be empty"));
         }
 
         let occurrences: Vec<usize> =
-            original.match_indices(&args.old_str).map(|(i, _)| i).collect();
+            original.match_indices(&old_str).map(|(i, _)| i).collect();
 
         if occurrences.is_empty() {
             return Ok(ToolResult::error(
@@ -88,11 +83,11 @@ impl EditFile {
             )));
         }
 
-        let edited = original.replacen(&args.old_str, &args.new_str, 1);
+        let edited = original.replacen(&old_str, &new_str, 1);
 
         match std::fs::write(&resolved, &edited) {
             Ok(_) => Ok(ToolResult::success(serde_json::json!({
-                "path": args.path,
+                "path": path,
                 "replaced": true,
                 "scope": scope_status.to_label(),
             }))),

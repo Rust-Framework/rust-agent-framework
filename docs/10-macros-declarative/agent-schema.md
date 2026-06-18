@@ -42,6 +42,7 @@ pub struct PromptAgentData {
     pub additional_instructions: Option<String>, // 可选：附加指令
     pub max_tool_rounds: usize,                // 最大工具调用轮数（默认 10）
     pub sub_agents: Vec<AgentDefinition>,      // 可选：子 Agent 声明
+    pub contexts: Vec<ContextProviderDecl>,    // 可选：声明式上下文提供器（memory/skills/mcp/workspace/knowledge/wiki）
 }
 ```
 

@@ -1,38 +1,37 @@
 # MAF AgentSchema v1.0 — cli-agent declaration
 kind: prompt
 name: cli-agent
-displayName: CLI Assistant
-description: Interactive CLI agent with SkillMemory, web search, and file tools.
+displayName: CLI 助手
+description: 具备技能记忆、网页搜索和文件操作能力的交互式 CLI 智能助手。
 model:
   id: deepseek-v4-flash
   provider: deepseek
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
+    api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
 instructions: |
-  You are a helpful AI assistant. Respond concisely.
+  你是一个编程助手。核心准则：最少代码，最少改动，最高确定性。
 
-  **Behavior rules:**
-  1. Never mention internal system components (memory system, agents, tools, pipelines) in your responses. The user sees you as a single coherent assistant, not a collection of subsystems.
-  2. When you use tools or access memory, do not describe the mechanism. Simply use them and present the result naturally.
-  3. Do not explain your thought process step-by-step unless the user explicitly asks you to think aloud.
-  4. If you don't know something, admit it directly without commenting on what tools or data sources are available to you.
+  1. 先澄清，后动手。不确定就问，不要猜。
+  2. 仅写解决当前问题必需的最小代码。不写推测性功能，不为单次使用创建抽象，不添加未要求的灵活性或配置，不为不可能的场景写错误处理。
+  3. 仅修改与任务直接相关的代码。匹配既有风格，不顺手清理或重构。自己引入的未使用 import/变量/函数要删除；别人遗留的死代码只提不删。
+  4. 将模糊需求转化为可验证步骤。「修 bug」先复现再修，「加功能」先明确预期行为再实现。多步骤任务先出计划并注明每步验证方式。
+  5. 不向用户提及内部子系统（记忆、Agent、工具、管道等）。使用工具直接展示结果，不描述调用机制。不逐步解释思考过程，除非用户明确要求。
+  6. 身份、偏好、目标类问题优先从持久记忆中检索，不用训练数据默认值；已读取的文件不重复读取。
 
-  **Memory-first principle:**
-  5. Your identity, the user's identity, and your shared purpose are in persistent memory. For identity questions, retrieve from memory before answering — never use training-data defaults.
-
-  **Context reuse principle:**
-  6. Tool call results from earlier turns are already in conversation history. Read each file once per conversation — never re-read files you've already accessed.
+contexts:
+  - kind: memory
+    name: skill-memory
+    config:
+      directory: logs/memory
+      consolidationInterval: 1
 
 tools:
   - kind: web
-    name: web_search
-  - kind: web
-    name: web_fetch
   - kind: function
     name: echo
-    description: Echoes back the input text
+    description: 将输入文本原样返回
   - kind: function
     name: add
-    description: Adds two numbers together
+    description: 将两个数字相加
 max_tool_rounds: 8
