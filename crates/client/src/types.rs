@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// Model list entry item from GET /models API.
-/// Both OpenAI (`/v1/models`) and DeepSeek (`/models`) follow this format:
+/// 来自 GET /models API 的模型列表条目。
+/// OpenAI（`/v1/models`）和 DeepSeek（`/models`）均遵循此格式：
 /// `{ "object": "list", "data": [{ "id": "...", "object": "model", ... }] }`
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ModelListEntry {

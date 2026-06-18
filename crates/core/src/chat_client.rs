@@ -6,51 +6,49 @@ use std::sync::Arc;
 use crate::{AgentError, AgentResponseUpdate, BoxStream, ChatMessage, ITool, ModelMetadata, Result};
 use crate::tool::ToolApprovalResponse;
 
-/// Per-call run options for `IChatClient::run()`, following MAF's pattern.
+/// `IChatClient::run()` 的单次调用运行选项，遵循 MAF 模式。
 ///
-/// Overrides the client's defaults for a single call.
-/// All fields are `Option` — `None` means "use the client's default".
+/// 覆盖客户端的默认配置（仅本次调用生效）。
+/// 所有字段均为 `Option` — `None` 表示"使用客户端默认值"。
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct ChatClientRunOptions {
-    /// Override max_tokens for this call.
+    /// 本次调用的 max_tokens 覆盖值
     pub max_tokens: Option<u32>,
-    /// Override temperature for this call.
+    /// 本次调用的 temperature 覆盖值
     pub temperature: Option<f32>,
-    /// Override top_p for this call.
+    /// 本次调用的 top_p 覆盖值
     pub top_p: Option<f32>,
-    /// Override stop sequences for this call.
+    /// 本次调用的停止序列覆盖值
     pub stop: Option<Vec<String>>,
-    /// Extra JSON fields merged into the request body top-level
-    /// for this call only (e.g. `{"thinking": {"type": "enabled"}}`).
+    /// 额外 JSON 字段，合并到请求体顶层（仅本次调用）
+    /// 例如：`{"thinking": {"type": "enabled"}}`
     pub extra_body: HashMap<String, serde_json::Value>,
-    /// Tool definitions in OpenAI function-calling format.
-    /// Each entry is a JSON object like:
+    /// OpenAI 函数调用格式的工具定义
+    /// 每个条目为 JSON 对象：
     /// ```json
     /// { "type": "function", "function": { "name": "...", "description": "...", "parameters": {...} } }
     /// ```
     pub tools: Vec<serde_json::Value>,
-    /// Allow parallel tool calls. When `Some(true)`, the LLM may emit multiple
-    /// tool calls in a single response. When `Some(false)`, tool calls are
-    /// serialized. `None` means use the provider default (typically enabled).
-    /// Maps to OpenAI's `parallel_tool_calls` parameter.
+    /// 是否允许并行工具调用。`Some(true)` 表示 LLM 可一次发出多个工具调用，
+    /// `Some(false)` 表示串行调用。`None` 表示使用提供商的默认值（通常启用）。
+    /// 对应 OpenAI 的 `parallel_tool_calls` 参数。
     pub parallel_tool_calls: Option<bool>,
-    /// Provider-injected tool instances for execution.
+    /// Provider 注入的可执行工具实例
     ///
-    /// Follows MAF's pattern where context providers inject tools into
-    /// `ChatOptions.Tools`, and `FunctionInvokingChatClient` reads them
-    /// at execution time. These tools supplement the statically-registered
-    /// tools in `FunctionInvokingChatClient` and are resolved by name
-    /// during the tool-calling loop.
+    /// 遵循 MAF 模式：Context Provider 将工具注入到 `ChatOptions.Tools`，
+    /// `FunctionInvokingChatClient` 在运行时读取并执行。
+    /// 这些工具补充了 `FunctionInvokingChatClient` 中静态注册的工具，
+    /// 在工具调用循环中按名称解析。
     ///
-    /// Unlike `self.tools` (JSON schemas sent to the LLM), this field
-    /// carries the actual `Arc<dyn ITool>` instances for invocation.
+    /// 与 `self.tools`（发送给 LLM 的 JSON Schema）不同，此字段携带实际的
+    /// `Arc<dyn ITool>` 实例用于调用。
     #[serde(skip)]
     pub provider_tools: Vec<Arc<dyn ITool>>,
-    /// Tool approval responses propagated from `AgentRunOptions` for
-    /// resuming after an approval pause.
+    /// 从 `AgentRunOptions` 传播过来的工具审批响应
+    /// 用于在审批暂停后继续执行
     #[serde(skip)]
     pub tool_approval_responses: Vec<ToolApprovalResponse>,
-    /// Cancel flag propagated from `AgentRunOptions`.
+    /// 从 `AgentRunOptions` 传播过来的取消标志
     #[serde(skip)]
     pub cancelled: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
@@ -73,65 +71,69 @@ impl std::fmt::Debug for ChatClientRunOptions {
 }
 
 impl ChatClientRunOptions {
+    /// 创建默认运行选项
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// 设置单次调用的最大 Token 数
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
+    /// 设置单次调用的温度参数
     pub fn with_temperature(mut self, temperature: f32) -> Self {
         self.temperature = Some(temperature);
         self
     }
 
+    /// 添加额外的请求体字段（仅本次调用生效）
     pub fn with_extra_body(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.extra_body.insert(key.into(), value);
         self
     }
 
+    /// 设置单次调用的工具定义
     pub fn with_tools(mut self, tools: Vec<serde_json::Value>) -> Self {
         self.tools = tools;
         self
     }
 }
 
-/// Chat client interface following MAF's ChatClient abstraction.
+/// 聊天客户端接口，遵循 MAF 的 ChatClient 抽象。
 ///
-/// A thin wrapper over LLM provider APIs.
-/// Only streaming output is supported.
+/// 对 LLM 提供商 API 的轻量封装。
+/// 仅支持流式输出。
 #[async_trait]
 pub trait IChatClient: Send + Sync {
-    /// Run chat completion and produce a stream of update deltas.
+    /// 执行聊天补全，产生更新增量的流式响应
     ///
-    /// `options` allows per-call overrides (temperature, extra_body, etc.)
-    /// without mutating the client's persistent configuration.
-    /// Pass `Default::default()` for standard behaviour.
+    /// `options` 允许单次调用覆盖默认参数（温度、额外请求体等），
+    /// 而不修改客户端的持久配置。传递 `Default::default()` 使用默认行为。
     async fn run(
         &self,
         messages: &[ChatMessage],
         options: ChatClientRunOptions,
     ) -> Result<BoxStream<'static, Result<AgentResponseUpdate>>>;
 
-    /// The model identifier used by this client.
+    /// 返回此客户端使用的模型标识符
     fn model_id(&self) -> &str;
 
-    /// Model metadata describing capability boundaries (context window, max output).
+    /// 返回模型元数据，描述能力边界（上下文窗口、最大输出等）
     ///
-    /// Used by compression strategies and the framework to enforce token limits.
-    /// Returns `None` when model boundaries are unknown (default).
-    /// Concrete implementations should override this.
+    /// 压缩策略和框架使用此信息强制 Token 限制。
+    /// 当模型边界未知时返回 `None`（默认行为）。
+    /// 具体实现应重写此方法。
     fn model_metadata(&self) -> Option<&ModelMetadata> {
         None
     }
 
-    /// The inner client in a decorator chain, or `None` for leaf (API) clients.
+    /// 返回装饰器链中的内部客户端，叶子（API）客户端返回 `None`
     ///
-    /// Used by context providers (e.g. SkillMemory) to unwrap decorator layers
-    /// and reach the raw API client.  Decorators like `FunctionInvokingChatClient`
-    /// override this; leaf clients keep the default `None`.
+    /// 上下文提供器（如 SkillMemory）使用此方法解包装饰器层，
+    /// 以访问原始 API 客户端。装饰器如 `FunctionInvokingChatClient`
+    /// 重写此方法；叶子客户端保持默认的 `None`。
     fn inner_client(&self) -> Option<&Arc<dyn IChatClient>> {
         None
     }
@@ -146,10 +148,12 @@ pub struct DelegatingChatClient {
 }
 
 impl DelegatingChatClient {
+    /// 创建装饰器，包裹给定的内部客户端
     pub fn new(inner: Arc<dyn IChatClient>) -> Self {
         Self { inner }
     }
 
+    /// 获取被包裹的内部客户端的引用
     pub fn inner(&self) -> &Arc<dyn IChatClient> {
         &self.inner
     }
@@ -157,6 +161,7 @@ impl DelegatingChatClient {
 
 #[async_trait]
 impl IChatClient for DelegatingChatClient {
+    /// 透传调用 — 委托给内部客户端执行聊天补全
     async fn run(
         &self,
         messages: &[ChatMessage],
@@ -165,14 +170,17 @@ impl IChatClient for DelegatingChatClient {
         self.inner.run(messages, options).await
     }
 
+    /// 透传获取模型标识符
     fn model_id(&self) -> &str {
         self.inner.model_id()
     }
 
+    /// 透传获取模型元数据
     fn model_metadata(&self) -> Option<&ModelMetadata> {
         self.inner.model_metadata()
     }
 
+    /// 返回被包裹的内部客户端（非叶子节点）
     fn inner_client(&self) -> Option<&Arc<dyn IChatClient>> {
         Some(&self.inner)
     }
@@ -198,6 +206,7 @@ pub struct ChatClientBuilder {
 }
 
 impl ChatClientBuilder {
+    /// 创建空的管道构建器
     pub fn new() -> Self {
         Self {
             decorators: Vec::new(),
@@ -235,6 +244,7 @@ impl ChatClientBuilder {
 }
 
 impl Default for ChatClientBuilder {
+    /// 默认实现：创建一个空管道构建器
     fn default() -> Self {
         Self::new()
     }

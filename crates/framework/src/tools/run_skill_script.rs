@@ -6,10 +6,9 @@ use rust_agent_core::{ITool, Result};
 use crate::context_providers::agent_skill::AgentSkill;
 use crate::context_providers::script_runner::AgentSkillScriptRunner;
 
-/// Execute a script from a skill's scripts/ directory.
+/// 从技能的 scripts/ 目录执行脚本。
 ///
-/// Includes path-traversal protection: the resolved script path is
-/// canonicalized and verified to stay within the skill's root directory.
+/// 包含路径遍历保护：脚本路径会被规范化并验证是否仍在技能根目录内。
 pub struct RunSkillScriptTool {
     skills: Arc<Vec<AgentSkill>>,
     runner: Option<Arc<dyn AgentSkillScriptRunner>>,

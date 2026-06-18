@@ -1,14 +1,13 @@
 use rust_agent_core::{ChatMessage, ICompressionStrategy, ITokenCounter, MessageRole, Result};
 
-/// Sliding window compression strategy.
+/// 滑动窗口压缩策略。
 ///
-/// Retains only the most recent N messages, discarding older ones.
-/// System messages are always preserved regardless of the window size.
+/// 仅保留最近的 N 条消息，丢弃更早的消息。
+/// 系统消息始终保留，不受窗口大小影响。
 ///
-/// This is the simplest compression strategy — suitable for scenarios
-/// where only recent context matters.
+/// 这是最简单的压缩策略——适用于仅需最近上下文的场景。
 pub struct SlidingWindowStrategy {
-    /// Maximum number of non-system messages to retain.
+    /// 保留的非系统消息最大数量。
     pub max_messages: usize,
 }
 

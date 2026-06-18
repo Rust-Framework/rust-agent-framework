@@ -9,39 +9,37 @@ fn default_max_tool_rounds() -> usize {
     10
 }
 
-/// Prompt-based agent data (kind = "prompt").
-/// Aligns with MAF AgentSchema v1.0 `PromptAgent`.
+/// 提示词 Agent 数据（kind = "prompt"），与 MAF AgentSchema v1.0 对齐。
 ///
-/// This is the most common agent type, supporting model configuration,
-/// tool registration, template-based prompt rendering, and instructions.
+/// 这是最常见的 Agent 类型，支持模型配置、工具注册、基于模板的提示词渲染和指令。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptAgentData {
-    /// Primary AI model configuration (required in MAF).
+    /// 主 AI 模型配置（MAF 中必需）。
     pub model: Model,
 
-    /// Tools available to the agent.
+    /// Agent 可用的工具。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<ToolDecl>,
 
-    /// Template configuration for prompt rendering.
+    /// 提示词渲染的模板配置。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<Template>,
 
-    /// System instructions / prompt for the agent.
+    /// Agent 的系统指令/提示词。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub instructions: String,
 
-    /// Additional instructions or context for the agent.
+    /// Agent 的附加指令或上下文。
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "additionalInstructions")]
     pub additional_instructions: Option<String>,
 
-    // ── Extension fields (non-MAF, framework-specific) ──
+    // ── 扩展字段（非 MAF，框架特有）──
 
-    /// Maximum tool-calling rounds before forced stop.
+    /// 强制停止前的最大工具调用轮数。
     #[serde(default = "default_max_tool_rounds", skip_serializing_if = "is_default_max_tool_rounds", rename = "maxToolRounds")]
     pub max_tool_rounds: usize,
 
-    /// Nested sub-agent declarations (recursive `AgentDefinition` entries).
+    /// 嵌套的子 Agent 声明（递归 `AgentDefinition` 条目）。
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "subAgents")]
     pub sub_agents: Vec<AgentDefinition>,
 }
@@ -51,7 +49,7 @@ fn is_default_max_tool_rounds(v: &usize) -> bool {
 }
 
 impl PromptAgentData {
-    /// Create a prompt agent with the given model.
+    /// 用指定模型创建提示词 Agent。
     pub fn new(model: Model) -> Self {
         Self {
             model,
@@ -64,37 +62,37 @@ impl PromptAgentData {
         }
     }
 
-    /// Add a tool to the agent.
+    /// 向 Agent 添加工具。
     pub fn with_tool(mut self, tool: ToolDecl) -> Self {
         self.tools.push(tool);
         self
     }
 
-    /// Set the system instructions.
+    /// 设置系统指令。
     pub fn with_instructions(mut self, instructions: impl Into<String>) -> Self {
         self.instructions = instructions.into();
         self
     }
 
-    /// Add additional instructions.
+    /// 添加附加指令。
     pub fn with_additional_instructions(mut self, instructions: impl Into<String>) -> Self {
         self.additional_instructions = Some(instructions.into());
         self
     }
 
-    /// Set the template configuration.
+    /// 设置模板配置。
     pub fn with_template(mut self, template: Template) -> Self {
         self.template = Some(template);
         self
     }
 
-    /// Set the maximum tool-calling rounds.
+    /// 设置最大工具调用轮数。
     pub fn with_max_tool_rounds(mut self, rounds: usize) -> Self {
         self.max_tool_rounds = rounds;
         self
     }
 
-    /// Add a sub-agent.
+    /// 添加子 Agent。
     pub fn with_sub_agent(mut self, sub_agent: AgentDefinition) -> Self {
         self.sub_agents.push(sub_agent);
         self

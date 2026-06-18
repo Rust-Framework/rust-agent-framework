@@ -152,10 +152,10 @@ fn map_chunk(sse: SseChunk, usage_format: UsageFormat) -> Vec<AgentResponseUpdat
     events
 }
 
-/// SseStream — custom Stream implementation yielding AgentResponseUpdate events.
+/// SseStream——自定义 Stream 实现，生成 AgentResponseUpdate 事件。
 ///
-/// Buffers incoming bytes, splits on newlines, parses SSE data lines,
-/// and emits individual AgentResponseUpdate items via FIFO from each parsed chunk.
+/// 缓冲传入的字节，按换行符分割，解析 SSE 数据行，
+/// 并从每个解析的块中通过 FIFO 顺序发出单个 AgentResponseUpdate 项。
 pub struct SseStream<S> {
     inner: S,
     buffer: Vec<u8>,

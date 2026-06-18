@@ -5,10 +5,9 @@ use rust_agent_core::{ITool, Result};
 
 use crate::context_providers::agent_skill::AgentSkill;
 
-/// Read a resource file from a loaded skill's references/ or assets/ directory.
+/// 从已加载技能的 references/ 或 assets/ 目录读取资源文件。
 ///
-/// Path resolution and traversal protection are delegated to
-/// `AgentSkill::read_resource()`.
+/// 路径解析和路径遍历保护委托给 `AgentSkill::read_resource()`。
 pub struct ReadSkillResourceTool {
     skills: Arc<Vec<AgentSkill>>,
 }

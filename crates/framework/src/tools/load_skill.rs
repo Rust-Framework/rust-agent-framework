@@ -5,10 +5,10 @@ use rust_agent_core::{ITool, Result};
 
 use crate::context_providers::agent_skill::AgentSkill;
 
-/// Load a skill's full instructions from SKILL.md.
+/// 从 SKILL.md 加载技能的完整指令。
 ///
-/// This tool exposes the `load_skill` operation as a standalone `ITool`,
-/// replacing the inline `FnTool` previously defined in `AgentSkillsProvider`.
+/// 该工具将 `load_skill` 操作暴露为独立的 `ITool`，
+/// 替代之前在 `AgentSkillsProvider` 中定义的内联 `FnTool`。
 pub struct LoadSkillTool {
     skills: Arc<Vec<AgentSkill>>,
 }

@@ -6,11 +6,11 @@ use rust_agent_core::{ITool, Result};
 use super::path_guard::resolve_safe;
 use super::{err_response, ok_response};
 
-/// Deletes a file or directory at the specified path.
+/// 删除指定路径的文件或目录。
 ///
-/// Paths are resolved against `base_dir`:
-/// - Absolute paths pass through unchanged.
-/// - Relative paths are joined to `base_dir`.
+/// 路径相对于 `base_dir` 解析：
+/// - 绝对路径直接使用。
+/// - 相对路径拼接至 `base_dir`。
 pub struct RemovePath {
     base_dir: PathBuf,
 }

@@ -9,7 +9,7 @@ use rust_agent_framework::AgentBuilder;
 
 use crate::config::HostConfig;
 
-/// Factory for creating built-in agent instances.
+/// 工厂，用于创建内置 Agent 实例。
 pub struct AgentFactory<'a> {
     config: &'a HostConfig,
 }
@@ -19,8 +19,8 @@ impl<'a> AgentFactory<'a> {
         Self { config }
     }
 
-    /// Create all enabled built-in agents.
-    /// Agents that fail to construct are skipped with a warning.
+    /// 创建所有已启用的内置 Agent。
+    /// 构造失败的 Agent 会被跳过并发出警告。
     pub async fn create_all(&self) -> Result<Vec<Arc<dyn IAgent>>> {
         let mut agents = Vec::new();
 

@@ -1,17 +1,15 @@
 use rust_agent_core::{ChatMessage, ICompressionStrategy, ITokenCounter, MessageRole, Result};
 
-/// Token budget compression strategy.
+/// Token 预算压缩策略。
 ///
-/// Truncates messages from the beginning (oldest first) until the
-/// total token count fits within the specified budget. System messages
-/// are always preserved.
+/// 从最早的消息开始截断，直到总 Token 数符合指定预算。系统消息始终保留。
 ///
-/// This strategy follows MAF's `ContextWindowCompactionStrategy` approach:
-/// 1. First, try to fit within budget by removing oldest non-system messages
-/// 2. Always preserve system messages and the most recent messages
+/// 此策略遵循 MAF 的 `ContextWindowCompactionStrategy` 方法：
+/// 1. 首先尝试移除最早的非系统消息以符合预算
+/// 2. 始终保留系统消息和最近的消息
 pub struct TokenBudgetStrategy {
-    /// Fraction of the budget at which to start removing tool result groups.
-    /// Default: 0.5 (start removing when at 50% of budget).
+    /// 开始移除工具结果组的预算阈值比例。
+    /// 默认：0.5（达到 50% 预算时开始移除）。
     pub tool_result_eviction_threshold: f64,
 }
 

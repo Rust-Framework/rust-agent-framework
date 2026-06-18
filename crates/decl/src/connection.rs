@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-/// Connection configuration for an AI model.
-/// Aligns with MAF AgentSchema v1.0 `Connection`.
+/// AI 模型的连接配置，与 MAF AgentSchema v1.0 对齐。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Connection {
     pub kind: ConnectionKind,
@@ -11,38 +10,38 @@ pub struct Connection {
     pub authentication_mode: AuthenticationMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage_description: Option<String>,
-    /// Kind-specific connection details (endpoint, api_key, etc.).
+    /// 类型特定的连接详情（endpoint、api_key 等）。
     #[serde(flatten)]
     pub details: ConnectionDetails,
 }
 
-/// The type of authentication/connection for the AI service.
+/// AI 服务的认证/连接类型。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionKind {
-    /// Azure-hosted remote connection with managed identity.
+    /// Azure 托管的远程连接，使用托管身份。
     Remote,
-    /// Named connection reference (looked up by name).
+    /// 命名连接引用（按名称查找）。
     Reference,
-    /// API key-based authentication.
+    /// 基于 API 密钥的认证。
     #[serde(rename = "key")]
     ApiKey,
-    /// No authentication required.
+    /// 无需认证。
     Anonymous,
-    /// Microsoft Foundry project connection.
+    /// Microsoft Foundry 项目连接。
     Foundry,
-    /// OAuth2-based authentication.
+    /// 基于 OAuth2 的认证。
     #[serde(rename = "oauth")]
     OAuth,
 }
 
-/// The authority level for the connection.
+/// 连接的权限级别。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthenticationMode {
-    /// Connection made under the user's authority.
+    /// 以用户权限建立连接。
     User,
-    /// Connection made under the system/application's authority.
+    /// 以系统/应用权限建立连接。
     System,
 }
 
@@ -50,22 +49,22 @@ fn default_authentication_mode() -> AuthenticationMode {
     AuthenticationMode::System
 }
 
-/// Kind-specific connection fields. Open-ended for future extension.
+/// 类型特定的连接字段，可扩展用于未来扩展。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionDetails {
-    /// Service endpoint URL (e.g., Azure OpenAI endpoint).
+    /// 服务端点 URL（例如 Azure OpenAI 端点）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
-    /// API key for key-based connections.
+    /// 基于密钥的连接的 API 密钥。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
-    /// Named connection reference target.
+    /// 命名连接引用目标。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// Optional target identifier.
+    /// 可选的目标标识符。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
-    /// Extra fields for forward compatibility.
+    /// 用于向前兼容的额外字段。
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -83,7 +82,7 @@ impl Default for ConnectionDetails {
 }
 
 impl Connection {
-    /// Create an API key connection.
+    /// 创建 API 密钥连接。
     pub fn api_key(key: impl Into<String>) -> Self {
         Self {
             kind: ConnectionKind::ApiKey,
@@ -96,7 +95,7 @@ impl Connection {
         }
     }
 
-    /// Create an anonymous connection (no auth).
+    /// 创建匿名连接（无需认证）。
     pub fn anonymous() -> Self {
         Self {
             kind: ConnectionKind::Anonymous,
@@ -106,7 +105,7 @@ impl Connection {
         }
     }
 
-    /// Create a remote connection with the given endpoint.
+    /// 用给定端点创建远程连接。
     pub fn remote(endpoint: impl Into<String>) -> Self {
         Self {
             kind: ConnectionKind::Remote,

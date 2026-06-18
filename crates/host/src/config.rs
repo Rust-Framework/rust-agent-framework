@@ -3,22 +3,22 @@
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 
-/// Top-level host configuration.
+/// 顶层主机配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostConfig {
-    /// Transport mode: "stdio" or "ws".
+    /// 传输模式："stdio" 或 "ws"。
     #[serde(default = "default_mode")]
     pub mode: TransportMode,
-    /// WebSocket bind address (used only in Ws mode).
+    /// WebSocket 绑定地址（仅 Ws 模式下使用）。
     #[serde(default = "default_ws_bind")]
     pub ws_bind: String,
-    /// LLM provider configuration.
+    /// LLM 提供商配置。
     #[serde(default)]
     pub provider: ProviderConfig,
-    /// Built-in agent presets to enable.
+    /// 要启用的内置 Agent 预设。
     #[serde(default)]
     pub agents: AgentPresetsConfig,
-    /// Directory for declarative agent files (JSON/YAML/TOML).
+    /// 声明式 Agent 文件（JSON/YAML/TOML）的目录。
     #[serde(default)]
     pub agents_dir: Option<String>,
 }
@@ -44,25 +44,25 @@ impl std::fmt::Display for TransportMode {
     }
 }
 
-/// LLM provider configuration.
+/// LLM 提供商配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
-    /// Provider name: "deepseek", "openai", "custom".
+    /// 提供商名称："deepseek"、"openai"、"custom"。
     #[serde(default = "default_provider_name")]
     pub provider: String,
-    /// Model name, e.g. "deepseek-v4-flash".
+    /// 模型名称，例如 "deepseek-v4-flash"。
     #[serde(default = "default_model")]
     pub model: String,
-    /// API key. Supports $ENV_VAR syntax.
+    /// API 密钥，支持 $ENV_VAR 语法。
     #[serde(default)]
     pub api_key: Option<String>,
-    /// Optional API base URL override.
+    /// 可选的 API base URL 覆盖。
     #[serde(default)]
     pub base_url: Option<String>,
-    /// Default temperature.
+    /// 默认 temperature。
     #[serde(default)]
     pub temperature: Option<f32>,
-    /// Default max_tokens.
+    /// 默认 max_tokens。
     #[serde(default)]
     pub max_tokens: Option<u32>,
 }
@@ -84,7 +84,7 @@ impl Default for ProviderConfig {
 }
 
 impl ProviderConfig {
-    /// Resolve the API key, supporting $ENV_VAR syntax.
+    /// 解析 API 密钥，支持 $ENV_VAR 语法。
     pub fn resolve_api_key(&self) -> Option<String> {
         self.api_key.as_ref().and_then(|key| {
             if let Some(var_name) = key.strip_prefix('$') {
@@ -96,60 +96,60 @@ impl ProviderConfig {
     }
 }
 
-/// Built-in agent presets to enable.
+/// 要启用的内置 Agent 预设。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentPresetsConfig {
-    /// Enable the coding agent.
+    /// 启用编码 Agent。
     #[serde(default = "default_true")]
     pub coding: bool,
-    /// Enable the general agent.
+    /// 启用通用 Agent。
     #[serde(default = "default_true")]
     pub general: bool,
-    /// Enable the analysis agent.
+    /// 启用分析 Agent。
     #[serde(default = "default_true")]
     pub analysis: bool,
 }
 
 fn default_true() -> bool { true }
 
-/// CLI arguments (clap).
+/// CLI 参数（clap）。
 #[derive(Debug, Parser, Serialize)]
 #[command(name = "rust-agent-host", about = "ACP server for the Rust Agent Framework")]
 pub struct CliArgs {
-    /// Transport mode: stdio or ws
+    /// 传输模式：stdio 或 ws
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<TransportMode>,
-    /// WebSocket bind address (ws mode only)
+    /// WebSocket 绑定地址（仅 ws 模式）
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bind: Option<String>,
-    /// Path to TOML config file
+    /// TOML 配置文件路径
     #[arg(long)]
     #[serde(skip)]
     pub config: Option<String>,
-    /// Directory for declarative agent files
+    /// 声明式 Agent 文件目录
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agents_dir: Option<String>,
-    /// LLM provider name
+    /// LLM 提供商名称
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
-    /// LLM model name
+    /// LLM 模型名称
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
-    /// API key (or $ENV_VAR)
+    /// API 密钥（或 $ENV_VAR）
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
 }
 
-/// Load configuration from layered sources:
-/// 1. host.toml (or --config path)
-/// 2. RAF_ environment variables
-/// 3. CLI arguments (highest priority)
+/// 从分层源加载配置：
+/// 1. host.toml（或 --config 路径）
+/// 2. RAF_ 环境变量
+/// 3. CLI 参数（最高优先级）
 pub fn load_config() -> anyhow::Result<HostConfig> {
     use figment::{
         Figment,

@@ -6,8 +6,8 @@ use rust_agent_core::{
     ISession, Result, Content,
 };
 
-/// Handoff orchestration pattern — triage agent routes to the best-fit target agent.
-/// Corresponds to MAF's handoff pattern (OpenAI Swarm style).
+/// 转交编排模式 — 分类 Agent 将请求路由到最合适的目标 Agent。
+/// 对应 MAF 的转交模式（类似 OpenAI Swarm）。
 ///
 /// # 执行流程
 ///
@@ -50,7 +50,7 @@ impl HandoffWorkflow {
         }
     }
 
-    /// Execute the handoff pattern.
+    /// 执行转交编排模式。
     ///
     /// 1. Triage agent runs with enriched instructions listing available agents
     /// 2. Collect triage response text
@@ -154,7 +154,7 @@ impl HandoffWorkflow {
     }
 }
 
-/// HandoffPattern builder
+/// HandoffPattern 构建器
 pub struct HandoffBuilder {
     triage: Option<Arc<dyn IAgent>>,
     agents: Vec<Arc<dyn IAgent>>,

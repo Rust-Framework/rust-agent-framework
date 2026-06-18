@@ -3,38 +3,35 @@ use std::collections::HashMap;
 use rust_agent_core::ModelMetadata;
 use serde::{Deserialize, Serialize};
 
-/// Construction options for a chat client, following MAF's provider-leading naming.
+/// 聊天客户端的构建选项，遵循 MAF 的提供商优先命名约定。
 ///
-/// These are set once at client creation time and remain static.
-/// Per-call overrides (temperature, extra_body, etc.) belong in
-/// `ChatClientRunOptions` — not here.
+/// 这些选项在客户端创建时设置一次，之后保持静态。
+/// 每次调用的覆盖项（temperature、extra_body 等）应放在 `ChatClientRunOptions` 中，而非此处。
 ///
-/// `api_base` stores the full base URL (e.g. `https://api.openai.com/v1` or
-/// `https://api.deepseek.com`). It is NOT suffixed with `/v1` internally —
-/// each provider has its own URL path convention (OpenAI uses `/v1/...`,
-/// DeepSeek does not).
+/// `api_base` 存储完整的基础 URL（例如 `https://api.openai.com/v1` 或 `https://api.deepseek.com`）。
+/// 内部不会自动添加 `/v1` 后缀——每个提供商有各自的 URL 路径约定（OpenAI 使用 `/v1/...`，DeepSeek 不使用）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatClientOptions {
     pub api_base: String,
-    /// API key — skipped during serialization to prevent accidental leakage.
+    /// API 密钥——序列化时跳过，防止意外泄露。
     #[serde(skip)]
     pub api_key: String,
     pub model: String,
-    /// Default max_tokens — can be overridden per-call via `ChatClientRunOptions`.
+    /// 默认 max_tokens——可通过 `ChatClientRunOptions` 每次调用时覆盖。
     pub max_tokens: Option<u32>,
-    /// Default temperature — can be overridden per-call via `ChatClientRunOptions`.
+    /// 默认 temperature——可通过 `ChatClientRunOptions` 每次调用时覆盖。
     pub temperature: Option<f32>,
-    /// Default top_p — can be overridden per-call via `ChatClientRunOptions`.
+    /// 默认 top_p——可通过 `ChatClientRunOptions` 每次调用时覆盖。
     pub top_p: Option<f32>,
-    /// Default stop sequences — can be overridden per-call via `ChatClientRunOptions`.
+    /// 默认 stop 序列——可通过 `ChatClientRunOptions` 每次调用时覆盖。
     pub stop: Option<Vec<String>>,
-    /// Extra HTTP headers merged into every request (e.g. `OpenAI-Organization`).
+    /// 合并到每个请求中的额外 HTTP 头（例如 `OpenAI-Organization`）。
     #[serde(skip)]
     pub extra_headers: HashMap<String, String>,
-    /// Request timeout in seconds.
+    /// 请求超时时间（秒）。
     pub timeout_secs: Option<u64>,
-    /// Model metadata describing capability boundaries (context window, max output).
-    /// When `None`, the framework cannot enforce token limits automatically.
+    /// 描述模型能力边界（上下文窗口、最大输出）的元数据。
+    /// 当为 `None` 时，框架无法自动强制 token 限制。
     #[serde(skip)]
     pub model_metadata: Option<ModelMetadata>,
 }
@@ -67,7 +64,7 @@ impl Default for ChatClientOptions {
 }
 
 impl ChatClientOptions {
-    /// Create an OpenAI-flavoured options with the standard `/v1` base.
+    /// 创建 OpenAI 风格的选项，使用标准的 `/v1` 基础 URL。
     pub fn openai(model: impl Into<String>, api_key: impl Into<String>) -> Self {
         Self {
             api_base: "https://api.openai.com/v1".into(),
@@ -77,7 +74,7 @@ impl ChatClientOptions {
         }
     }
 
-    /// Create a DeepSeek-flavoured options (base URL has **no** `/v1` prefix).
+    /// 创建 DeepSeek 风格的选项（基础 URL **没有** `/v1` 前缀）。
     pub fn deepseek(model: impl Into<String>, api_key: impl Into<String>) -> Self {
         Self {
             api_base: "https://api.deepseek.com".into(),

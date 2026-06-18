@@ -2,9 +2,9 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Expr, ExprLit, Lit, Meta};
 
-/// `#[tool]` attribute macro — simplifies ITool definition.
+/// `#[tool]` 属性宏——简化 ITool 定义。
 ///
-/// # On async functions
+/// # 用于异步函数
 ///
 /// ```ignore
 /// #[tool(description = "Echoes back the input text")]
@@ -13,17 +13,17 @@ use syn::{DeriveInput, Expr, ExprLit, Lit, Meta};
 /// }
 /// ```
 ///
-/// Generates a struct (PascalCase of fn name) implementing `ITool`,
-/// with auto-derived JSON schema and argument deserialization.
+/// 生成一个实现 `ITool` 的结构体（函数名的帕斯卡命名），
+/// 自动派生 JSON schema 和参数反序列化。
 ///
-/// # On unit structs
+/// # 用于单元结构体
 ///
 /// ```ignore
 /// #[tool(description = "My tool")]
 /// struct MyTool;
 /// ```
 ///
-/// Generates `ITool` impl delegating to a `call` method you define.
+/// 生成委托给你定义的 `call` 方法的 `ITool` 实现。
 #[proc_macro_attribute]
 pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
     let description = parse_description(attr);

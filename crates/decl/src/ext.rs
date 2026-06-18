@@ -12,26 +12,25 @@ use crate::resolver::connection_resolver;
 
 // ── AgentBuilder Extension ──
 
-/// Extension trait for `AgentBuilder` that adds declarative
-/// construction from MAF-compatible `AgentDocument` or `AgentDefinition`.
+/// `AgentBuilder` 的扩展 trait，支持从 MAF 兼容的 `AgentDocument` 或 `AgentDefinition` 进行声明式构建。
 pub trait AgentBuilderExt: Sized {
-    /// Create an `AgentBuilder` from an `AgentDocument`.
+    /// 从 `AgentDocument` 创建 `AgentBuilder`。
     fn from_doc(doc: &AgentDocument) -> Result<AgentBuilder<ChatClientWrapper>>;
 
-    /// Create an `AgentBuilder` from a JSON declaration string.
+    /// 从 JSON 声明字符串创建 `AgentBuilder`。
     fn from_json_decl(json: &str) -> Result<AgentBuilder<ChatClientWrapper>> {
         let doc = AgentDocument::from_json_str(json)?;
         Self::from_doc(&doc)
     }
 
-    /// Create an `AgentBuilder` from a YAML declaration string.
+    /// 从 YAML 声明字符串创建 `AgentBuilder`。
     #[cfg(feature = "yaml")]
     fn from_yaml_decl(yaml: &str) -> Result<AgentBuilder<ChatClientWrapper>> {
         let doc = AgentDocument::from_yaml_str(yaml)?;
         Self::from_doc(&doc)
     }
 
-    /// Create an `AgentBuilder` from a TOML declaration string.
+    /// 从 TOML 声明字符串创建 `AgentBuilder`。
     #[cfg(feature = "toml")]
     fn from_toml_decl(toml_str: &str) -> Result<AgentBuilder<ChatClientWrapper>> {
         let doc = AgentDocument::from_toml_str(toml_str)?;
@@ -69,21 +68,20 @@ impl AgentBuilderExt for AgentBuilder<ChatClientWrapper> {
 
 // ── WorkflowBuilder Extension ──
 
-/// Extension trait for `WorkflowBuilder` that adds declarative
-/// parse helpers from MAF-compatible YAML/JSON.
+/// `WorkflowBuilder` 的扩展 trait，支持从 MAF 兼容的 YAML/JSON 进行声明式解析。
 pub trait WorkflowBuilderExt: Sized {
-    /// Parse a workflow document from a JSON string.
+    /// 从 JSON 字符串解析工作流文档。
     fn parse_json_decl(json: &str) -> Result<AgentDocument> {
         AgentDocument::from_json_str(json)
     }
 
-    /// Parse a workflow document from a YAML string.
+    /// 从 YAML 字符串解析工作流文档。
     #[cfg(feature = "yaml")]
     fn parse_yaml_decl(yaml: &str) -> Result<AgentDocument> {
         AgentDocument::from_yaml_str(yaml)
     }
 
-    /// Parse a workflow document from a TOML string.
+    /// 从 TOML 字符串解析工作流文档。
     #[cfg(feature = "toml")]
     fn parse_toml_decl(toml_str: &str) -> Result<AgentDocument> {
         AgentDocument::from_toml_str(toml_str)
@@ -94,8 +92,7 @@ impl WorkflowBuilderExt for WorkflowBuilder {}
 
 // ── Wrapper Types ──
 
-/// Wraps `Arc<dyn IChatClient>` to implement `IChatClient` for use with
-/// `AgentBuilder<C>`.
+/// 包装 `Arc<dyn IChatClient>` 以实现 `IChatClient`，用于 `AgentBuilder<C>`。
 pub struct ChatClientWrapper(pub Arc<dyn IChatClient>);
 
 #[async_trait::async_trait]
@@ -119,7 +116,7 @@ impl IChatClient for ChatClientWrapper {
     }
 }
 
-/// Wraps `Arc<dyn ITool>` to implement `ITool` for `AgentBuilder::with_tool()`.
+/// 包装 `Arc<dyn ITool>` 以实现 `ITool`，用于 `AgentBuilder::with_tool()`。
 pub struct ToolWrapper(pub Arc<dyn ITool>);
 
 #[async_trait::async_trait]

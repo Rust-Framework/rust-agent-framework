@@ -3,20 +3,18 @@ use std::sync::Arc;
 
 use rust_agent_core::{ISession, ISessionStore, Result};
 
-/// Isolation key provider for multi-tenant session scoping.
+/// 多租户会话隔离的隔离键提供器。
 ///
-/// Provides a key that is prepended to session IDs to ensure
-/// tenant isolation. Referenced from MAF's
-/// `SessionIsolationKeyProvider` design.
+/// 提供前置到会话 ID 的键，确保租户隔离。
+/// 参考自 MAF 的 `SessionIsolationKeyProvider` 设计。
 #[async_trait]
 pub trait IIsolationKeyProvider: Send + Sync {
     async fn get_isolation_key(&self) -> Result<String>;
 }
 
-/// Fixed isolation key provider for simple scenarios.
+/// 适用于简单场景的固定隔离键提供器。
 ///
-/// Uses a static key string. Suitable for single-tenant
-/// applications or testing.
+/// 使用静态键字符串。适用于单租户应用或测试。
 pub struct FixedIsolationKeyProvider {
     key: String,
 }
@@ -34,15 +32,13 @@ impl IIsolationKeyProvider for FixedIsolationKeyProvider {
     }
 }
 
-/// Isolation-scoped session store decorator.
+/// 隔离作用域的会话存储装饰器。
 ///
-/// Wraps an inner `ISessionStore` and prepends an isolation key
-/// to session IDs, ensuring different tenants cannot access
-/// each other's sessions.
+/// 包装内部 `ISessionStore`，将会话 ID 前添加隔离键，确保不同租户无法访问彼此的会话。
 ///
-/// Referenced from MAF's `IsolationKeyScopedAgentSessionStore`.
+/// 参考自 MAF 的 `IsolationKeyScopedAgentSessionStore`。
 ///
-/// # Example
+/// # 示例
 ///
 /// ```ignore
 /// let inner = InMemorySessionStore::new();
@@ -51,7 +47,7 @@ impl IIsolationKeyProvider for FixedIsolationKeyProvider {
 ///     Arc::new(inner),
 ///     Arc::new(key_provider),
 /// );
-/// // Session ID "abc" becomes "tenant-123::abc"
+/// // 会话 ID "abc" 变为 "tenant-123::abc"
 /// ```
 pub struct IsolationScopedSessionStore {
     inner: Arc<dyn ISessionStore>,

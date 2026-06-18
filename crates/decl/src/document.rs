@@ -6,17 +6,16 @@ use crate::definition::AgentDefinition;
 use crate::error::Result;
 use crate::schema::PropertySchema;
 
-/// Top-level document type for declarative agent files.
+/// 声明式 Agent 文件的顶层文档类型。
 ///
-/// Accepts either a full `AgentManifest` (deployment package) or a
-/// raw `AgentDefinition` (inline definition), matching MAF usage patterns
-/// where some YAML files contain manifest wrappers and others are bare definitions.
+/// 可接受完整的 `AgentManifest`（部署包）或裸 `AgentDefinition`（内联定义），
+/// 兼容 MAF 的使用模式——部分 YAML 文件包含 manifest 包装器，其余为裸定义。
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum AgentDocument {
-    /// Full deployment manifest with template and parameters.
+    /// 完整部署 manifest，含模板和参数。
     Manifest(AgentManifest),
-    /// Bare agent definition (no manifest wrapper).
+    /// 裸 Agent 定义，无 manifest 包装。
     Definition(AgentDefinition),
 }
 
@@ -42,41 +41,40 @@ impl<'de> Deserialize<'de> for AgentDocument {
     }
 }
 
-/// Deployment manifest for creating agents dynamically.
-/// Aligns with MAF AgentSchema v1.0 `AgentManifest`.
+/// 用于动态创建 Agent 的部署 Manifest，与 MAF AgentSchema v1.0 对齐。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentManifest {
-    /// Name of the manifest.
+    /// Manifest 名称。
     pub name: String,
-    /// Human-readable display name.
+    /// 人类可读的展示名称。
     #[serde(default, rename = "displayName")]
     pub display_name: String,
-    /// Description of the agent's capabilities and purpose.
+    /// Agent 能力与用途的描述。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
-    /// Additional metadata (authors, tags, etc.).
+    /// 附加元数据（作者、标签等）。
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
-    /// The core agent template definition.
+    /// 核心 Agent 模板定义。
     pub template: AgentDefinition,
-    /// Parameters for configuring the agent at deployment time.
+    /// 部署时配置 Agent 的参数。
     pub parameters: PropertySchema,
-    /// Required resources (models, tools, connections).
+    /// 必需的资源（模型、工具、连接）。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resources: Vec<ManifestResource>,
 }
 
-/// A resource declaration in an agent manifest.
+/// Agent Manifest 中的资源声明。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ManifestResource {
-    /// Resource name.
+    /// 资源名称。
     pub name: String,
-    /// Resource kind (e.g., "model", "tool", "connection").
+    /// 资源类型（例如 "model"、"tool"、"connection"）。
     pub kind: String,
-    /// Optional resource identifier.
+    /// 可选的资源标识符。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    /// Additional resource-specific fields.
+    /// 附加的资源特有字段。
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -84,43 +82,43 @@ pub struct ManifestResource {
 impl AgentDocument {
     // ── JSON ──
 
-    /// Parse an `AgentDocument` from a JSON string.
+    /// 从 JSON 字符串解析 `AgentDocument`。
     pub fn from_json_str(s: &str) -> Result<Self> {
         Ok(serde_json::from_str(s)?)
     }
 
-    /// Load an `AgentDocument` from a JSON file.
+    /// 从 JSON 文件加载 `AgentDocument`。
     pub fn from_json_file(path: &str) -> Result<Self> {
         let content = std::fs::read_to_string(path)?;
         Self::from_json_str(&content)
     }
 
-    /// Serialize to a JSON string.
+    /// 序列化为 JSON 字符串。
     pub fn to_json_string(&self) -> Result<String> {
         Ok(serde_json::to_string(self)?)
     }
 
-    /// Serialize to a pretty-printed JSON string.
+    /// 序列化为美化打印的 JSON 字符串。
     pub fn to_json_pretty(&self) -> Result<String> {
         Ok(serde_json::to_string_pretty(self)?)
     }
 
     // ── YAML ──
 
-    /// Parse an `AgentDocument` from a YAML string.
+    /// 从 YAML 字符串解析 `AgentDocument`。
     #[cfg(feature = "yaml")]
     pub fn from_yaml_str(s: &str) -> Result<Self> {
         Ok(serde_yaml::from_str(s)?)
     }
 
-    /// Load an `AgentDocument` from a YAML file.
+    /// 从 YAML 文件加载 `AgentDocument`。
     #[cfg(feature = "yaml")]
     pub fn from_yaml_file(path: &str) -> Result<Self> {
         let content = std::fs::read_to_string(path)?;
         Self::from_yaml_str(&content)
     }
 
-    /// Serialize to a YAML string.
+    /// 序列化为 YAML 字符串。
     #[cfg(feature = "yaml")]
     pub fn to_yaml_string(&self) -> Result<String> {
         Ok(serde_yaml::to_string(self)?)
@@ -128,20 +126,20 @@ impl AgentDocument {
 
     // ── TOML ──
 
-    /// Parse an `AgentDocument` from a TOML string.
+    /// 从 TOML 字符串解析 `AgentDocument`。
     #[cfg(feature = "toml")]
     pub fn from_toml_str(s: &str) -> Result<Self> {
         Ok(toml::from_str(s)?)
     }
 
-    /// Load an `AgentDocument` from a TOML file.
+    /// 从 TOML 文件加载 `AgentDocument`。
     #[cfg(feature = "toml")]
     pub fn from_toml_file(path: &str) -> Result<Self> {
         let content = std::fs::read_to_string(path)?;
         Self::from_toml_str(&content)
     }
 
-    /// Serialize to a TOML string.
+    /// 序列化为 TOML 字符串。
     #[cfg(feature = "toml")]
     pub fn to_toml_string(&self) -> Result<String> {
         Ok(toml::to_string(self)?)
@@ -149,7 +147,7 @@ impl AgentDocument {
 
     // ── Conversion helpers ──
 
-    /// Unwrap as a Manifest, consuming self.
+    /// 解包为 Manifest，消费自身。
     pub fn into_manifest(self) -> Option<AgentManifest> {
         match self {
             AgentDocument::Manifest(m) => Some(m),
@@ -157,7 +155,7 @@ impl AgentDocument {
         }
     }
 
-    /// Unwrap as a Definition, consuming self.
+    /// 解包为 Definition，消费自身。
     pub fn into_definition(self) -> Option<AgentDefinition> {
         match self {
             AgentDocument::Manifest(_) => None,
@@ -165,7 +163,7 @@ impl AgentDocument {
         }
     }
 
-    /// Try to extract the inner `AgentDefinition` regardless of wrapping.
+    /// 尝试提取内部的 `AgentDefinition`，无论是否有包装。
     pub fn inner_definition(&self) -> &AgentDefinition {
         match self {
             AgentDocument::Manifest(m) => &m.template,

@@ -6,13 +6,12 @@ use rust_agent_core::{
     Result, Content,
 };
 
-/// Sequential workflow — agents run in order, each receiving the
-/// collected output of the previous agent.
+/// 顺序工作流 — Agent 按顺序执行，每个 Agent 接收前一个 Agent 的输出。
 ///
-/// # MAF Alignment
+/// # MAF 对照
 ///
-/// Corresponds to MAF's `SequentialWorkflow`. Agents are chained:
-/// input → agent1 → agent2 → ... → streaming output from last agent.
+/// 对应 MAF 的 `SequentialWorkflow`。Agent 链式执行：
+/// 输入 → agent1 → agent2 → ... → 最后一个 Agent 的流式输出。
 ///
 /// # Usage
 ///

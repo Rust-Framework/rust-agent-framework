@@ -10,14 +10,14 @@ use crate::ChatClientAgent;
 use crate::chat_client_decorators::FunctionInvokingChatClient;
 use crate::context_providers::history_provider::InMemoryHistoryProvider;
 
-/// Fluently construct an agent with reasonable defaults.
+/// 以流畅的构建器模式创建 Agent，提供合理的默认值。
 ///
-/// ## Built-in context providers
+/// ## 内置上下文提供器
 ///
-/// `AgentBuilder` starts with `[InMemoryHistoryProvider]` as the default
-/// context provider chain, providing session history management out of the box.
+/// `AgentBuilder` 默认包含 `[InMemoryHistoryProvider]` 作为
+/// 上下文提供器链，提供开箱即用的会话历史管理。
 ///
-/// ## Replacing the default history management
+/// ## 替换默认历史管理
 ///
 /// ```ignore
 /// let agent = AgentBuilder::new("agent")
@@ -26,7 +26,7 @@ use crate::context_providers::history_provider::InMemoryHistoryProvider;
 ///     .build()?;
 /// ```
 ///
-/// ## Adding providers alongside the default
+/// ## 在默认基础上添加提供器
 ///
 /// ```ignore
 /// let agent = AgentBuilder::new("agent")
@@ -34,14 +34,13 @@ use crate::context_providers::history_provider::InMemoryHistoryProvider;
 ///     .add_context_provider(SkillsProvider::new())
 ///     .add_context_provider(RagProvider::new())
 ///     .build()?;
-/// // Chain: [InMemoryHistoryProvider, SkillsProvider, RagProvider]
+/// // 链式顺序：[InMemoryHistoryProvider, SkillsProvider, RagProvider]
 /// ```
 ///
-/// ## Tool loop (pipeline mode)
+/// ## 工具循环（管道模式）
 ///
-/// When tools are registered, `AgentBuilder` automatically wraps the
-/// `IChatClient` in a `FunctionInvokingChatClient` decorator (MAF pipeline
-/// pattern).
+/// 注册工具时，`AgentBuilder` 自动将 `IChatClient` 包裹在
+/// `FunctionInvokingChatClient` 装饰器中（MAF 管道模式）。
 pub struct AgentBuilder<C> {
     agent_id: String,
     chat_client: Option<C>,
@@ -56,6 +55,9 @@ pub struct AgentBuilder<C> {
 }
 
 impl<C: IChatClient + 'static> AgentBuilder<C> {
+    /// 创建新的 AgentBuilder 实例
+    ///
+    /// 初始化默认上下文提供器链，包含 `InMemoryHistoryProvider`。
     pub fn new(id: impl Into<String>) -> Self {
         Self {
             agent_id: id.into(),
@@ -73,21 +75,25 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         }
     }
 
+    /// 设置聊天客户端
     pub fn chat_client(mut self, client: C) -> Self {
         self.chat_client = Some(client);
         self
     }
 
+    /// 设置系统指令文本
     pub fn instructions(mut self, text: impl Into<String>) -> Self {
         self.instructions = text.into();
         self
     }
 
+    /// 注册一个工具
     pub fn with_tool(mut self, tool: impl ITool + 'static) -> Self {
         self.tools.push(Arc::new(tool));
         self
     }
 
+    /// 设置 Agent 属性键值对
     pub fn with_properties(
         mut self,
         iter: impl IntoIterator<Item = (String, serde_json::Value)>,
@@ -98,30 +104,31 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         self
     }
 
+    /// 设置 Agent 描述信息
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = desc.into();
         self
     }
 
+    /// 设置最大工具调用轮数
     pub fn max_tool_rounds(mut self, rounds: usize) -> Self {
         self.max_tool_rounds = rounds;
         self
     }
 
-    /// Set the compression strategy for context window management.
+    /// 设置上下文窗口压缩策略
     ///
-    /// When set along with a token counter and model metadata,
-    /// the agent will automatically compress messages that exceed
-    /// the model's context window budget.
+    /// 配合 token 计数器和模型元数据使用时，Agent 会在消息超出
+    /// 模型上下文窗口预算时自动进行压缩。
     pub fn with_compression_strategy(mut self, strategy: Arc<dyn ICompressionStrategy>) -> Self {
         self.compression_strategy = Some(strategy);
         self
     }
 
-    /// Set the token counter for estimating token consumption.
+    /// 设置 Token 计数器
     ///
-    /// Required for compression strategies to make informed decisions.
-    /// If not set, compression will not be applied even if a strategy is configured.
+    /// 压缩策略需要 Token 计数器来做出合理的压缩决策。
+    /// 如果未设置，即使配置了压缩策略也不会生效。
     pub fn with_token_counter(mut self, counter: Arc<dyn ITokenCounter>) -> Self {
         self.token_counter = Some(counter);
         self
@@ -169,10 +176,10 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         self
     }
 
-    /// Build the agent using ChatClient pipeline pattern.
+    /// 构建 Agent，采用 ChatClient 管道模式
     ///
-    /// When tools are registered, the IChatClient is wrapped in a
-    /// `FunctionInvokingChatClient` decorator (MAF pipeline pattern).
+    /// 注册工具时，IChatClient 会被包裹在 `FunctionInvokingChatClient`
+    /// 装饰器中（MAF 管道模式）。
     pub fn build(self) -> Result<Arc<dyn IAgent>> {
         let chat_client = self.chat_client.ok_or_else(|| {
             rust_agent_core::AgentError::ConfigError("chat_client is required".into())

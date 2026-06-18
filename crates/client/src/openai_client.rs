@@ -9,10 +9,9 @@ use crate::options::ChatClientOptions;
 use crate::types::ModelListEntry;
 use crate::usage::UsageFormat;
 
-/// OpenAI chat client implementing IChatClient.
+/// 实现 IChatClient 的 OpenAI 聊天客户端。
 ///
-/// Composes the generic `ChatClient` for HTTP/SSE transport and
-/// adds OpenAI-specific API capabilities.
+/// 组合通用 `ChatClient` 用于 HTTP/SSE 传输，并添加 OpenAI 特定的 API 能力。
 pub struct OpenAiChatClient {
     inner: ChatClient,
 }
@@ -28,8 +27,8 @@ impl OpenAiChatClient {
         &self.inner
     }
 
-    /// List available models.
-    /// GET `{api_base}/models` → `{ "object": "list", "data": [...] }`
+    /// 列出可用的模型。
+    /// 发送 GET 请求 `{api_base}/models` → `{ "object": "list", "data": [...] }`
     pub async fn list_models(&self) -> Result<Vec<ModelListEntry>> {
         let url = format!(
             "{}/models",

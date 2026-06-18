@@ -1,25 +1,25 @@
 use crate::types::{AgentId, FinishReason, ResponseMetadata, ToolCall, Usage};
 use serde::{Deserialize, Serialize};
 
-/// Message source marker for tracking where a message originated.
+/// 消息来源标记，用于追踪消息的起源。
 ///
-/// Used by `InMemoryHistoryProvider` to filter messages during
-/// persistence, avoiding duplicate storage of history messages.
-/// Referenced from MAF's `AgentRequestMessageSourceType`.
+/// `InMemoryHistoryProvider` 使用此标记在持久化时过滤消息，
+/// 避免重复存储历史消息。
+/// 参考自 MAF 的 `AgentRequestMessageSourceType`。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageSource {
-    /// External user input
+    /// 外部用户输入
     External,
-    /// Loaded from chat history
+    /// 从聊天历史加载
     ChatHistory,
-    /// Injected by a ContextProvider
+    /// 由 ContextProvider 注入
     ContextProvider,
-    /// Tool execution result
+    /// 工具执行结果
     ToolResult,
 }
 
-/// Role of a message author, following MAF's unified ChatMessage model.
+/// 消息作者角色，遵循 MAF 的统一 ChatMessage 模型。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum MessageRole {
@@ -29,7 +29,7 @@ pub enum MessageRole {
     Tool,
 }
 
-/// Extended ChatMessage — now includes tool_calls and tool_call_id
+/// 扩展的 ChatMessage — 包含 tool_calls 和 tool_call_id
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: MessageRole,
@@ -47,6 +47,7 @@ pub struct ChatMessage {
 }
 
 impl ChatMessage {
+    /// 创建系统角色消息
     pub fn system(content: impl Into<String>) -> Self {
         Self {
             role: MessageRole::System,
@@ -58,6 +59,7 @@ impl ChatMessage {
         }
     }
 
+    /// 创建用户角色消息
     pub fn user(content: impl Into<String>) -> Self {
         Self {
             role: MessageRole::User,
@@ -69,6 +71,7 @@ impl ChatMessage {
         }
     }
 
+    /// 创建助手角色消息
     pub fn assistant(content: impl Into<String>) -> Self {
         Self {
             role: MessageRole::Assistant,
@@ -80,6 +83,7 @@ impl ChatMessage {
         }
     }
 
+    /// 创建包含工具调用的助手角色消息
     pub fn assistant_with_tools(content: impl Into<String>, tool_calls: Vec<ToolCall>) -> Self {
         Self {
             role: MessageRole::Assistant,
@@ -91,6 +95,7 @@ impl ChatMessage {
         }
     }
 
+    /// 创建工具角色消息（工具执行结果）
     pub fn tool(content: impl Into<String>, tool_call_id: impl Into<String>) -> Self {
         Self {
             role: MessageRole::Tool,
@@ -103,8 +108,9 @@ impl ChatMessage {
     }
 }
 
-/// Trait to get ResponseMetadata from content/event variants
+/// 从内容/事件变体中获取 ResponseMetadata 的 trait
 pub trait HasMeta {
+    /// 获取响应元数据引用
     fn meta(&self) -> &ResponseMetadata;
 }
 
@@ -326,7 +332,7 @@ impl HasMeta for ErrorContent {
     }
 }
 
-/// Content enum — 12 variants
+/// Content 枚举 — 12 个变体
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Content {
     Text(TextContent),
@@ -465,6 +471,7 @@ pub struct AgentResponse {
 }
 
 impl AgentResponse {
+    /// 从纯文本创建 Agent 响应（无工具调用）
     pub fn from_text(text: impl Into<String>) -> Self {
         Self {
             id: None,

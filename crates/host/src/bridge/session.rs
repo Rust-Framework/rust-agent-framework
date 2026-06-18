@@ -10,18 +10,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use rust_agent_core::{AgentSession};
 use tokio::sync::RwLock;
 
-/// Context stored per ACP session.
+/// 每个 ACP 会话存储的上下文。
 #[derive(Clone)]
 pub struct SessionContext {
-    /// The RAF agent session.
+    /// RAF Agent 会话。
     pub raf_session: Arc<AgentSession>,
-    /// The target agent ID for this session.
+    /// 此会话的目标 Agent ID。
     pub target_agent_id: String,
-    /// Cancel token for the current prompt turn.
+    /// 当前提示轮次的取消令牌。
     pub cancel_token: Option<Arc<AtomicBool>>,
 }
 
-/// Bridge between ACP sessions and RAF agent sessions.
+/// ACP 会话与 RAF Agent 会话之间的桥梁。
 pub struct SessionBridge {
     sessions: RwLock<HashMap<String, SessionContext>>,
 }
@@ -33,7 +33,7 @@ impl SessionBridge {
         }
     }
 
-    /// Create a new session, optionally targeting a specific agent.
+    /// 创建新会话，可选地指定目标 Agent。
     pub async fn create_session(
         &self,
         session_id: &str,
@@ -48,7 +48,7 @@ impl SessionBridge {
         Ok(())
     }
 
-    /// Get or create a RAF session for the given ACP session ID.
+    /// 获取或为指定 ACP 会话 ID 创建 RAF 会话。
     pub async fn get_or_create_raf_session(
         &self,
         session_id: &str,
@@ -64,12 +64,12 @@ impl SessionBridge {
         Ok(ctx.raf_session.clone())
     }
 
-    /// Get the session context.
+    /// 获取会话上下文。
     pub async fn get_session_context(&self, session_id: &str) -> Option<SessionContext> {
         self.sessions.read().await.get(session_id).cloned()
     }
 
-    /// Register a cancel token for a session.
+    /// 为会话注册取消令牌。
     pub async fn register_cancel_token(
         &self,
         session_id: &str,
@@ -80,7 +80,7 @@ impl SessionBridge {
         }
     }
 
-    /// Trigger cancellation for a session.
+    /// 触发会话的取消。
     pub async fn cancel_session(&self, session_id: &str) -> bool {
         if let Some(ctx) = self.sessions.read().await.get(session_id) {
             if let Some(ref token) = ctx.cancel_token {
@@ -91,7 +91,7 @@ impl SessionBridge {
         false
     }
 
-    /// Get the target agent ID for a session.
+    /// 获取会话的目标 Agent ID。
     pub async fn get_target_agent_id(&self, session_id: &str) -> Option<String> {
         self.sessions
             .read()
@@ -100,12 +100,12 @@ impl SessionBridge {
             .map(|ctx| ctx.target_agent_id.clone())
     }
 
-    /// Remove a session.
+    /// 移除会话。
     pub async fn remove_session(&self, session_id: &str) {
         self.sessions.write().await.remove(session_id);
     }
 
-    /// Remove the cancel token for a session (cleanup after turn completes).
+    /// 移除会话的取消令牌（轮次完成后清理）。
     pub async fn clear_cancel_token(&self, session_id: &str) {
         if let Some(ctx) = self.sessions.write().await.get_mut(session_id) {
             ctx.cancel_token = None;

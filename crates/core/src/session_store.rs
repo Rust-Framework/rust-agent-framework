@@ -3,33 +3,31 @@ use std::sync::Arc;
 
 use crate::{ISession, Result};
 
-/// Session persistence store interface.
+/// 会话持久化存储接口。
 ///
-/// Abstracts the storage backend for session data, enabling
-/// cross-request and cross-restart session recovery.
+/// 抽象会话数据的存储后端，支持跨请求和跨重启的会话恢复。
 ///
-/// Referenced from MAF's `AgentSessionStore` design.
+/// 参考自 MAF 的 `AgentSessionStore` 设计。
 #[async_trait]
 pub trait ISessionStore: Send + Sync {
-    /// Save a session to the store.
+    /// 将会话保存到存储中。
     ///
-    /// If a session with the same ID already exists, it is overwritten.
+    /// 如果已存在相同 ID 的会话，则会被覆盖。
     async fn save_session(&self, session: &dyn ISession) -> Result<()>;
 
-    /// Get a session by ID.
+    /// 根据 ID 获取会话。
     ///
-    /// Returns `None` if no session with the given ID exists.
+    /// 如果指定 ID 的会话不存在，返回 `None`。
     async fn get_session(&self, session_id: &str) -> Result<Option<Arc<dyn ISession>>>;
 
-    /// Delete a session by ID.
+    /// 根据 ID 删除会话。
     ///
-    /// No error is raised if the session does not exist.
+    /// 如果会话不存在，不会引发错误。
     async fn delete_session(&self, session_id: &str) -> Result<()>;
 
-    /// Clean up expired sessions.
+    /// 清理过期的会话。
     ///
-    /// Returns the number of sessions removed.
-    /// Implementations should check `ISession::last_active_at()` against
-    /// the configured TTL options.
+    /// 返回已移除的会话数量。
+    /// 实现应检查 `ISession::last_active_at()` 与配置的 TTL 选项。
     async fn cleanup_expired(&self) -> Result<usize>;
 }

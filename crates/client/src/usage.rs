@@ -8,7 +8,7 @@
 
 use rust_agent_core::Usage;
 
-/// Which provider's wire format to expect in usage data.
+/// 指定在用量数据中预期的供应商线格式。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UsageFormat {
     /// OpenAI style: `prompt_tokens_details.cached_tokens`,
@@ -19,7 +19,7 @@ pub enum UsageFormat {
 }
 
 impl UsageFormat {
-    /// Parse raw `serde_json::Value` usage data using the correct provider struct.
+    /// 使用正确的供应商结构体解析原始的 `serde_json::Value` 用量数据。
     pub fn parse(&self, raw: &serde_json::Value) -> Option<Usage> {
         match self {
             UsageFormat::OpenAI => {

@@ -9,11 +9,11 @@ use super::{err_response, ok_response};
 /// Maximum file content size (1 MB) to prevent excessive memory usage.
 const MAX_CONTENT_SIZE: usize = 1_000_000;
 
-/// Creates a new file or overwrites an existing file with the given content.
+/// 创建新文件或覆盖已有文件的内容。
 ///
-/// Paths are resolved against `base_dir`:
-/// - Absolute paths pass through unchanged.
-/// - Relative paths are joined to `base_dir`.
+/// 路径相对于 `base_dir` 解析：
+/// - 绝对路径直接使用。
+/// - 相对路径拼接至 `base_dir`。
 pub struct WriteFile {
     base_dir: PathBuf,
 }
@@ -57,7 +57,7 @@ impl WriteFile {
     }
 }
 
-/// Default: base_dir = process CWD (backward-compatible).
+/// 默认：base_dir 为进程当前工作目录（向后兼容）。
 impl Default for WriteFile {
     fn default() -> Self {
         Self::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))

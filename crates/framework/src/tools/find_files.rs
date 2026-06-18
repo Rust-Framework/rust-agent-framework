@@ -8,12 +8,12 @@ use super::{err_response, ok_response};
 
 const MAX_RESULTS: usize = 500;
 
-/// Finds files matching a glob pattern from a directory.
+/// 从目录中查找匹配 glob 模式的文件。
 ///
-/// The directory is resolved against `base_dir`:
-/// - If `directory` is absolute → pass through unchanged.
-/// - If `directory` is relative → join with `base_dir`.
-/// - If `directory` is None → use `base_dir` directly.
+/// 目录相对于 `base_dir` 解析：
+/// - 若 `directory` 为绝对路径 → 直接使用。
+/// - 若 `directory` 为相对路径 → 拼接至 `base_dir`。
+/// - 若 `directory` 为 None → 直接使用 `base_dir`。
 pub struct FindFiles {
     base_dir: PathBuf,
 }

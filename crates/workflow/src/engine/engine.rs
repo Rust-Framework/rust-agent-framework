@@ -86,7 +86,7 @@ impl WorkflowEngine {
         &self.config
     }
 
-    /// 完整运行，返回事件流 + 输出流（简单场景，不支持 resume）
+    /// 完整运行，返回事件流 + 输出流（简单场景，不支持恢复）
     pub async fn run(
         &self,
         initial_message: Arc<dyn std::any::Any + Send + Sync>,

@@ -7,56 +7,53 @@ use crate::prompt_agent::PromptAgentData;
 use crate::schema::PropertySchema;
 use crate::workflow_decl::WorkflowAgentData;
 
-/// The unified agent definition type.
-/// Aligns with MAF AgentSchema v1.0 `AgentDefinition`.
+/// 统一的 Agent 定义类型，与 MAF AgentSchema v1.0 对齐。
 ///
-/// This struct holds the common base fields shared by all agent kinds
-/// (name, description, metadata, input/output schema), and delegates
-/// kind-specific data to `AgentKindData` via serde flatten.
+/// 结构体持有所有 Agent 类型共有的基本字段（名称、描述、元数据、输入/输出模式），
+/// 通过 serde flatten 将类型特定数据委托给 `AgentKindData`。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentDefinition {
-    /// Human-readable name of the agent.
+    /// Agent 的人类可读名称。
     pub name: String,
-    /// Display name for UI purposes.
+    /// 用于 UI 的展示名称。
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "displayName")]
     pub display_name: Option<String>,
-    /// Description of the agent's capabilities and purpose.
+    /// Agent 能力与用途的描述。
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
-    /// Additional metadata including authors, tags, etc.
+    /// 附加元数据，包括作者、标签等。
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
-    /// Input parameters that participate in template rendering.
+    /// 参与模板渲染的输入参数。
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "inputSchema")]
     pub input_schema: Option<PropertySchema>,
-    /// Expected output format and structure from the agent.
+    /// Agent 预期的输出格式与结构。
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "outputSchema")]
     pub output_schema: Option<PropertySchema>,
 
-    /// Kind-specific data (prompt, hosted, workflow).
-    /// The `kind` field is injected by the internally-tagged enum below.
+    /// 类型特定数据（prompt、hosted、workflow），
+    /// `kind` 字段由内部标签枚举注入。
     #[serde(flatten)]
     pub kind_data: AgentKindData,
 }
 
-/// Kind-specific agent data, discriminated by the `kind` field.
-/// Aligns with MAF `kind: "prompt"`, `kind: "hosted"`, `kind: "workflow"`.
+/// 按 `kind` 字段区分的类型特定 Agent 数据，与 MAF 对齐。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum AgentKindData {
-    /// Prompt-based AI agent.
+    /// 基于提示词的 AI Agent。
     #[serde(rename = "prompt")]
     Prompt(PromptAgentData),
-    /// Hosted/container-based agent.
+    /// 托管/容器化 Agent。
     #[serde(rename = "hosted")]
     Container(ContainerAgentData),
-    /// Workflow orchestration agent.
+    /// 工作流编排 Agent。
     #[serde(rename = "workflow")]
     Workflow(WorkflowAgentData),
 }
 
 impl AgentDefinition {
-    /// Create a new prompt agent definition.
+    /// 创建一个新的提示词 Agent 定义。
     pub fn new_prompt(name: impl Into<String>, model: crate::model::Model) -> Self {
         Self {
             name: name.into(),
@@ -69,7 +66,7 @@ impl AgentDefinition {
         }
     }
 
-    /// Create a new workflow definition.
+    /// 创建一个新的工作流定义。
     pub fn new_workflow(name: impl Into<String>, trigger_kind: impl Into<String>, trigger_id: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -82,7 +79,7 @@ impl AgentDefinition {
         }
     }
 
-    /// Create a new container/hosted agent definition.
+    /// 创建一个新的容器/托管 Agent 定义。
     pub fn new_container(name: impl Into<String>, resources: crate::container_agent::ContainerResources) -> Self {
         use crate::container_agent::{ContainerAgentData, ProtocolVersionRecord};
         Self {
@@ -99,17 +96,17 @@ impl AgentDefinition {
         }
     }
 
-    /// Check if this is a prompt agent.
+    /// 检查是否为提示词 Agent。
     pub fn is_prompt(&self) -> bool {
         matches!(self.kind_data, AgentKindData::Prompt(_))
     }
 
-    /// Check if this is a workflow agent.
+    /// 检查是否为工作流 Agent。
     pub fn is_workflow(&self) -> bool {
         matches!(self.kind_data, AgentKindData::Workflow(_))
     }
 
-    /// Check if this is a container agent.
+    /// 检查是否为容器 Agent。
     pub fn is_container(&self) -> bool {
         matches!(self.kind_data, AgentKindData::Container(_))
     }

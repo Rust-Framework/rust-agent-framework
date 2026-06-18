@@ -1,16 +1,16 @@
-//! Shared path resolution with traversal protection.
+//! 共享的路径解析与目录穿越防护工具。
 //!
-//! All filesystem tools should use `resolve_safe()` instead of
-//! raw path joining, to prevent `../` and absolute-path escapes.
+//! 所有文件系统工具应使用 `resolve_safe()` 而非原始路径拼接，
+//! 以防止 `../` 和绝对路径逃逸。
 
 use rust_agent_core::AgentError;
 use std::path::{Path, PathBuf};
 
-/// Resolve a user-supplied path against a base directory with traversal protection.
+/// 将用户提供的路径相对于基础目录解析，含目录穿越防护。
 ///
-/// Returns the canonical path, or an error if:
-/// - The path does not exist or cannot be canonicalized
-/// - The canonical path escapes `base_dir`
+/// 返回规范路径，以下情况返回错误：
+/// - 路径不存在或无法规范化
+/// - 规范路径逃逸出 `base_dir`
 pub fn resolve_safe(base_dir: &Path, path: &str) -> Result<PathBuf, AgentError> {
     let candidate = if Path::new(path).is_absolute() {
         PathBuf::from(path)
@@ -33,8 +33,7 @@ pub fn resolve_safe(base_dir: &Path, path: &str) -> Result<PathBuf, AgentError> 
     Ok(canonical)
 }
 
-/// Resolve a user-supplied path with traversal protection, but allow
-/// paths that don't exist yet (for write/create operations).
+/// 将用户提供的路径相对于基础目录解析，含目录穿越防护，允许路径尚不存在（用于写/创建操作）。
 pub fn resolve_safe_new(base_dir: &Path, path: &str) -> Result<PathBuf, AgentError> {
     let candidate = if Path::new(path).is_absolute() {
         PathBuf::from(path)

@@ -5,15 +5,13 @@ use tokio::sync::RwLock;
 
 use rust_agent_core::{AgentSession, ISession, ISessionStore, Result, SessionTTLOptions};
 
-/// In-memory session store backed by a `HashMap`.
+/// 基于 `HashMap` 的内存会话存储。
 ///
-/// Sessions are lost when the process exits.
-/// Suitable for development, testing, and short-lived applications.
+/// 进程退出时会话丢失。适用于开发、测试和短期应用。
 ///
-/// ## TTL cleanup
+/// ## TTL 清理
 ///
-/// When constructed with `with_ttl()`, `cleanup_expired()` will evict sessions
-/// that exceed `max_idle_secs` or `max_lifetime_secs`.
+/// 使用 `with_ttl()` 构造时，`cleanup_expired()` 将驱逐超过 `max_idle_secs` 或 `max_lifetime_secs` 的会话。
 pub struct InMemorySessionStore {
     sessions: RwLock<HashMap<String, Arc<dyn ISession>>>,
     ttl: Option<SessionTTLOptions>,

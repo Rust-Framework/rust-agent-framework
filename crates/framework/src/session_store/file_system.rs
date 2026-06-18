@@ -5,19 +5,16 @@ use tokio::fs;
 
 use rust_agent_core::{AgentSession, ISession, ISessionStore, Result, AgentError, SessionTTLOptions};
 
-/// File system session store.
+/// 文件系统会话存储。
 ///
-/// Each session is stored as a JSON file in the configured directory.
-/// File names are `{session_id}.json`.
+/// 每个会话作为 JSON 文件存储在配置目录中。文件名为 `{session_id}.json`。
 ///
-/// Suitable for single-instance production deployments where
-/// persistence across restarts is needed but a database is overkill.
+/// 适用于需要重启持久化但无需数据库的单实例生产部署。
 ///
-/// ## TTL cleanup
+/// ## TTL 清理
 ///
-/// When constructed with `with_ttl()`, `cleanup_expired()` will evict session
-/// files whose `last_active_at` exceeds `max_idle_secs` or whose `created_at`
-/// exceeds `max_lifetime_secs`.
+/// 使用 `with_ttl()` 构造时，`cleanup_expired()` 将驱逐 `last_active_at` 超过 `max_idle_secs`
+/// 或 `created_at` 超过 `max_lifetime_secs` 的会话文件。
 pub struct FileSystemSessionStore {
     base_dir: PathBuf,
     ttl: Option<SessionTTLOptions>,

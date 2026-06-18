@@ -4,11 +4,10 @@ use serde_json::Value;
 
 const DEFAULT_MAX_OPERATIONS: u64 = 100_000;
 
-/// High-cohesion, low-coupling Rhai scripting runtime.
+/// 高内聚低耦合的 Rhai 脚本运行时。
 ///
-/// Manages the script engine, scope, module registration, and security policy.
-/// External dependencies (context, progress callbacks, etc.) are injected via
-/// function registration, keeping coupling low.
+/// 管理脚本引擎、作用域、模块注册和安全策略。
+/// 外部依赖（上下文、进度回调等）通过函数注册注入，保持低耦合。
 pub struct RhaiRuntime {
     engine: Engine,
     scope: Scope<'static>,
@@ -18,7 +17,7 @@ pub struct RhaiRuntime {
 }
 
 impl RhaiRuntime {
-    /// Create a sandboxed runtime using `Engine::new_raw()`.
+    /// 使用 `Engine::new_raw()` 创建沙箱化运行时。
     pub fn new() -> Self {
         let mut engine = Engine::new_raw();
         engine.set_max_operations(DEFAULT_MAX_OPERATIONS);
@@ -45,14 +44,14 @@ impl RhaiRuntime {
         }
     }
 
-    /// Set the maximum operation limit.
+    /// 设置最大操作数限制。
     pub fn max_operations(&mut self, ops: u64) -> &mut Self {
         self.max_operations = ops;
         self.engine.set_max_operations(ops);
         self
     }
 
-    /// Set and compile the script source.
+    /// 设置并编译脚本源代码。
     pub fn with_script(&mut self, script: impl Into<String>) -> &mut Self {
         let source = script.into();
         self.script_source = Some(source.clone());
@@ -60,32 +59,32 @@ impl RhaiRuntime {
         self
     }
 
-    /// Inject a variable into the runtime scope.
+    /// 向运行时作用域注入变量。
     pub fn with_variable(&mut self, name: &str, value: Dynamic) -> &mut Self {
         self.scope.push(name, value);
         self
     }
 
-    /// Inject a variable as a JSON Value.
+    /// 以 JSON Value 形式注入变量。
     pub fn with_json_variable(&mut self, name: &str, value: Value) -> &mut Self {
         let dynamic = json_to_dynamic(&value);
         self.scope.push(name, dynamic);
         self
     }
 
-    /// Register a custom Rhai module.
+    /// 注册自定义 Rhai 模块。
     pub fn with_module(&mut self, _name: impl AsRef<str>, module: rhai::Module) -> &mut Self {
         self.engine.register_global_module(module.into());
         self
     }
 
-    /// Register a custom type.
+    /// 注册自定义类型。
     pub fn register_type<T: rhai::CustomType>(&mut self) -> &mut Self {
         self.engine.build_type::<T>();
         self
     }
 
-    /// Use a pre-compiled AST.
+    /// 使用预编译的 AST。
     pub fn with_ast(&mut self, ast: AST) -> &mut Self {
         self.ast = Some(ast);
         self
@@ -100,12 +99,12 @@ impl RhaiRuntime {
         }
     }
 
-    /// Compile a script and return the AST.
+    /// 编译脚本并返回 AST。
     pub fn compile_standalone(&self, script: &str) -> std::result::Result<AST, rhai::ParseError> {
         self.engine.compile(script)
     }
 
-    /// Run the pre-compiled script and return the result as JSON.
+    /// 运行预编译脚本，返回 JSON 格式结果。
     pub fn run(&mut self) -> Result<Value> {
         let ast = match &self.ast {
             Some(ast) => ast.clone(),
@@ -128,7 +127,7 @@ impl RhaiRuntime {
         }
     }
 
-    /// Compile and execute a script in one step.
+    /// 一步完成脚本的编译和执行。
     pub fn eval(&mut self, script: &str) -> Result<Value> {
         self.ast = Some(
             self.engine
@@ -144,7 +143,7 @@ impl RhaiRuntime {
         self.run()
     }
 
-    /// Evaluate an expression and return the Dynamic value.
+    /// 求值表达式并返回 Dynamic 值。
     pub fn eval_expression(&mut self, expr: &str) -> Result<Dynamic> {
         let ast = self.engine.compile_expression(expr).map_err(|e| {
             rust_agent_core::AgentError::WorkflowError(format!(
@@ -162,17 +161,17 @@ impl RhaiRuntime {
             })
     }
 
-    /// Get a variable from the scope.
+    /// 从作用域中获取变量。
     pub fn get_variable(&self, name: &str) -> Option<Dynamic> {
         self.scope.get_value(name)
     }
 
-    /// Mutable access to the engine (advanced: for dynamic function registration).
+    /// 可变访问引擎（高级：用于动态函数注册）。
     pub fn engine_mut(&mut self) -> &mut Engine {
         &mut self.engine
     }
 
-    /// Mutable access to the scope.
+    /// 可变访问作用域。
     pub fn scope_mut(&mut self) -> &mut Scope<'static> {
         &mut self.scope
     }
@@ -186,12 +185,12 @@ impl Default for RhaiRuntime {
 
 // ── JSON ↔ Dynamic conversions ──
 
-/// Convert serde_json::Value to rhai::Dynamic.
+/// 将 serde_json::Value 转换为 rhai::Dynamic。
 pub fn json_to_dynamic_val(value: &Value) -> Dynamic {
     json_to_dynamic(value)
 }
 
-/// Convert rhai::Dynamic to serde_json::Value.
+/// 将 rhai::Dynamic 转换为 serde_json::Value。
 pub fn dynamic_to_json_val(dynamic: &Dynamic) -> Value {
     dynamic_to_json(dynamic)
 }

@@ -6,11 +6,11 @@ use rust_agent_core::{ITool, Result};
 use super::path_guard::resolve_safe_new;
 use super::{err_response, ok_response};
 
-/// Creates a directory and all parent directories if they don't exist (like mkdir -p).
+/// 创建目录及其所有父目录（类似 mkdir -p）。
 ///
-/// Paths are resolved against `base_dir`:
-/// - Absolute paths pass through unchanged.
-/// - Relative paths are joined to `base_dir`.
+/// 路径相对于 `base_dir` 解析：
+/// - 绝对路径直接使用。
+/// - 相对路径拼接至 `base_dir`。
 pub struct MakeDirectory {
     base_dir: PathBuf,
 }

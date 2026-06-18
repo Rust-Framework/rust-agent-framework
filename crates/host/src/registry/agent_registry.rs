@@ -11,7 +11,7 @@ use std::sync::Arc;
 use rust_agent_core::{AgentId, IAgent};
 use serde::Serialize;
 
-/// Information about a registered agent, exposed via `_raf/agent_list` and `initialize._meta`.
+/// 已注册 Agent 的信息，通过 `_raf/agent_list` 和 `initialize._meta` 暴露。
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentInfo {
     pub id: String,
@@ -26,12 +26,12 @@ pub struct AgentInfo {
     pub capability_tags: Vec<String>,
     #[serde(default)]
     pub has_subagents: bool,
-    /// This agent is the default (used when no agent_id is specified in session/new).
+    /// 此 Agent 是默认的（当 session/new 中未指定 agent_id 时使用）。
     #[serde(default)]
     pub is_default: bool,
 }
 
-/// Information about a sub-agent, exposed via `_raf/subagent_list`.
+/// 子 Agent 的信息，通过 `_raf/subagent_list` 暴露。
 #[derive(Debug, Clone, Serialize)]
 pub struct SubAgentInfo {
     pub id: String,
@@ -40,13 +40,13 @@ pub struct SubAgentInfo {
     pub description: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub capability_tags: Vec<String>,
-    /// Depth in the agent tree (0 = direct child of queried agent).
+    /// 在 Agent 树中的深度（0 = 查询 Agent 的直接子级）。
     pub depth: usize,
     #[serde(default)]
     pub has_subagents: bool,
 }
 
-/// Tree node for `_raf/subagent_tree`.
+/// `_raf/subagent_tree` 的树节点。
 #[derive(Debug, Clone, Serialize)]
 pub struct SubAgentNode {
     pub id: String,
@@ -59,10 +59,10 @@ pub struct SubAgentNode {
     pub children: Vec<SubAgentNode>,
 }
 
-/// Multi-agent registry.
+/// 多 Agent 注册表。
 pub struct AgentRegistry {
     agents: HashMap<AgentId, Arc<dyn IAgent>>,
-    /// Default agent ID (the first registered agent).
+    /// 默认 Agent ID（第一个注册的 Agent）。
     default_id: Option<AgentId>,
 }
 
@@ -74,7 +74,7 @@ impl AgentRegistry {
         }
     }
 
-    /// Register an agent.
+    /// 注册一个 Agent。
     pub fn register(&mut self, agent: Arc<dyn IAgent>) {
         let id = agent.id().clone();
         if self.default_id.is_none() {
@@ -83,27 +83,27 @@ impl AgentRegistry {
         self.agents.insert(id, agent);
     }
 
-    /// Look up an agent by ID.
+    /// 按 ID 查找 Agent。
     pub fn get(&self, id: &AgentId) -> Option<&Arc<dyn IAgent>> {
         self.agents.get(id)
     }
 
-    /// Get the default agent.
+    /// 获取默认 Agent。
     pub fn get_default(&self) -> Option<&Arc<dyn IAgent>> {
         self.default_id.as_ref().and_then(|id| self.agents.get(id))
     }
 
-    /// Return all registered agent IDs.
+    /// 返回所有已注册的 Agent ID。
     pub fn ids(&self) -> Vec<&AgentId> {
         self.agents.keys().collect()
     }
 
-    /// Number of registered agents.
+    /// 已注册 Agent 的数量。
     pub fn len(&self) -> usize {
         self.agents.len()
     }
 
-    /// Build agent list info for all registered agents.
+    /// 为所有已注册 Agent 构建 Agent 列表信息。
     pub fn build_agent_list(&self) -> Vec<AgentInfo> {
         let mut list: Vec<AgentInfo> = self
             .agents
@@ -132,7 +132,7 @@ impl AgentRegistry {
         list
     }
 
-    /// Build agent list as `_meta` value for ACP `initialize` response.
+    /// 构建 Agent 列表作为 ACP `initialize` 响应的 `_meta` 值。
     pub fn build_agent_list_meta(&self) -> serde_json::Value {
         let agents = self.build_agent_list();
         serde_json::json!({
@@ -143,7 +143,7 @@ impl AgentRegistry {
         })
     }
 
-    /// Get sub-agent list for a given agent by recursively calling `get_subagent()`.
+    /// 通过递归调用 `get_subagent()` 获取指定 Agent 的子 Agent 列表。
     pub fn get_subagent_list(&self, agent_id: &AgentId) -> Vec<SubAgentInfo> {
         let agent = match self.agents.get(agent_id) {
             Some(a) => a,
@@ -154,13 +154,13 @@ impl AgentRegistry {
         result
     }
 
-    /// Get sub-agent tree for a given agent.
+    /// 获取指定 Agent 的子 Agent 树。
     pub fn get_subagent_tree(&self, agent_id: &AgentId) -> Option<SubAgentNode> {
         let agent = self.agents.get(agent_id)?;
         Some(self.build_subagent_node(agent))
     }
 
-    /// Resolve the target agent for a request. Checks `_meta.raf.agent_id`, falls back to default.
+    /// 解析请求的目标 Agent。检查 `_meta.raf.agent_id`，回退到默认。
     pub fn resolve_agent(&self, agent_id_override: Option<&str>) -> Option<Arc<dyn IAgent>> {
         if let Some(id_str) = agent_id_override {
             let id = AgentId::new(id_str);

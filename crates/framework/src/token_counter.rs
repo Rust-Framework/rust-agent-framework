@@ -3,13 +3,12 @@ use rust_agent_core::{ChatMessage, ITokenCounter};
 #[cfg(feature = "tiktoken")]
 use rust_agent_core::MessageRole;
 
-/// Rough estimate token counter: ~1 token per 4 characters.
+/// 粗略估算 Token 计数器：约 1 token 对应 4 个字符。
 ///
-/// Use this when no model-specific tokenizer is available.
-/// The estimate is intentionally conservative (over-counts slightly)
-/// to avoid exceeding context windows.
+/// 当无可用的模型特定分词器时使用此计数器。
+/// 估算有意保守（略高估），以避免超出上下文窗口。
 pub struct EstimateCounter {
-    /// Characters per token ratio. Default is 4.0.
+    /// 每 token 字符数。默认值为 4.0。
     pub chars_per_token: f32,
 }
 
@@ -63,10 +62,9 @@ impl ITokenCounter for EstimateCounter {
     }
 }
 
-/// Model-specific token counter using tiktoken-rs.
+/// 使用 tiktoken-rs 的模型特定 Token 计数器。
 ///
-/// Falls back to `EstimateCounter` if tiktoken is not available or
-/// the model is not recognized.
+/// 若 tiktoken 不可用或模型无法识别，则回退到 `EstimateCounter`。
 #[cfg(feature = "tiktoken")]
 pub struct TiktokenCounter {
     encoding: Option<tiktoken_rs::CoreBPE>,

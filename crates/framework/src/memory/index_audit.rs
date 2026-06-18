@@ -1,15 +1,15 @@
-//! Post-consolidation index integrity checks for assets/ tree.
+//! 合并后对 assets/ 树的索引完整性检查。
 
 use std::path::{Path, PathBuf};
 
-/// A missing or broken index entry detected under `assets/`.
+/// 在 `assets/` 下检测到缺失或损坏的索引条目。
 #[derive(Debug, Clone)]
 pub struct IndexGap {
     pub path: PathBuf,
     pub reason: String,
 }
 
-/// Scan `memory_dir/assets/` for index chain gaps.
+/// 扫描 `memory_dir/assets/` 中的索引链缺口。
 pub fn scan_index_gaps(memory_dir: &Path) -> Vec<IndexGap> {
     let assets = memory_dir.join("assets");
     if !assets.is_dir() {
@@ -98,7 +98,7 @@ fn has_markdown_leaf(dir: &Path) -> bool {
     false
 }
 
-/// Format gaps for CLI / log output.
+/// 格式化索引缺口用于 CLI / 日志输出。
 pub fn format_index_gaps(gaps: &[IndexGap]) -> String {
     if gaps.is_empty() {
         return String::new();

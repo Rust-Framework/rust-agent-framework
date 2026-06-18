@@ -1,4 +1,4 @@
-//! Single-threaded MemoryAgent worker with latest-wins queue coalescing.
+//! 单线程 MemoryAgent 工作器，使用最新获胜队列合并。
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -12,7 +12,7 @@ use super::memory_observability::{
     emit_worker_coalesced, emit_worker_finished, emit_worker_started, ConsolidationRunContext,
 };
 
-/// A single consolidation job for the worker queue.
+/// 工作器队列的单个合并任务。
 #[derive(Clone)]
 pub struct ConsolidationJob {
     pub memory_dir: PathBuf,
@@ -22,7 +22,7 @@ pub struct ConsolidationJob {
     pub coalesced_dropped: u64,
 }
 
-/// Worker statistics exposed for `/memory` debug view.
+/// 为 `/memory` 调试视图暴露的工作器统计信息。
 #[derive(Debug, Clone, Default)]
 pub struct WorkerStats {
     pub running: bool,
@@ -31,7 +31,7 @@ pub struct WorkerStats {
     pub total_runs: u64,
 }
 
-/// Background consolidation worker — one job at a time; pending channel coalesces to latest.
+/// 后台合并工作器——一次一个任务；待处理通道合并为最新。
 pub struct MemoryConsolidationWorker {
     tx: mpsc::UnboundedSender<ConsolidationJob>,
     running: Arc<AtomicBool>,
@@ -112,7 +112,7 @@ impl MemoryConsolidationWorker {
     }
 }
 
-/// Drain any additional queued jobs, keeping only the latest.
+/// 排空任何额外排队任务，仅保留最新的。
 pub(crate) fn coalesce_after_recv<T>(
     rx: &mut mpsc::UnboundedReceiver<T>,
     mut job: T,

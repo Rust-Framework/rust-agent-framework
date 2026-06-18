@@ -33,10 +33,10 @@ use std::path::PathBuf;
 
 use rust_agent_core::ToolRegistry;
 
-/// Register all built-in file-system tools at once.
+/// 一次性注册所有内置文件系统工具。
 ///
-/// Each tool is constructed with the given `base_dir` for relative path resolution.
-/// Absolute paths passed by the LLM bypass the base_dir.
+/// 每个工具使用给定的 `base_dir` 进行相对路径解析。
+/// LLM 传递的绝对路径绕过 base_dir。
 pub fn register_all(registry: &mut ToolRegistry, base_dir: impl Into<PathBuf>) {
     let base_dir = base_dir.into();
     registry.register(ReadFile::new(&base_dir));

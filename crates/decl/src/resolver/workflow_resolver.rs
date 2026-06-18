@@ -12,27 +12,26 @@ use crate::error::DeclError;
 use crate::resolver::agent_resolver::AgentResolver;
 use crate::workflow_decl::WorkflowAgentData;
 
-/// Resolve a `WorkflowAgentData` into an executable `WorkflowGraph`.
+/// 将 `WorkflowAgentData` 解析为可执行的 `WorkflowGraph`。
 ///
-/// This resolver compiles the MAF action-list DSL into a graph that can
-/// be executed by the workflow engine.
+/// 此解析器将 MAF 动作列表 DSL 编译为可由工作流引擎执行的图。
 ///
-/// Currently supports a subset of actions:
-/// - `InvokeAgent` → creates AgentExecutor node
-/// - `SendActivity` → creates output emitter
-/// - `SetVariable` → creates state mutation node
-/// Future phases will add full support for If, Foreach, ConditionGroup, etc.
+/// 当前支持动作的子集：
+/// - `InvokeAgent` → 创建 AgentExecutor 节点
+/// - `SendActivity` → 创建输出发射器
+/// - `SetVariable` → 创建状态变更节点
+/// 未来阶段将添加对 If、Foreach、ConditionGroup 等的完整支持。
 pub struct WorkflowResolver<'a> {
     agent_resolver: &'a mut AgentResolver,
 }
 
 impl<'a> WorkflowResolver<'a> {
-    /// Create a new workflow resolver using the given agent resolver.
+    /// 使用给定的 Agent 解析器创建新的工作流解析器。
     pub fn new(agent_resolver: &'a mut AgentResolver) -> Self {
         Self { agent_resolver }
     }
 
-    /// Resolve a `WorkflowAgentData` into a `WorkflowGraph`.
+    /// 将 `WorkflowAgentData` 解析为 `WorkflowGraph`。
     pub async fn resolve(&mut self, data: &WorkflowAgentData) -> crate::Result<WorkflowGraph> {
         let mut builder = WorkflowBuilder::new();
         let mut prev_node_id: Option<String> = None;
@@ -134,7 +133,7 @@ impl<'a> WorkflowResolver<'a> {
     }
 }
 
-/// Resolve a workflow agent definition into a graph.
+/// 将工作流 Agent 定义解析为图。
 pub async fn resolve_workflow(def: &AgentDefinition) -> crate::Result<WorkflowGraph> {
     match &def.kind_data {
         AgentKindData::Workflow(data) => {
@@ -149,7 +148,7 @@ pub async fn resolve_workflow(def: &AgentDefinition) -> crate::Result<WorkflowGr
     }
 }
 
-/// Quick one-liner: parse a `WorkflowDecl` from a file and build the graph.
+/// 快速一行程序：从文件解析 `WorkflowDecl` 并构建图。
 pub async fn quick_workflow(path: &str) -> crate::Result<WorkflowGraph> {
     let doc = crate::document::AgentDocument::from_json_file(path)?;
     let def = doc.inner_definition();

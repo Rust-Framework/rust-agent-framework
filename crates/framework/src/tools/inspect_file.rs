@@ -6,11 +6,11 @@ use rust_agent_core::{ITool, Result};
 use super::path_guard::resolve_safe;
 use super::{err_response, ok_response};
 
-/// Returns metadata about a file or directory: type, size in bytes, modification time, permissions.
+/// 返回文件或目录的元信息：类型、字节大小、修改时间、权限。
 ///
-/// Paths are resolved against `base_dir`:
-/// - Absolute paths pass through unchanged.
-/// - Relative paths are joined to `base_dir`.
+/// 路径相对于 `base_dir` 解析：
+/// - 绝对路径直接使用。
+/// - 相对路径拼接至 `base_dir`。
 pub struct InspectFile {
     base_dir: PathBuf,
 }

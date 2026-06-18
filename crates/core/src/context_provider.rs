@@ -19,6 +19,7 @@ pub struct ContextInjection {
 }
 
 impl std::fmt::Debug for ContextInjection {
+    /// 格式化上下文注入内容用于调试输出
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ContextInjection")
             .field("instructions", &self.instructions)

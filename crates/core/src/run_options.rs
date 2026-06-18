@@ -7,40 +7,38 @@ use serde::{Deserialize, Serialize};
 use crate::chat_client::ChatClientRunOptions;
 use crate::tool::ToolApprovalResponse;
 
-/// Options passed to `IAgent::run()`, following MAF's RunOptions pattern.
+/// 传递给 `IAgent::run()` 的选项，遵循 MAF 的 RunOptions 模式。
 ///
-/// Allows callers to override per-call behaviour without mutating
-/// the agent's persistent configuration. Fields are `Option`-al —
-/// `None` means "use the agent's default".
+/// 允许调用方覆盖每次调用的行为，而不修改智能体的持久配置。
+/// 字段均为 `Option` 类型——`None` 表示"使用智能体默认值"。
 ///
-/// MAF reference: `AgentRunOptions` in Microsoft Agent Framework.
+/// MAF 参考：Microsoft Agent Framework 中的 `AgentRunOptions`。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentRunOptions {
-    /// Override the system instructions for this run only.
+    /// 仅覆盖本次运行的系统指令。
     pub instructions: Option<String>,
-    /// Override max_tokens for this run only.
+    /// 仅覆盖本次运行的 max_tokens。
     pub max_tokens: Option<u32>,
-    /// Override temperature for this run only.
+    /// 仅覆盖本次运行的 temperature。
     pub temperature: Option<f32>,
-    /// Override top_p for this run only.
+    /// 仅覆盖本次运行的 top_p。
     pub top_p: Option<f32>,
-    /// Override stop sequences for this run only.
+    /// 仅覆盖本次运行的 stop 序列。
     pub stop: Option<Vec<String>>,
-    /// Extra JSON fields merged into the chat completion request body
-    /// for this run only (e.g. DeepSeek thinking config).
+    /// 仅覆盖本次运行中合并到补全请求体的额外 JSON 字段
+    /// （如 DeepSeek 思考配置）。
     pub extra_body: HashMap<String, serde_json::Value>,
-    /// Arbitrary properties passed through to the agent run context.
+    /// 传递到智能体运行上下文的任意属性。
     pub properties: HashMap<String, serde_json::Value>,
-    /// Allow parallel tool calls. When `Some(true)`, the LLM may emit multiple
-    /// tool calls in a single response. Maps to OpenAI's `parallel_tool_calls` parameter.
+    /// 允许并行工具调用。当为 `Some(true)` 时，LLM 可在单次响应中发出多个
+    /// 工具调用。映射到 OpenAI 的 `parallel_tool_calls` 参数。
     pub parallel_tool_calls: Option<bool>,
-    /// Tool approval responses for resuming after `FinishReason::AwaitingApproval`.
-    /// Caller fills this with user decisions before calling `run()` again.
-    /// The session already holds the assistant(tool_calls) message from the
-    /// paused run, so no messages need to be passed.
+    /// 在 `FinishReason::AwaitingApproval` 后恢复运行的工具审批响应。
+    /// 调用方在再次调用 `run()` 前填入用户决策。
+    /// 会话已持有暂停运行的 assistant(tool_calls) 消息，因此无需传递消息。
     pub tool_approval_responses: Vec<ToolApprovalResponse>,
-    /// Cancel flag. The caller holds a clone and sets it to `true` to interrupt
-    /// the agent at the next tool-loop iteration. Zero external dependencies.
+    /// 取消标志。调用方持有克隆并将其设为 `true` 以在下一个工具循环
+    /// 迭代时中断智能体。零外部依赖。
     #[serde(skip)]
     pub cancelled: Option<Arc<AtomicBool>>,
 }
@@ -78,10 +76,10 @@ impl AgentRunOptions {
         self
     }
 
-    /// Enable or disable DeepSeek thinking (reasoning) mode for this run.
+    /// 启用或禁用本次运行的 DeepSeek 思考（推理）模式。
     ///
-    /// When enabled, the model outputs `reasoning_content` in stream deltas
-    /// before the final `content`.
+    /// 启用后，模型在流式增量中先输出 `reasoning_content`，
+    /// 再输出最终的 `content`。
     pub fn with_thinking(mut self, enabled: bool) -> Self {
         let thinking_type = if enabled { "enabled" } else { "disabled" };
         self.extra_body.insert(
@@ -91,13 +89,13 @@ impl AgentRunOptions {
         self
     }
 
-    /// Control whether the LLM may emit multiple tool calls in one response.
+    /// 控制 LLM 是否可以在一次响应中发出多个工具调用。
     pub fn with_parallel_tool_calls(mut self, enabled: bool) -> Self {
         self.parallel_tool_calls = Some(enabled);
         self
     }
 
-    /// Set tool approval responses for resuming after an approval pause.
+    /// 设置审批暂停后恢复运行的工具审批响应。
     pub fn with_tool_approval_responses(
         mut self,
         responses: Vec<ToolApprovalResponse>,
@@ -106,15 +104,15 @@ impl AgentRunOptions {
         self
     }
 
-    /// Set the cancellation flag for this run.
+    /// 设置本次运行的取消标志。
     pub fn with_cancelled(mut self, flag: Arc<AtomicBool>) -> Self {
         self.cancelled = Some(flag);
         self
     }
 
-    /// Set the reasoning effort level for this run.
+    /// 设置本次运行的推理努力级别。
     ///
-    /// Maps to `reasoning_effort: "high"/"max"` in the request body.
+    /// 映射到请求体中的 `reasoning_effort: "high"/"max"`。
     pub fn with_reasoning_effort(mut self, effort: ReasoningEffort) -> Self {
         self.extra_body.insert(
             "reasoning_effort".to_string(),
@@ -123,10 +121,9 @@ impl AgentRunOptions {
         self
     }
 
-    /// Convert to `ChatClientRunOptions` for passing to `IChatClient::run()`.
+    /// 转换为 `ChatClientRunOptions` 以传递给 `IChatClient::run()`。
     ///
-    /// Agent-level fields (like `instructions`) are handled by the agent
-    /// and not forwarded to the chat client.
+    /// 智能体级别的字段（如 `instructions`）由智能体处理，不会转发给聊天客户端。
     pub fn to_chat_client_run_options(&self) -> ChatClientRunOptions {
         ChatClientRunOptions {
             max_tokens: self.max_tokens,
@@ -143,7 +140,7 @@ impl AgentRunOptions {
     }
 }
 
-/// Reasoning effort level for models that support it (e.g. DeepSeek).
+/// 支持该功能的模型（如 DeepSeek）的推理努力级别。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningEffort {

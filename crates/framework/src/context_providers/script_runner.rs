@@ -12,7 +12,7 @@ const DEFAULT_TIMEOUT_SECS: u64 = 30;
 #[async_trait]
 pub trait AgentSkillScriptRunner: Send + Sync {
     /// 执行脚本，返回 stdout。
-    /// `timeout_secs` overrides the runner's configured default per-call when provided.
+    /// `timeout_secs` 在提供时覆盖运行器配置的每次调用默认超时。
     async fn run(
         &self,
         skill_name: &str,

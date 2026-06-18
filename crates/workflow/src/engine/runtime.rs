@@ -22,7 +22,7 @@ pub enum ResumeCommand {
     Abort,
 }
 
-/// 有状态的工作流执行句柄 — 支持暂停后 resume
+/// 有状态的工作流执行句柄 — 支持暂停后恢复
 pub struct WorkflowRuntime {
     resume_tx: mpsc::UnboundedSender<ResumeCommand>,
     done: Mutex<Option<tokio::sync::oneshot::Receiver<Result<()>>>>,

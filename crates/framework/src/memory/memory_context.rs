@@ -1,12 +1,12 @@
-//! Selective context projection for MemoryAgent consolidation.
+//! MemoryAgent 合并的选择性上下文投影。
 //!
-//! MainAgent system prompts and provider advertise text are stripped.
-//! Only factual user/assistant messages and knowledge-gathering tool results
-//! are kept, in stable OpenAI tool-loop order for KV cache prefix reuse.
+//! 过滤掉 MainAgent 系统提示和提供器广告文本。
+//! 仅保留事实性用户/助手消息和知识收集工具结果，
+//! 按稳定的 OpenAI 工具循环顺序以复用 KV 缓存前缀。
 
 use rust_agent_core::{ChatMessage, MessageRole, ToolCall, AgentResponseResult, Content, FinishReason};
 
-/// Provider state key for accumulated projected memory context.
+/// 累积投影记忆上下文的提供器状态键。
 pub const MEMORY_PROJECTION_STATE_KEY: &str = "SkillMemoryContextProvider_memory_projection";
 
 const KNOWLEDGE_TOOLS: &[&str] = &[
@@ -20,7 +20,7 @@ const KNOWLEDGE_TOOLS: &[&str] = &[
 
 const SKIP_TOOLS: &[&str] = &["echo", "add"];
 
-/// Whether a tool's results are useful for memory consolidation.
+/// 工具的结果是否对记忆合并有用。
 pub fn is_knowledge_tool(name: &str) -> bool {
     KNOWLEDGE_TOOLS.contains(&name)
 }
@@ -29,7 +29,7 @@ fn is_skip_tool(name: &str) -> bool {
     SKIP_TOOLS.contains(&name)
 }
 
-/// Project a raw message slice for MemoryAgent: drop system, filter irrelevant tools.
+/// 为 MemoryAgent 投影原始消息切片：丢弃系统消息，过滤不相关工具。
 pub fn project_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
     let mut out = Vec::new();
     let mut i = 0;
@@ -115,7 +115,7 @@ fn messages_tail_equal(a: &[ChatMessage], b: &[ChatMessage]) -> bool {
         })
 }
 
-/// Merge prior projected history with the current turn (append-only, dedupe by tail).
+/// 合并先前投影历史与当前轮次（仅追加，按尾部去重）。
 pub fn merge_memory_projection(
     history: &[ChatMessage],
     turn: &[ChatMessage],
@@ -138,7 +138,7 @@ pub fn merge_memory_projection(
     merged
 }
 
-/// Build consolidation input: projected history + projected current turn.
+/// 构建合并输入：投影历史 + 投影当前轮次。
 pub fn build_consolidation_context(
     memory_projection: &[ChatMessage],
     turn_transcript: &[ChatMessage],
@@ -147,7 +147,7 @@ pub fn build_consolidation_context(
     merge_memory_projection(memory_projection, &projected_turn)
 }
 
-/// Rebuild the current turn's factual transcript from stream chunks + caller messages.
+/// 从流块和调用者消息重建当前轮次的事实转录。
 pub fn build_turn_transcript(
     caller_messages: &[ChatMessage],
     chunks: &[AgentResponseResult],
@@ -231,7 +231,7 @@ pub fn build_turn_transcript(
     transcript
 }
 
-/// Load projected memory context from session provider state JSON.
+/// 从会话提供器状态 JSON 加载投影记忆上下文。
 pub fn load_memory_projection(
     session: &dyn rust_agent_core::ISession,
 ) -> Vec<ChatMessage> {
@@ -242,7 +242,7 @@ pub fn load_memory_projection(
         .unwrap_or_default()
 }
 
-/// Save projected memory context to session provider state.
+/// 将投影记忆上下文保存到会话提供器状态。
 pub fn save_memory_projection(
     session: &dyn rust_agent_core::ISession,
     projection: &[ChatMessage],

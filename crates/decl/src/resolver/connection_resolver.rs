@@ -7,12 +7,12 @@ use crate::connection::{Connection, ConnectionKind};
 use crate::error::DeclError;
 use crate::model::Model;
 
-/// Resolve a `Model` + `Connection` into an `Arc<dyn IChatClient>`.
+/// 将 `Model` + `Connection` 解析为 `Arc<dyn IChatClient>`。
 ///
-/// Supports these connection kinds:
-/// - `ApiKey` — direct API key authentication
-/// - `Anonymous` — no authentication
-/// - `Remote` — uses endpoint with environment-based credentials
+/// 支持以下连接类型：
+/// - `ApiKey` — 直接 API 密钥认证
+/// - `Anonymous` — 无需认证
+/// - `Remote` — 使用端点，基于环境的凭据
 pub fn resolve_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>> {
     let connection = model.connection.as_ref();
     let provider = model
@@ -86,7 +86,7 @@ pub fn resolve_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>>
     }
 }
 
-/// Extract API key and optional base URL from a Connection.
+/// 从 Connection 提取 API 密钥和可选的 base URL。
 fn extract_credentials(conn: &Connection) -> crate::Result<(Option<String>, Option<String>)> {
     match conn.kind {
         ConnectionKind::ApiKey | ConnectionKind::Foundry => {

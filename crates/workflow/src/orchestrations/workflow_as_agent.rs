@@ -24,7 +24,7 @@ type StoredRunner = Arc<
         + Sync,
 >;
 
-/// Wraps an orchestration pattern's `run()` method as an IAgent.
+/// 将编排模式的 `run()` 方法包装为 IAgent。
 pub struct WorkflowAsAgent {
     id: AgentId,
     metadata: AgentMetadata,

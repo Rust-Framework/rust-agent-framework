@@ -8,20 +8,20 @@ use crate::error::DeclError;
 use crate::resolver::connection_resolver;
 use crate::resolver::tool_resolver::ToolResolver;
 
-/// Resolver that builds a runnable `IAgent` from an `AgentDefinition`.
+/// 将 `AgentDefinition` 构建为可运行的 `IAgent` 的解析器。
 ///
-/// Supports:
-/// - `Prompt` agents → built via `AgentBuilder`
-/// - `Workflow` agents → delegated to `WorkflowResolver`
-/// - `Container` agents → not yet supported (returns error)
+/// 支持：
+/// - `Prompt` Agent → 通过 `AgentBuilder` 构建
+/// - `Workflow` Agent → 委托给 `WorkflowResolver`
+/// - `Container` Agent → 尚不支持（返回错误）
 pub struct AgentResolver {
     tool_resolver: ToolResolver,
-    /// Registry of resolved agents, keyed by name.
+    /// 已解析 Agent 的注册表，按名称键控。
     agent_registry: Vec<(String, Arc<dyn IAgent>)>,
 }
 
 impl AgentResolver {
-    /// Create a new agent resolver with default tool resolver.
+    /// 使用默认工具解析器创建新的 Agent 解析器。
     pub fn new() -> Self {
         Self {
             tool_resolver: ToolResolver::new(),
@@ -29,12 +29,12 @@ impl AgentResolver {
         }
     }
 
-    /// Get mutable access to the tool resolver for factory registration.
+    /// 获取工具解析器的可变引用，用于工厂注册。
     pub fn tool_resolver_mut(&mut self) -> &mut ToolResolver {
         &mut self.tool_resolver
     }
 
-    /// Register a custom tool factory.
+    /// 注册自定义工具工厂。
     pub fn register_tool_factory(
         &mut self,
         name: impl Into<String>,
@@ -46,7 +46,7 @@ impl AgentResolver {
         self.tool_resolver.register_factory(name, factory);
     }
 
-    /// Look up a previously-resolved agent by name.
+    /// 按名称查找先前解析的 Agent。
     pub fn get_agent(&self, name: &str) -> Option<Arc<dyn IAgent>> {
         self.agent_registry
             .iter()
@@ -55,7 +55,7 @@ impl AgentResolver {
             .map(|(_, agent)| Arc::clone(agent))
     }
 
-    /// Resolve an `AgentDefinition` into a runnable `IAgent`.
+    /// 将 `AgentDefinition` 解析为可运行的 `IAgent`。
     pub async fn resolve(&mut self, def: &AgentDefinition) -> crate::Result<Arc<dyn IAgent>> {
         match &def.kind_data {
             AgentKindData::Prompt(data) => self.resolve_prompt(def, data).await,
@@ -110,8 +110,7 @@ impl Default for AgentResolver {
 
 // ── Internal Wrappers ──
 
-/// Wraps `Arc<dyn IChatClient>` to implement `IChatClient` for use with
-/// `AgentBuilder<C>`.
+/// 包装 `Arc<dyn IChatClient>` 以实现 `IChatClient`，用于 `AgentBuilder<C>`。
 struct ChatClientWrapper(pub Arc<dyn IChatClient>);
 
 #[async_trait::async_trait]
@@ -135,7 +134,7 @@ impl IChatClient for ChatClientWrapper {
     }
 }
 
-/// Wraps `Arc<dyn ITool>` to implement `ITool` for `AgentBuilder::with_tool()`.
+/// 包装 `Arc<dyn ITool>` 以实现 `ITool`，用于 `AgentBuilder::with_tool()`。
 struct ToolWrapper(pub Arc<dyn ITool>);
 
 #[async_trait::async_trait]
@@ -161,7 +160,7 @@ use rust_agent_core::ITool;
 
 // ── Convenience Functions ──
 
-/// Quick one-liner: parse an `AgentDocument` from a file and build the agent.
+/// 快速一行程序：从文件解析 `AgentDocument` 并构建 Agent。
 pub async fn quick_agent(path: &str) -> crate::Result<Arc<dyn IAgent>> {
     let doc = crate::document::AgentDocument::from_json_file(path)?;
     let def = doc.inner_definition();

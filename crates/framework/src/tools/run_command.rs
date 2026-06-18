@@ -10,12 +10,12 @@ use super::{err_response, ok_response};
 const MAX_OUTPUT_BYTES: usize = 100 * 1024; // 100 KB
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
-/// Executes a shell command and returns the output (stdout + stderr) and exit code.
+/// 执行 shell 命令并返回输出（stdout + stderr）和退出码。
 ///
-/// The working directory is resolved against `base_dir`:
-/// - If `working_dir` is an absolute path → pass through unchanged.
-/// - If `working_dir` is a relative path → join with `base_dir`.
-/// - If `working_dir` is None → use `base_dir` directly (not process CWD).
+/// 工作目录相对于 `base_dir` 解析：
+/// - 若 `working_dir` 为绝对路径 → 直接使用。
+/// - 若 `working_dir` 为相对路径 → 拼接至 `base_dir`。
+/// - 若 `working_dir` 为 None → 直接使用 `base_dir`（而非进程 CWD）。
 pub struct RunCommand {
     base_dir: PathBuf,
     timeout_secs: Option<u64>,

@@ -4,10 +4,10 @@ use futures_core::Stream;
 
 use crate::{AgentId, AgentResponse, AgentResponseResult, Content, Result, ToolCall};
 
-/// Type alias for a boxed, sendable stream.
+/// 装箱的可发送流的类型别名。
 pub type BoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + Send + 'a>>;
 
-/// Collect an agent stream into a single aggregated AgentResponse.
+/// 将智能体流收集为单个聚合的 AgentResponse。
 pub async fn collect_agent_response(
     mut stream: BoxStream<'static, Result<AgentResponseResult>>,
 ) -> Result<AgentResponse> {

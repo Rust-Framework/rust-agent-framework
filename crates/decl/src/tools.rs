@@ -4,106 +4,105 @@ use serde::{Deserialize, Serialize};
 
 use crate::schema::PropertySchema;
 
-/// Tool declaration for an AI agent.
-/// Aligns with MAF AgentSchema v1.0 tool types.
+/// AI Agent 的工具声明，与 MAF AgentSchema v1.0 工具类型对齐。
 ///
-/// MAF defines these tool kinds:
+/// MAF 定义了以下工具类型：
 /// - `function` — OpenAI Function Calling
-/// - `custom` — Factory-registered custom tools
-/// - `web_search` — Web search engine tool
-/// - `file_search` — File/vector search tool
-/// - `mcp` — Model Context Protocol tool
-/// - `openapi` — OpenAPI specification-based tool
-/// - `code_interpreter` — Sandbox code execution tool
+/// - `custom` — 工厂注册的自定义工具
+/// - `web_search` — 网络搜索引擎工具
+/// - `file_search` — 文件/向量搜索工具
+/// - `mcp` — 模型上下文协议工具
+/// - `openapi` — 基于 OpenAPI 规范的工具
+/// - `code_interpreter` — 沙箱代码执行工具
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ToolDecl {
-    /// OpenAI Function Calling tool.
+    /// OpenAI Function Calling 工具。
     #[serde(rename = "function")]
     Function {
-        /// Function/tool name.
+        /// 函数/工具名称。
         name: String,
-        /// Human-readable description.
+        /// 人类可读的描述。
         #[serde(default, skip_serializing_if = "String::is_empty")]
         description: String,
-        /// JSON Schema for the tool's parameters.
+        /// 工具参数的 JSON Schema。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parameters: Option<PropertySchema>,
-        /// Bindings from inputSchema properties to tool arguments.
+        /// 从 inputSchema 属性到工具参数的绑定。
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         bindings: Vec<ToolBinding>,
     },
 
-    /// Factory-registered custom tool.
+    /// 工厂注册的自定义工具。
     #[serde(rename = "custom")]
     Custom {
-        /// Tool name (used for factory lookup).
+        /// 工具名称（用于工厂查找）。
         name: String,
-        /// Human-readable description.
+        /// 人类可读的描述。
         #[serde(default, skip_serializing_if = "String::is_empty")]
         description: String,
-        /// Arbitrary configuration forwarded to the factory.
+        /// 转发给工厂的任意配置。
         #[serde(default, skip_serializing_if = "HashMap::is_empty")]
         config: HashMap<String, serde_json::Value>,
     },
 
-    /// Web search tool (uses Bing/Google/DuckDuckGo).
+    /// 网络搜索工具（使用 Bing/Google/DuckDuckGo）。
     #[serde(rename = "web_search")]
     WebSearch,
 
-    /// File/vector search tool.
+    /// 文件/向量搜索工具。
     #[serde(rename = "file_search")]
     FileSearch {
-        /// Vector store IDs for targeted search.
+        /// 用于定向搜索的向量存储 ID。
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         vector_store_ids: Vec<String>,
     },
 
-    /// Model Context Protocol (MCP) tool.
+    /// 模型上下文协议（MCP）工具。
     #[serde(rename = "mcp")]
     Mcp {
-        /// Tool display name.
+        /// 工具展示名称。
         name: String,
-        /// MCP server URL.
+        /// MCP 服务器 URL。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         server_url: Option<String>,
-        /// Specific tool name on the MCP server.
+        /// MCP 服务器上的具体工具名称。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tool_name: Option<String>,
-        /// Approval mode: "always", "never", or "specify".
+        /// 审批模式："always"、"never" 或 "specify"。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         approval_mode: Option<String>,
     },
 
-    /// OpenAPI-specification-based tool.
+    /// 基于 OpenAPI 规范的工具。
     #[serde(rename = "openapi")]
     OpenApi {
-        /// Tool display name.
+        /// 工具展示名称。
         name: String,
-        /// URL to the OpenAPI specification.
+        /// OpenAPI 规范的 URL。
         #[serde(rename = "specUrl")]
         spec_url: String,
-        /// Optional operation ID to target a specific endpoint.
+        /// 可选的操作 ID，用于定位特定端点。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         operation_id: Option<String>,
     },
 
-    /// Sandbox code interpreter tool.
+    /// 沙箱代码解释器工具。
     #[serde(rename = "code_interpreter")]
     CodeInterpreter,
 }
 
-/// Binding from an inputSchema property to a tool argument.
+/// 从 inputSchema 属性到工具参数的绑定。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolBinding {
-    /// Binding name.
+    /// 绑定名称。
     pub name: String,
-    /// Path to the input property (e.g., "question" in inputSchema).
+    /// 输入属性的路径（例如 inputSchema 中的 "question"）。
     pub input: String,
 }
 
 impl ToolDecl {
-    /// Get the tool name, if applicable.
+    /// 获取工具名称（如适用）。
     pub fn name(&self) -> Option<&str> {
         match self {
             ToolDecl::Function { name, .. } => Some(name),
@@ -114,7 +113,7 @@ impl ToolDecl {
         }
     }
 
-    /// Get the tool kind string.
+    /// 获取工具类型字符串。
     pub fn kind_str(&self) -> &'static str {
         match self {
             ToolDecl::Function { .. } => "function",
@@ -127,7 +126,7 @@ impl ToolDecl {
         }
     }
 
-    /// Create a function tool with name and description.
+    /// 创建带名称和描述的函数工具。
     pub fn function(name: impl Into<String>, description: impl Into<String>) -> Self {
         ToolDecl::Function {
             name: name.into(),
@@ -137,7 +136,7 @@ impl ToolDecl {
         }
     }
 
-    /// Create a custom tool with name.
+    /// 创建带名称的自定义工具。
     pub fn custom(name: impl Into<String>) -> Self {
         ToolDecl::Custom {
             name: name.into(),
@@ -146,7 +145,7 @@ impl ToolDecl {
         }
     }
 
-    /// Create an MCP tool.
+    /// 创建 MCP 工具。
     pub fn mcp(name: impl Into<String>, server_url: impl Into<String>, tool_name: impl Into<String>) -> Self {
         ToolDecl::Mcp {
             name: name.into(),

@@ -9,19 +9,17 @@ use crate::options::ChatClientOptions;
 use crate::types::ModelListEntry;
 use crate::usage::UsageFormat;
 
-/// DeepSeek chat client implementing IChatClient.
+/// 实现 IChatClient 的 DeepSeek 聊天客户端。
 ///
-/// DeepSeek's API is OpenAI-compatible except:
-/// - Base URL is `https://api.deepseek.com` (no `/v1` prefix)
-/// - Supports `thinking` mode via `ChatAgentRunOptions::with_thinking()`
-/// - Returns `reasoning_content` in stream deltas
-/// - Returns `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` in usage
+/// DeepSeek 的 API 与 OpenAI 兼容，但有以下区别：
+/// - 基础 URL 为 `https://api.deepseek.com`（无 `/v1` 前缀）
+/// - 通过 `ChatAgentRunOptions::with_thinking()` 支持 `thinking` 模式
+/// - 在流式增量中返回 `reasoning_content`
+/// - 在用量数据中返回 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`
 ///
-/// Composes the generic `ChatClient` for HTTP/SSE transport and
-/// adds DeepSeek-specific API capabilities.
+/// 组合通用 `ChatClient` 用于 HTTP/SSE 传输，并添加 DeepSeek 特定的 API 能力。
 ///
-/// Per-call options (thinking mode, reasoning effort, etc.) are configured
-/// via `ChatAgentRunOptions` — not on this client — keeping the interface clean.
+/// 每次调用的选项（思考模式、推理努力等）通过 `ChatAgentRunOptions` 配置，而非此客户端，保持接口简洁。
 pub struct DeepSeekChatClient {
     inner: ChatClient,
 }
@@ -37,8 +35,8 @@ impl DeepSeekChatClient {
         &self.inner
     }
 
-    /// List available DeepSeek models.
-    /// GET `https://api.deepseek.com/models` → `{ "object": "list", "data": [...] }`
+    /// 列出可用的 DeepSeek 模型。
+    /// 发送 GET 请求 `https://api.deepseek.com/models` → `{ "object": "list", "data": [...] }`
     pub async fn list_models(&self) -> Result<Vec<ModelListEntry>> {
         let url = format!(
             "{}/models",

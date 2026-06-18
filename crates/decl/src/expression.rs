@@ -19,17 +19,16 @@
 #[cfg(feature = "powerfx")]
 use powerfx::{DataValue, PowerFxEngine, Session};
 
-/// Expression evaluation engine.
+/// 表达式求值引擎。
 ///
-/// Supports environment variable resolution and optional PowerFx
-/// expression evaluation (behind the `powerfx` feature flag).
+/// 支持环境变量解析和可选的 PowerFx 表达式求值（在 `powerfx` 特性标志后）。
 pub struct ExpressionEngine {
     #[cfg(feature = "powerfx")]
     inner: PowerFxEngine,
 }
 
 impl ExpressionEngine {
-    /// Create a new expression engine.
+    /// 创建新的表达式引擎。
     #[cfg(feature = "powerfx")]
     pub fn new() -> Self {
         Self {
@@ -37,24 +36,24 @@ impl ExpressionEngine {
         }
     }
 
-    /// Create a new expression engine (no PowerFx).
+    /// 创建新的表达式引擎（无 PowerFx）。
     #[cfg(not(feature = "powerfx"))]
     pub fn new() -> Self {
         Self {}
     }
 
-    /// Check if a string value starts with `=`, indicating an expression.
+    /// 检查字符串值是否以 `=` 开头，表示一个表达式。
     pub fn is_expression(value: &str) -> bool {
         value.starts_with('=')
     }
 
-    /// Resolve an environment variable reference.
+    /// 解析环境变量引用。
     ///
-    /// Supports two formats:
-    /// - `$VAR_NAME` — Unix-style env var reference
-    /// - `=Env.VAR_NAME` — MAF PowerFx env var reference
+    /// 支持两种格式：
+    /// - `$VAR_NAME` — Unix 风格的环境变量引用
+    /// - `=Env.VAR_NAME` — MAF PowerFx 环境变量引用
     ///
-    /// Returns `None` if the value doesn't look like an env var reference.
+    /// 如果值看起来不像环境变量引用则返回 `None`。
     pub fn resolve_env(value: &str) -> Option<String> {
         if let Some(var_name) = value.strip_prefix('$') {
             std::env::var(var_name).ok()
@@ -65,8 +64,7 @@ impl ExpressionEngine {
         }
     }
 
-    /// Resolve a value that may be an env var reference or expression.
-    /// Returns the original value if no resolution is needed.
+    /// 解析可能是环境变量引用或表达式的值，无需解析时返回原值。
     pub fn resolve_value(&self, value: &str) -> String {
         // Try env var first
         if let Some(resolved) = Self::resolve_env(value) {
@@ -87,7 +85,7 @@ impl ExpressionEngine {
         value.to_string()
     }
 
-    /// Evaluate a PowerFx expression.
+    /// 求值 PowerFx 表达式。
     #[cfg(feature = "powerfx")]
     pub fn evaluate_powerfx(
         &self,
@@ -110,7 +108,7 @@ impl ExpressionEngine {
         }
     }
 
-    /// Create a session with variables pre-populated.
+    /// 创建预填充变量的会话。
     #[cfg(feature = "powerfx")]
     pub fn create_session(variables: &std::collections::HashMap<String, serde_json::Value>) -> Session {
         let mut session = Session::new();
@@ -128,7 +126,7 @@ impl Default for ExpressionEngine {
     }
 }
 
-/// Convert a `serde_json::Value` to a `powerfx::DataValue`.
+/// 将 `serde_json::Value` 转换为 `powerfx::DataValue`。
 #[cfg(feature = "powerfx")]
 fn json_to_data_value(value: &serde_json::Value) -> DataValue {
     match value {

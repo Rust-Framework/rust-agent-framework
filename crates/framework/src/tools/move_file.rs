@@ -6,11 +6,11 @@ use rust_agent_core::{ITool, Result};
 use super::path_guard::{resolve_safe, resolve_safe_new};
 use super::{err_response, ok_response};
 
-/// Moves or renames a file or directory.
+/// 移动或重命名文件或目录。
 ///
-/// Both `from` and `to` paths are resolved against `base_dir`:
-/// - Absolute paths pass through unchanged.
-/// - Relative paths are joined to `base_dir`.
+/// `from` 和 `to` 路径均相对于 `base_dir` 解析：
+/// - 绝对路径直接使用。
+/// - 相对路径拼接至 `base_dir`。
 pub struct MoveFile {
     base_dir: PathBuf,
 }

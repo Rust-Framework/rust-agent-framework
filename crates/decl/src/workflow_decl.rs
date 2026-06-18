@@ -2,34 +2,30 @@ use serde::{Deserialize, Serialize};
 
 use crate::actions::ActionDecl;
 
-/// Workflow agent data (kind = "workflow").
-/// Aligns with MAF AgentSchema v1.0 `Workflow`.
+/// 工作流 Agent 数据（kind = "workflow"），与 MAF AgentSchema v1.0 对齐。
 ///
-/// A workflow agent orchestrates multiple steps and actions. It uses a
-/// trigger-based action-list DSL where actions execute sequentially.
-/// Supports conditional logic, parallel processing, and sophisticated
-/// AI-driven processes.
+/// 工作流 Agent 编排多个步骤和动作，使用基于触发器的动作列表 DSL，
+/// 动作按顺序执行。支持条件逻辑、并行处理和复杂的 AI 驱动流程。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowAgentData {
-    /// The trigger that initiates the workflow execution.
+    /// 启动工作流执行的触发器。
     pub trigger: WorkflowTrigger,
 }
 
-/// The trigger that starts a workflow execution.
-/// Aligns with MAF Declarative Workflows trigger structure.
+/// 启动工作流执行的触发器，与 MAF Declarative Workflows 触发器结构对齐。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowTrigger {
-    /// Trigger type (typically `"OnConversationStart"`).
+    /// 触发器类型（通常为 `"OnConversationStart"`）。
     pub kind: String,
-    /// Unique identifier for the workflow trigger.
+    /// 工作流触发器的唯一标识符。
     pub id: String,
-    /// List of actions to execute when triggered.
+    /// 触发时执行的动作列表。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<ActionDecl>,
 }
 
 impl WorkflowAgentData {
-    /// Create a new workflow with a trigger.
+    /// 使用触发器创建新工作流。
     pub fn new(kind: impl Into<String>, id: impl Into<String>) -> Self {
         Self {
             trigger: WorkflowTrigger {
@@ -40,13 +36,13 @@ impl WorkflowAgentData {
         }
     }
 
-    /// Add an action to the trigger's action list.
+    /// 向触发器的动作列表添加动作。
     pub fn with_action(mut self, action: ActionDecl) -> Self {
         self.trigger.actions.push(action);
         self
     }
 
-    /// Get a reference to all actions.
+    /// 获取所有动作的引用。
     pub fn actions(&self) -> &[ActionDecl] {
         &self.trigger.actions
     }

@@ -10,11 +10,10 @@ use crate::options::ChatClientOptions;
 use crate::transport::SseStream;
 use crate::usage::UsageFormat;
 
-/// Generic chat client that handles the HTTP transport and SSE streaming layer.
+/// 通用聊天客户端，处理 HTTP 传输和 SSE 流式层。
 ///
-/// Works with any OpenAI-compatible API (OpenAI, DeepSeek, etc.).
-/// Provider-specific extensions are implemented via wrapper types
-/// (`OpenAiChatClient`, `DeepSeekChatClient`) that compose this struct.
+/// 适用于任何兼容 OpenAI 的 API（OpenAI、DeepSeek 等）。
+/// 特定供应商的扩展通过包装类型（`OpenAiChatClient`、`DeepSeekChatClient`）实现，这些类型组合了该结构体。
 pub struct ChatClient {
     http: reqwest::Client,
     options: ChatClientOptions,
@@ -35,7 +34,7 @@ impl ChatClient {
         &self.options
     }
 
-    /// Core streaming call: POST to `{api_base}/chat/completions`, parse SSE.
+    /// 核心流式调用：向 `{api_base}/chat/completions` 发送 POST 请求，解析 SSE。
     pub async fn chat_stream(
         &self,
         messages: &[ChatMessage],

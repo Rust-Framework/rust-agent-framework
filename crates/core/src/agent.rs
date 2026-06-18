@@ -5,22 +5,22 @@ use crate::chat_client::IChatClient;
 use crate::session::{AgentSession, ISession};
 use crate::{AgentId, AgentMetadata, AgentResponseResult, AgentRunOptions, BoxStream, ChatMessage, Result};
 
-/// Core agent interface following MAF design.
+/// 核心 Agent 接口，遵循 MAF 设计。
 ///
-/// An agent is an autonomous software component that can reason,
-/// plan, and execute using LLMs, tools, and other agents.
-/// Only streaming output is supported.
+/// Agent 是自主软件组件，能够使用 LLM、工具和其他 Agent
+/// 进行推理、规划和执行。仅支持流式输出。
 #[async_trait]
 pub trait IAgent: Send + Sync {
+    /// 获取 Agent ID
     fn id(&self) -> &AgentId;
+    /// 获取 Agent 元数据
     fn metadata(&self) -> &AgentMetadata;
 
-    /// Process messages and produce a streaming response.
+    /// 处理消息并产生流式响应
     ///
-    /// `session` is an optional session for maintaining conversation history.
-    /// `options` allows per-call overrides (instructions, temperature, etc.)
-    /// without mutating the agent's persistent state. Pass `None` for
-    /// standard behaviour.
+    /// `session` 为可选的会话对象，用于维护对话历史。
+    /// `options` 允许单次调用覆盖默认参数（指令、温度等），
+    /// 而不修改 Agent 的持久状态。传递 `None` 使用默认行为。
     async fn run(
         &self,
         messages: Vec<ChatMessage>,
@@ -28,46 +28,42 @@ pub trait IAgent: Send + Sync {
         options: Option<AgentRunOptions>,
     ) -> Result<BoxStream<'static, Result<AgentResponseResult>>>;
 
-    /// Get a sub-agent by id.
+    /// 根据 ID 获取子 Agent
     ///
-    /// Sub-agents enable multi-agent orchestration — a parent agent can
-    /// delegate to child agents, and frontends can discover the agent tree
-    /// to provide interactive sub-agent inspection, streaming output, and
-    /// execution status tracking.
+    /// 子 Agent 支持多 Agent 编排 — 父 Agent 可将任务委派给子 Agent，
+    /// 前端可据此发现 Agent 树以提供交互式子 Agent 查看、流式输出和执行状态跟踪。
     ///
-    /// Default returns `None`. Override in agents that manage child agents
-    /// (e.g., `GraphFlow`, `WorkflowAgent`).
+    /// 默认返回 `None`。管理子 Agent 的实现（如 `GraphFlow`、`WorkflowAgent`）应重写此方法。
     fn get_subagent(&self, _id: &AgentId) -> Option<Arc<dyn IAgent>> {
         None
     }
 
-    /// Reset the agent's internal state.
+    /// 重置 Agent 内部状态
     async fn reset(&self) -> Result<()>;
 
-    /// Create a new session for this agent.
+    /// 为此 Agent 创建新会话
     ///
-    /// Default implementation creates an `AgentSession` with a random UUID.
-    /// Override to create agent-specific session types.
+    /// 默认实现使用随机 UUID 创建 `AgentSession`。
+    /// 重写以支持特定类型的会话。
     fn create_session(&self) -> Arc<dyn ISession> {
         Arc::new(AgentSession::new())
     }
 
-    /// Deserialize a session from serialized data.
+    /// 从序列化数据反序列化会话
     ///
-    /// Default implementation deserializes as `AgentSession`.
-    /// Override to support agent-specific session types.
+    /// 默认实现按 `AgentSession` 反序列化。
+    /// 重写以支持特定类型的会话。
     fn deserialize_session(&self, data: &str) -> Result<Arc<dyn ISession>> {
         let session = AgentSession::deserialize(data)?;
         Ok(Arc::new(session))
     }
 
-    /// Returns the underlying chat client if the agent wraps one.
+    /// 返回底层的聊天客户端（如果 Agent 包装了）
     ///
-    /// `ChatClientAgent` returns its inner client.  Proxy/stub agents
-    /// (e.g. `AgentProxy`) return `None`.  Used by context providers
-    /// that need to spawn sub-agents — for example,
-    /// `SkillMemoryContextProvider` auto-discovers the main agent's
-    /// client to run `MemoryAgent` for background memory consolidation.
+    /// `ChatClientAgent` 返回其内部客户端。代理/存根 Agent（如 `AgentProxy`）
+    /// 返回 `None`。上下文提供器通过此方法获取客户端以生成子 Agent，
+    /// 例如 `SkillMemoryContextProvider` 自动发现主 Agent 的客户端来运行
+    /// `MemoryAgent` 进行后台记忆整合。
     fn chat_client(&self) -> Option<&Arc<dyn IChatClient>> {
         None
     }

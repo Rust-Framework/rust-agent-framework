@@ -5,14 +5,13 @@ use rust_agent_core::{
     Result,
 };
 
-/// Concurrent workflow — all agents run in parallel on the same input.
-/// Outputs from all agents are merged into a single interleaved stream.
+/// 并发工作流 — 所有 Agent 并行处理相同输入。
+/// 所有 Agent 的输出被合并为单个交错流。
 ///
-/// # MAF Alignment
+/// # MAF 对照
 ///
-/// Corresponds to MAF's concurrent orchestration（并发编排）。
-/// Each agent receives the same input independently; results are
-/// merged via `select_all` as they arrive.
+/// 对应 MAF 的并发编排（Concurrent Orchestration）。
+/// 每个 Agent 独立接收相同输入，结果通过 `select_all` 按到达顺序合并。
 ///
 /// # Usage
 ///

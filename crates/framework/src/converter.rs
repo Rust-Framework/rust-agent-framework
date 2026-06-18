@@ -21,11 +21,10 @@ struct ToolCallAccumulator {
     start_emitted: bool,
 }
 
-/// Converts AgentResponseUpdate (internal SSE-level) to AgentResponseResult (public API).
+/// 将 AgentResponseUpdate（内部 SSE 层）转换为 AgentResponseResult（公共 API）。
 ///
-/// Supports parallel tool calls by keying accumulators by call_id (String) rather than
-/// position index. For legacy ToolCallDelta events, the accumulator decomposes them into
-/// ToolCallStart / ToolCallArgs / ToolCallEnd lifecycle content variants.
+/// 通过以 call_id（String）而非位置索引为键的累加器，支持并行工具调用。
+/// 对于旧版 ToolCallDelta 事件，累加器将其分解为 ToolCallStart / ToolCallArgs / ToolCallEnd 生命周期内容变体。
 pub struct AgentResponseConverter {
     agent_id: AgentId,
     model_id: Option<String>,
@@ -75,14 +74,13 @@ impl AgentResponseConverter {
         }
     }
 
-    /// Consume a single AgentResponseUpdate, producing content and event vectors.
+    /// 消费单个 AgentResponseUpdate，生成内容和事件向量。
     ///
-    /// For the streaming tool call lifecycle (ToolCallStart → ToolCallArgs … → ToolCallEnd),
-    /// the corresponding content variants are emitted immediately during streaming,
-    /// enabling downstream consumers to react to each lifecycle event in real time.
+    /// 对于流式工具调用生命周期（ToolCallStart → ToolCallArgs … → ToolCallEnd），
+    /// 对应内容变体在流式传输时立即发出，使下游消费者能实时响应每个生命周期事件。
     ///
-    /// For legacy `ToolCallDelta`, the converter decomposes it into the three lifecycle
-    /// content variants (start/args/end) so consumers get a consistent streaming API.
+    /// 对于旧版 `ToolCallDelta`，转换器将其分解为三个生命周期内容变体（start/args/end），
+    /// 使消费者获得一致的流式 API。
     pub fn consume(&mut self, update: AgentResponseUpdate) -> ConvertOutput {
         let mut contents = Vec::new();
         let events = Vec::new();
@@ -380,8 +378,8 @@ impl AgentResponseConverter {
         ConvertOutput { contents, events }
     }
 
-    /// Produce the final AgentResponseResult with finish_reason.
-    /// Usage is NOT emitted here — it is already emitted during streaming via consume().
+    /// 生成带有 finish_reason 的最终 AgentResponseResult。
+    /// 此处不发出 Usage——已在 consume() 流式传输期间发出。
     pub fn finalize(
         &mut self,
         finish_reason: Option<FinishReason>,

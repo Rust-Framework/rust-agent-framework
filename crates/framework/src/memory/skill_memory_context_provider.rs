@@ -15,7 +15,7 @@ use super::memory_context::{load_memory_projection, save_memory_projection};
 use super::memory_seed;
 use super::memory_worker::{ConsolidationJob, MemoryConsolidationWorker, WorkerStats};
 
-/// Skill memory context provider: loads SKILL.md tools and runs MemoryAgent on a schedule.
+/// 技能记忆上下文提供器：加载 SKILL.md 工具并按计划运行 MemoryAgent。
 pub struct SkillMemoryContextProvider {
     enabled: bool,
     memory_dir: PathBuf,
@@ -62,7 +62,7 @@ impl SkillMemoryContextProvider {
         self
     }
 
-    /// Background consolidation worker statistics (for `/memory` debug view).
+    /// 后台记忆整合工作线程统计信息（用于 /memory 调试视图）。
     pub fn worker_stats(&self) -> WorkerStats {
         self.worker.stats()
     }

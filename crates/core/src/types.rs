@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Unique identifier for an agent instance.
+/// 智能体实例的唯一标识符。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct AgentId(String);
 
@@ -29,28 +29,28 @@ impl AsRef<str> for AgentId {
     }
 }
 
-/// Static metadata describing an Agent's identity and capabilities.
+/// 描述智能体身份与能力的静态元数据。
 ///
-/// Used by AgentRegistry for dynamic discovery — frontends and orchestration
-/// engines can query the full capability matrix without invoking the agent.
+/// 由 AgentRegistry 用于动态发现，前端和编排引擎
+/// 可在不调用智能体的情况下查询完整的能力矩阵。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AgentMetadata {
-    /// Agent class name (e.g. "ChatClientAgent", "WorkflowAgent")
+    /// 智能体类名（如 "ChatClientAgent"、"WorkflowAgent"）
     pub agent_type: String,
-    /// Short identifier (agent id as string)
+    /// 短标识符（智能体 ID 的字符串形式）
     pub key: String,
-    /// Human-readable description. Auto-generated from instructions if unset.
+    /// 人类可读的描述，未设置时从指令自动生成。
     pub description: String,
-    /// Names of registered tools (e.g. ["read_file", "web_search"])
+    /// 已注册工具名称列表（如 ["read_file", "web_search"]）
     #[serde(default)]
     pub tool_names: Vec<String>,
-    /// LLM model identifier (e.g. "deepseek-v4-flash")
+    /// LLM 模型标识符（如 "deepseek-v4-flash"）
     #[serde(default)]
     pub model_id: Option<String>,
-    /// Capability tags for discovery (e.g. ["file_operations", "code"])
+    /// 用于发现的能力标签（如 ["file_operations", "code"]）
     #[serde(default)]
     pub capability_tags: Vec<String>,
-    /// First 200 chars of system instructions for quick preview
+    /// 系统指令的前 200 个字符，用于快速预览
     #[serde(default)]
     pub instructions_preview: String,
 }
@@ -69,7 +69,7 @@ impl AgentMetadata {
     }
 }
 
-/// A tool call requested by the agent during response generation.
+/// 智能体在生成响应时请求的工具调用。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
     pub id: String,
@@ -77,7 +77,7 @@ pub struct ToolCall {
     pub arguments: serde_json::Value,
 }
 
-/// Metadata for each content/event variant
+/// 每个内容/事件变体的元数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseMetadata {
     pub agent_id: Option<AgentId>,
@@ -87,7 +87,7 @@ pub struct ResponseMetadata {
     pub properties: HashMap<String, serde_json::Value>,
 }
 
-/// Finish reason from LLM
+/// LLM 返回的结束原因
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
@@ -95,18 +95,18 @@ pub enum FinishReason {
     Length,
     ToolCalls,
     ContentFilter,
-    /// Agent paused because a tool requires human approval.
-    /// The session retains full context (including the assistant(tool_calls) message).
-    /// Caller should collect approval decisions and resume via `AgentRunOptions.tool_approval_responses`.
+    /// 智能体因工具需要人工审批而暂停。
+    /// 会话保留完整上下文（包括 assistant(tool_calls) 消息）。
+    /// 调用方应收集审批决定并通过 `AgentRunOptions.tool_approval_responses` 恢复。
     AwaitingApproval,
-    /// The tool-calling loop reached the maximum round limit and was forcibly terminated.
-    /// The agent may have wanted to make additional tool calls but was cut off.
+    /// 工具调用循环达到最大轮次限制并被强制终止。
+    /// 智能体可能希望进行更多工具调用但被截断。
     MaxRounds,
     #[serde(untagged)]
     Other(String),
 }
 
-/// Usage statistics including KV cache hit/miss
+/// 用量统计，包括 KV 缓存命中/未命中
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Usage {
     pub prompt_tokens: u32,
@@ -118,11 +118,11 @@ pub struct Usage {
 }
 
 impl Usage {
-    /// Compute cache hit ratio, choosing the formula appropriate for the provider.
+    /// 计算缓存命中率，根据提供商选择合适的公式。
     ///
-    /// - If `prompt_cache_miss_tokens` is present (DeepSeek): `hit / (hit + miss)`
-    /// - Otherwise (OpenAI): `hit / prompt_tokens`
-    /// - Returns `0.0` when no cache data is available.
+    /// - 如果提供了 `prompt_cache_miss_tokens`（DeepSeek）：`hit / (hit + miss)`
+    /// - 否则（OpenAI）：`hit / prompt_tokens`
+    /// - 无缓存数据时返回 `0.0`。
     pub fn cache_hit_ratio(&self) -> f64 {
         let hit = self.prompt_cache_hit_tokens.unwrap_or(0) as f64;
         if hit == 0.0 {

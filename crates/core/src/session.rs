@@ -8,14 +8,14 @@ use uuid::Uuid;
 
 use crate::{ChatMessage, Result, AgentError};
 
-/// Session TTL options for controlling session lifetime.
+/// 会话 TTL 选项，用于控制会话的生命周期。
 #[derive(Debug, Clone)]
 pub struct SessionTTLOptions {
-    /// Maximum idle time in seconds before a session can be cleaned up.
+    /// 会话清理前的最大空闲时间（秒）
     pub max_idle_secs: Option<u64>,
-    /// Maximum lifetime in seconds before a session is forcefully cleaned up.
+    /// 会话强制清理前的最大存活时间（秒）
     pub max_lifetime_secs: Option<u64>,
-    /// Interval in seconds between cleanup checks.
+    /// 清理检查的间隔时间（秒）
     pub cleanup_interval_secs: u64,
 }
 
@@ -29,16 +29,24 @@ impl Default for SessionTTLOptions {
     }
 }
 
-/// Session — MAF AgentSession equivalent, manages multi-turn message lifecycle.
+/// Session — 等同于 MAF 的 AgentSession，管理多轮消息的生命周期。
 #[async_trait]
 pub trait ISession: Send + Sync {
+    /// 获取会话 ID
     fn session_id(&self) -> &str;
+    /// 添加一条消息到会话历史
     async fn add_message(&self, message: ChatMessage) -> Result<()>;
+    /// 获取会话中的所有消息
     async fn get_messages(&self) -> Result<Vec<ChatMessage>>;
+    /// 清空会话历史
     async fn clear(&self) -> Result<()>;
+    /// 获取会话元数据
     fn metadata(&self) -> SessionMetadata;
+    /// 获取会话快照（用于调试/展示）
     fn snapshot(&self) -> SessionSnapshot;
+    /// 序列化会话为 JSON 字符串
     fn serialize(&self) -> Result<String>;
+    /// 从 JSON 字符串反序列化会话
     fn deserialize(data: &str) -> Result<Self> where Self: Sized;
 
     /// 获取指定 Provider 在本次 Session 中存储的状态
@@ -68,27 +76,27 @@ pub trait ISession: Send + Sync {
     /// 获取上次请求的 messages 哈希
     fn get_last_request_hash(&self) -> Option<u64> { None }
 
-    /// Session creation timestamp.
+    /// 获取会话创建时间戳
     fn created_at(&self) -> DateTime<Utc> {
-        Utc::now() // default fallback
+        Utc::now() // 默认回退
     }
 
-    /// Last activity timestamp.
+    /// 获取最后活动时间戳
     fn last_active_at(&self) -> DateTime<Utc> {
-        Utc::now() // default fallback
+        Utc::now() // 默认回退
     }
 
-    /// Update the last activity timestamp.
+    /// 更新最后活动时间戳
     async fn touch_last_active(&self) {}
 }
 
-/// Session metadata — creation time, message count, cache tracking hash
+/// 会话元数据 — 创建时间、消息数量、缓存追踪哈希
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionMetadata {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub message_count: u64,
-    /// Hash of the last request's full messages array, used for KV cache prefix tracking
+    /// 上次请求完整消息数组的哈希，用于 KV 缓存前缀追踪
     pub last_request_hash: Option<u64>,
 }
 
@@ -99,13 +107,17 @@ pub struct ProviderStateStore {
 }
 
 impl ProviderStateStore {
+    /// 创建空的 Provider 状态存储
     pub fn new() -> Self { Self { states: HashMap::new() } }
+    /// 获取指定 Provider 的状态
     pub fn get(&self, provider_name: &str) -> Option<&serde_json::Value> {
         self.states.get(provider_name)
     }
+    /// 设置指定 Provider 的状态
     pub fn set(&mut self, provider_name: &str, state: serde_json::Value) {
         self.states.insert(provider_name.to_string(), state);
     }
+    /// 移除指定 Provider 的状态
     pub fn remove(&mut self, provider_name: &str) { self.states.remove(provider_name); }
 }
 
@@ -130,6 +142,7 @@ pub struct ProviderState<T: serde::Serialize + serde::de::DeserializeOwned> {
 }
 
 impl<T: serde::Serialize + serde::de::DeserializeOwned + Default> ProviderState<T> {
+    /// 创建指定 Provider 的类型安全状态访问器
     pub fn new(provider_name: &str) -> Self {
         Self {
             key: format!("provider_state::{}", provider_name),
@@ -157,18 +170,18 @@ impl<T: serde::Serialize + serde::de::DeserializeOwned + Default> ProviderState<
     }
 }
 
-/// Read-only session snapshot for debugging, UI display, auditing
+/// 只读会话快照，用于调试、UI 展示、审计
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionSnapshot {
     pub session_id: String,
     pub metadata: SessionMetadata,
     pub messages: Vec<ChatMessage>,
     pub provider_states: ProviderStateStore,
-    /// Last activity timestamp — preserved across serialization for TTL tracking
+    /// 最后活动时间戳 — 跨序列化保留，用于 TTL 追踪
     pub last_active_at: Option<DateTime<Utc>>,
 }
 
-/// Default in-memory session implementation
+/// 默认的内存会话实现
 pub struct AgentSession {
     session_id: String,
     history: RwLock<Vec<ChatMessage>>,
@@ -179,6 +192,7 @@ pub struct AgentSession {
 }
 
 impl AgentSession {
+    /// 创建新的内存会话，自动生成随机 UUID 作为会话 ID
     pub fn new() -> Self {
         let now = Utc::now();
         Self {
@@ -193,6 +207,7 @@ impl AgentSession {
         }
     }
 
+    /// 使用指定 ID 创建新的内存会话
     pub fn with_id(session_id: impl Into<String>) -> Self {
         let now = Utc::now();
         Self {
@@ -207,6 +222,7 @@ impl AgentSession {
         }
     }
 
+    /// 记录本次请求的消息哈希（用于 KV 缓存前缀追踪）
     pub fn touch_request_hash(&self, messages: &[ChatMessage]) {
         let hash = hash_messages(messages);
         if let Ok(mut meta) = self.metadata.try_write() {
@@ -219,6 +235,7 @@ impl Default for AgentSession {
     fn default() -> Self { Self::new() }
 }
 
+/// 计算消息列表的哈希值（用于 KV 缓存前缀追踪）
 fn hash_messages(messages: &[ChatMessage]) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -246,6 +263,7 @@ fn hash_messages(messages: &[ChatMessage]) -> u64 {
 impl ISession for AgentSession {
     fn session_id(&self) -> &str { &self.session_id }
 
+    /// 追加一条消息到会话历史
     async fn add_message(&self, message: ChatMessage) -> Result<()> {
         self.history.write().await.push(message);
         let mut meta = self.metadata.write().await;
@@ -254,10 +272,12 @@ impl ISession for AgentSession {
         Ok(())
     }
 
+    /// 获取会话中的所有消息副本
     async fn get_messages(&self) -> Result<Vec<ChatMessage>> {
         Ok(self.history.read().await.clone())
     }
 
+    /// 清空会话历史并重置消息计数
     async fn clear(&self) -> Result<()> {
         self.history.write().await.clear();
         let mut meta = self.metadata.write().await;
@@ -270,12 +290,11 @@ impl ISession for AgentSession {
         self.metadata.try_read().map(|m| m.clone()).unwrap_or_default()
     }
 
-    /// Returns a best-effort snapshot of the current session state.
+    /// 返回当前会话状态的最佳快照（尽力而为）
     ///
-    /// NOTE: Each field is read via separate `try_read()` calls — the snapshot
-    /// is NOT atomically consistent. Messages, metadata, and provider states
-    /// may reflect slightly different points in time. Use only for
-    /// debugging/display; do not rely on cross-field consistency.
+    /// 注意：每个字段通过独立的 `try_read()` 调用读取——快照不是原子一致的。
+    /// 消息、元数据和 Provider 状态可能反映略有不同的时间点。
+    /// 仅用于调试/展示，不保证跨字段一致性。
     fn snapshot(&self) -> SessionSnapshot {
         let history = self.history.try_read().map(|h| h.clone()).unwrap_or_default();
         let meta = self.metadata.try_read().map(|m| m.clone()).unwrap_or_default();
@@ -294,11 +313,13 @@ impl ISession for AgentSession {
         }
     }
 
+    /// 序列化会话快照为 JSON 字符串
     fn serialize(&self) -> Result<String> {
         serde_json::to_string(&self.snapshot())
             .map_err(|e| AgentError::Serialize(e.to_string()))
     }
 
+    /// 从 JSON 字符串反序列化恢复会话
     fn deserialize(data: &str) -> Result<Self> {
         let snap: SessionSnapshot = serde_json::from_str(data)
             .map_err(|e| AgentError::Serialize(e.to_string()))?;
@@ -314,6 +335,7 @@ impl ISession for AgentSession {
         })
     }
 
+    /// 获取指定 Provider 在会话中存储的状态
     fn get_provider_state(&self, provider_name: &str) -> Result<serde_json::Value> {
         if let Ok(ps) = self.provider_states.try_read() {
             Ok(ps.get(provider_name).cloned().unwrap_or(serde_json::Value::Null))
@@ -322,6 +344,7 @@ impl ISession for AgentSession {
         }
     }
 
+    /// 设置指定 Provider 在会话中的状态
     fn set_provider_state(&self, provider_name: &str, state: serde_json::Value) -> Result<()> {
         if let Ok(mut ps) = self.provider_states.try_write() {
             ps.set(provider_name, state);
@@ -329,6 +352,7 @@ impl ISession for AgentSession {
         Ok(())
     }
 
+    /// 原子批量追加多条消息到会话历史
     async fn add_messages_batch(&self, messages: &[ChatMessage]) -> Result<()> {
         let count = messages.len() as u64;
         {
@@ -341,10 +365,12 @@ impl ISession for AgentSession {
         Ok(())
     }
 
+    /// 获取当前消息数量（O(1)，无克隆）
     fn get_message_count(&self) -> usize {
         self.metadata.try_read().map(|m| m.message_count as usize).unwrap_or(0)
     }
 
+    /// 记录本次请求的消息哈希（KV 缓存前缀追踪）
     fn touch_request_hash(&self, messages: &[ChatMessage]) {
         let hash = hash_messages(messages);
         if let Ok(mut meta) = self.metadata.try_write() {
@@ -352,18 +378,22 @@ impl ISession for AgentSession {
         }
     }
 
+    /// 获取上次请求的消息哈希
     fn get_last_request_hash(&self) -> Option<u64> {
         self.metadata.try_read().ok().and_then(|m| m.last_request_hash)
     }
 
+    /// 获取会话创建时间戳
     fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
 
+    /// 获取最后活动时间戳
     fn last_active_at(&self) -> DateTime<Utc> {
         self.last_active_at.try_read().map(|t| *t).unwrap_or(self.created_at)
     }
 
+    /// 更新最后活动时间戳为当前时间
     async fn touch_last_active(&self) {
         let mut t = self.last_active_at.write().await;
         *t = Utc::now();

@@ -1,12 +1,11 @@
 use rust_agent_core::{ChatMessage, ICompressionStrategy, ITokenCounter, Result};
 
-/// Compression pipeline that chains multiple strategies.
+/// 链式组合多个策略的压缩管道。
 ///
-/// Strategies are applied in order. Each strategy receives the output
-/// of the previous one. This allows composing simple strategies into
-/// more sophisticated compression behavior.
+/// 策略按顺序应用。每个策略接收前一个策略的输出。
+/// 这允许将简单策略组合成更复杂的压缩行为。
 ///
-/// Example: SlidingWindow (coarse) → TokenBudget (fine-grained)
+/// 示例：SlidingWindow（粗粒度）→ TokenBudget（细粒度）
 pub struct CompressionPipeline {
     strategies: Vec<Box<dyn ICompressionStrategy>>,
 }

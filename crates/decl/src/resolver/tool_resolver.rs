@@ -12,30 +12,29 @@ use rust_agent_websearch::{WebFetch, WebSearch};
 use crate::error::DeclError;
 use crate::tools::ToolDecl;
 
-/// Type alias for a custom tool factory function.
+/// 自定义工具工厂函数的类型别名。
 pub type ToolFactoryFn =
     Box<dyn Fn(HashMap<String, serde_json::Value>) -> crate::Result<Arc<dyn ITool>> + Send + Sync>;
 
-/// Resolve a `ToolDecl` into a concrete `Arc<dyn ITool>`.
+/// 将 `ToolDecl` 解析为具体的 `Arc<dyn ITool>`。
 ///
-/// Supports all 7 MAF tool kinds with the built-in resolver handling
-/// `function`, `web_search`, and `code_interpreter`. `custom`, `mcp`,
-/// `openapi`, and `file_search` require factory registration or external
-/// plugin systems.
+/// 支持所有 7 种 MAF 工具类型，内置解析器处理 `function`、`web_search` 和
+/// `code_interpreter`。`custom`、`mcp`、`openapi` 和 `file_search`
+/// 需要工厂注册或外部插件系统。
 pub struct ToolResolver {
-    /// Custom tool factories keyed by name.
+    /// 按名称键控的自定义工具工厂。
     factories: HashMap<String, ToolFactoryFn>,
 }
 
 impl ToolResolver {
-    /// Create a new tool resolver with no custom factories.
+    /// 创建无自定义工厂的新工具解析器。
     pub fn new() -> Self {
         Self {
             factories: HashMap::new(),
         }
     }
 
-    /// Register a custom tool factory.
+    /// 注册自定义工具工厂。
     pub fn register_factory(
         &mut self,
         name: impl Into<String>,
@@ -47,7 +46,7 @@ impl ToolResolver {
         self.factories.insert(name.into(), Box::new(factory));
     }
 
-    /// Resolve a single tool declaration into an ITool.
+    /// 将单个工具声明解析为 ITool。
     pub async fn resolve(&self, tool: &ToolDecl) -> crate::Result<Arc<dyn ITool>> {
         match tool {
             ToolDecl::Function { name, description, parameters, bindings } => {
@@ -78,7 +77,7 @@ impl ToolResolver {
         }
     }
 
-    /// Resolve all tool declarations in a list.
+    /// 解析列表中的所有工具声明。
     pub async fn resolve_all(&self, tools: &[ToolDecl]) -> crate::Result<Vec<Arc<dyn ITool>>> {
         let mut resolved = Vec::with_capacity(tools.len());
         for tool in tools {
@@ -94,7 +93,7 @@ impl Default for ToolResolver {
     }
 }
 
-/// Resolve a Function tool by looking up built-in tools and framework tools.
+/// 通过查找内置工具和框架工具来解析 Function 工具。
 fn resolve_function(
     name: &str,
     _description: &str,

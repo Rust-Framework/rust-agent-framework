@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-/// Property schema definition for input/output of agents.
-/// Aligns with MAF AgentSchema v1.0 `PropertySchema`.
+/// 用于 Agent 输入/输出的属性模式定义，与 MAF AgentSchema v1.0 对齐。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PropertySchema {
     pub properties: Vec<Property>,
@@ -13,7 +12,7 @@ pub struct PropertySchema {
     pub examples: Vec<HashMap<String, serde_json::Value>>,
 }
 
-/// A single property within a `PropertySchema`.
+/// `PropertySchema` 中的单个属性。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Property {
     pub name: String,
@@ -30,7 +29,7 @@ pub struct Property {
     pub enum_values: Vec<serde_json::Value>,
 }
 
-/// Supported property data types in MAF AgentSchema.
+/// MAF AgentSchema 中支持的属性数据类型。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PropertyType {
@@ -43,7 +42,7 @@ pub enum PropertyType {
 }
 
 impl PropertySchema {
-    /// Create an empty property schema (no properties, not strict).
+    /// 创建一个空的属性模式（无属性，非严格模式）。
     pub fn empty() -> Self {
         Self {
             properties: Vec::new(),
@@ -52,7 +51,7 @@ impl PropertySchema {
         }
     }
 
-    /// Create a schema with the given properties.
+    /// 用给定属性创建模式。
     pub fn new(properties: Vec<Property>) -> Self {
         Self {
             properties,
@@ -61,7 +60,7 @@ impl PropertySchema {
         }
     }
 
-    /// Find a property by name.
+    /// 按名称查找属性。
     pub fn find_property(&self, name: &str) -> Option<&Property> {
         self.properties.iter().find(|p| p.name == name)
     }

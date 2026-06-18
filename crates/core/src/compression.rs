@@ -1,26 +1,23 @@
 use crate::{ChatMessage, ITokenCounter, Result};
 
-/// Context compression strategy interface.
+/// 上下文压缩策略接口。
 ///
-/// Compresses a list of messages to fit within a token budget,
-/// preserving the most important context while discarding or
-/// summarizing older messages.
+/// 将消息列表压缩至令牌预算内，保留最重要的上下文，
+/// 同时丢弃或摘要较旧的消息。
 ///
-/// Implementations are chained via `CompressionPipeline` and
-/// integrated into `ChatClientAgent` Phase 1.5.
+/// 实现通过 `CompressionPipeline` 链式组合，
+/// 并集成到 `ChatClientAgent` 的 Phase 1.5 阶段。
 pub trait ICompressionStrategy: Send + Sync {
-    /// Human-readable name for logging and diagnostics.
+    /// 人类可读的名称，用于日志记录和诊断。
     fn name(&self) -> &str;
 
-    /// Compress messages to fit within the given token budget.
+    /// 将消息压缩至给定的令牌预算内。
     ///
-    /// `budget` is the maximum number of tokens the compressed
-    /// message list should occupy. The strategy should make a
-    /// best-effort attempt to stay within this budget, but is
-    /// not required to guarantee it (e.g., if a single message
-    /// exceeds the budget).
+    /// `budget` 是压缩后消息列表应占用的最大令牌数。
+    /// 策略应尽力保持在预算内，但不保证一定满足
+    /// （例如，单条消息超过预算时）。
     ///
-    /// Returns the compressed message list.
+    /// 返回压缩后的消息列表。
     fn compress(
         &self,
         messages: Vec<ChatMessage>,

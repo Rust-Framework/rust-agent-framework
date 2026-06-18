@@ -9,11 +9,11 @@ use super::{err_response, ok_response};
 const MAX_FILE_SIZE: u64 = 512 * 1024; // 512 KB
 const MAX_LINE_LEN: usize = 2000; // truncate very long lines
 
-/// Reads a file from the local filesystem. Supports line range via offset/limit.
+/// 从本地文件系统读取文件内容。支持通过 offset/limit 指定行范围。
 ///
-/// Paths are resolved against `base_dir`:
-/// - Absolute paths pass through unchanged.
-/// - Relative paths are joined to `base_dir`.
+/// 路径相对于 `base_dir` 解析：
+/// - 绝对路径直接使用。
+/// - 相对路径拼接至 `base_dir`。
 pub struct ReadFile {
     base_dir: PathBuf,
 }
@@ -90,7 +90,7 @@ impl ReadFile {
     }
 }
 
-/// Default: base_dir = process CWD (backward-compatible).
+/// 默认：base_dir 为进程当前工作目录（向后兼容）。
 impl Default for ReadFile {
     fn default() -> Self {
         Self::new(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))

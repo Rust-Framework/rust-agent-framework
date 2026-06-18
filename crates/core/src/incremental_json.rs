@@ -20,18 +20,17 @@ use serde_json::Value;
 
 // ── Public Event type ────────────────────────────────────────────────
 
-/// An event produced by the streaming parser.
+/// 流式解析器产生的事件。
 #[derive(Debug, Clone)]
 pub enum ArgsEvent {
-    /// A parameter value has been fully received and parsed.
+    /// 参数值已完整接收并解析完成。
     Parsed {
         id: String,
         name: String,
         value: Value,
     },
-    /// A string parameter is still arriving; `value` contains the latest
-    /// content fragment, `received` is the cumulative byte count (after the
-    /// opening quote).
+    /// 字符串参数仍在接收中；`value` 包含最新的内容片段，
+    /// `received` 是累计字节数（在起始引号之后）。
     Progress {
         id: String,
         name: String,
@@ -68,15 +67,15 @@ enum State {
 
 // ── Parser ───────────────────────────────────────────────────────────
 
-/// Character-level streaming JSON parser for tool-call arguments.
+/// 面向工具调用参数的字符级流式 JSON 解析器。
 ///
-/// # Usage
+/// # 用法
 ///
 /// ```ignore
 /// let mut parser = StreamingArgsParser::new();
 /// parser.push_bytes(delta);
 /// for event in parser.poll(tool_call_id) {
-///     // forward event to UI / channel
+///     // 将事件转发给 UI 或通道
 /// }
 /// ```
 pub struct StreamingArgsParser {
@@ -109,7 +108,7 @@ pub struct StreamingArgsParser {
 }
 
 impl StreamingArgsParser {
-    /// Create a fresh parser for a new tool call.
+    /// 为新的工具调用创建一个全新的解析器。
     pub fn new() -> Self {
         Self {
             buffer: Vec::new(),
@@ -126,14 +125,14 @@ impl StreamingArgsParser {
         }
     }
 
-    /// Append raw bytes that arrived from the LLM stream.
+    /// 追加从 LLM 流到达的原始字节。
     pub fn push_bytes(&mut self, bytes: &[u8]) {
         self.buffer.extend_from_slice(bytes);
     }
 
-    /// Poll the parser for events. Call this after every `push_bytes()`.
+    /// 轮询解析器获取事件。每次调用 `push_bytes()` 后调用此方法。
     ///
-    /// Returns all newly-discovered events (empty if nothing changed).
+    /// 返回所有新发现的事件（无变化时返回空列表）。
     pub fn poll(&mut self, tool_call_id: &str) -> Vec<ArgsEvent> {
         let mut events = Vec::new();
 

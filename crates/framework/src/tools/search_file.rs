@@ -9,11 +9,11 @@ use super::{err_response, ok_response};
 const MAX_MATCHES: usize = 200;
 const MAX_LINE_DISPLAY: usize = 300;
 
-/// Searches file contents using a regex pattern.
+/// 使用正则表达式搜索文件内容。
 ///
-/// The directory is resolved against `base_dir`:
-/// - Absolute paths pass through unchanged.
-/// - Relative paths are joined to `base_dir`.
+/// 目录相对于 `base_dir` 解析：
+/// - 绝对路径直接使用。
+/// - 相对路径拼接至 `base_dir`。
 pub struct SearchFile {
     base_dir: PathBuf,
 }
