@@ -4,129 +4,169 @@ use serde::{Deserialize, Serialize};
 
 use crate::schema::PropertySchema;
 
-/// AI Agent 的工具声明，与 MAF AgentSchema v1.0 工具类型对齐。
+/// 工具类别枚举。`kind` 是分类命名空间，`name` 选定具体工具。
 ///
-/// MAF 定义了以下工具类型：
-/// - `function` — OpenAI Function Calling
-/// - `custom` — 工厂注册的自定义工具
-/// - `web_search` — 网络搜索引擎工具
-/// - `file_search` — 文件/向量搜索工具
-/// - `mcp` — 模型上下文协议工具
-/// - `openapi` — 基于 OpenAPI 规范的工具
-/// - `code_interpreter` — 沙箱代码执行工具
+/// # 类别一览
+///
+/// | kind       | name 示例                          | 实例化                         |
+/// |------------|-----------------------------------|-------------------------------|
+/// | `function` | `echo`, `add`                     | `with_tool()` 注册的用户工具    |
+/// | `custom`   | `my_plugin`                       | `register_factory()` 注册      |
+/// | `web`      | `web_search`, `web_fetch`         | `WebSearch`, `WebFetch`       |
+/// | `file`     | `read_file`, `write_file`, ...    | 11 个文件系统工具               |
+/// | `code`     | `code_interpreter`                | 沙箱代码执行                    |
+/// | `mcp`      | —                                 | MCP 远程工具                   |
+/// | `openapi`  | —                                 | OpenAPI 规范工具               |
+///
+/// # 关于 description
+///
+/// `web`、`file`、`code` 类别的工具 description 已内置在 `#[tool]` 宏中，
+/// YAML 只需写 `name` 即可，不需要重复 description。
+/// `function` 和 `custom` 类别由用户声明，description 在 YAML 中提供。
+///
+/// # YAML 示例
+///
+/// ```yaml
+/// tools:
+///   - kind: web
+///     name: web_search
+///   - kind: file
+///     name: read_file
+///   - kind: function
+///     name: echo
+///     description: Echoes back the input text
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ToolDecl {
-    /// OpenAI Function Calling 工具。
+    /// 用户注册的函数工具。
+    ///
+    /// 由 `DeclAgentBuilder::with_tool()` 注册，在 YAML 中声明
+    /// `kind: function` + `name` + `description`。
     #[serde(rename = "function")]
     Function {
-        /// 函数/工具名称。
+        /// 函数名称 — 与 `with_tool()` 注册时的键匹配。
         name: String,
-        /// 人类可读的描述。
+        /// 向 LLM 暴露的功能说明。
         #[serde(default, skip_serializing_if = "String::is_empty")]
         description: String,
-        /// 工具参数的 JSON Schema。
+        /// 参数 JSON Schema（可选）。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parameters: Option<PropertySchema>,
-        /// 从 inputSchema 属性到工具参数的绑定。
+        /// inputSchema 属性到参数的映射。
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         bindings: Vec<ToolBinding>,
     },
 
     /// 工厂注册的自定义工具。
+    ///
+    /// 通过 `ToolResolver::register_factory(name, factory)` 动态注册。
     #[serde(rename = "custom")]
     Custom {
-        /// 工具名称（用于工厂查找）。
+        /// 工具名称 — 与注册工厂时的键匹配。
         name: String,
-        /// 人类可读的描述。
+        /// 向 LLM 暴露的功能说明。
         #[serde(default, skip_serializing_if = "String::is_empty")]
         description: String,
-        /// 转发给工厂的任意配置。
+        /// 透传给工厂的任意配置。
         #[serde(default, skip_serializing_if = "HashMap::is_empty")]
         config: HashMap<String, serde_json::Value>,
     },
 
-    /// 网络搜索工具（使用 Bing/Google/DuckDuckGo）。
-    #[serde(rename = "web_search")]
-    WebSearch,
-
-    /// 文件/向量搜索工具。
-    #[serde(rename = "file_search")]
-    FileSearch {
-        /// 用于定向搜索的向量存储 ID。
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        vector_store_ids: Vec<String>,
+    /// Web 工具：`web_search`、`web_fetch`。
+    ///
+    /// description 由 `#[tool]` 宏内建，YAML 无需提供。
+    #[serde(rename = "web")]
+    Web {
+        /// 工具名 — `"web_search"` 或 `"web_fetch"`。
+        name: String,
+        /// 可选描述（覆盖内建描述）。
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        description: String,
     },
 
-    /// 模型上下文协议（MCP）工具。
+    /// 文件系统工具：`read_file`、`write_file` 等 11 个。
+    ///
+    /// description 由 `#[tool]` 宏内建，YAML 无需提供。
+    #[serde(rename = "file")]
+    File {
+        /// 工具名 — 如 `"read_file"`、`"write_file"`。
+        name: String,
+        /// 可选描述（覆盖内建描述）。
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        description: String,
+    },
+
+    /// 代码执行工具：`code_interpreter`。
+    ///
+    /// description 由 `#[tool]` 宏内建，YAML 无需提供。
+    #[serde(rename = "code")]
+    Code {
+        /// 工具名 — `"code_interpreter"`。
+        name: String,
+        /// 可选描述（覆盖内建描述）。
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        description: String,
+    },
+
+    /// MCP（Model Context Protocol）远程工具。
     #[serde(rename = "mcp")]
     Mcp {
-        /// 工具展示名称。
         name: String,
-        /// MCP 服务器 URL。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         server_url: Option<String>,
-        /// MCP 服务器上的具体工具名称。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tool_name: Option<String>,
-        /// 审批模式："always"、"never" 或 "specify"。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         approval_mode: Option<String>,
     },
 
-    /// 基于 OpenAPI 规范的工具。
+    /// OpenAPI 3.x 规范驱动工具。
     #[serde(rename = "openapi")]
     OpenApi {
-        /// 工具展示名称。
         name: String,
-        /// OpenAPI 规范的 URL。
         #[serde(rename = "specUrl")]
         spec_url: String,
-        /// 可选的操作 ID，用于定位特定端点。
         #[serde(default, skip_serializing_if = "Option::is_none")]
         operation_id: Option<String>,
     },
-
-    /// 沙箱代码解释器工具。
-    #[serde(rename = "code_interpreter")]
-    CodeInterpreter,
 }
 
 /// 从 inputSchema 属性到工具参数的绑定。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolBinding {
-    /// 绑定名称。
     pub name: String,
-    /// 输入属性的路径（例如 inputSchema 中的 "question"）。
     pub input: String,
 }
 
 impl ToolDecl {
-    /// 获取工具名称（如适用）。
+    /// 获取工具名称（所有带 name 字段的变体）。
     pub fn name(&self) -> Option<&str> {
         match self {
             ToolDecl::Function { name, .. } => Some(name),
             ToolDecl::Custom { name, .. } => Some(name),
+            ToolDecl::Web { name, .. } => Some(name),
+            ToolDecl::File { name, .. } => Some(name),
+            ToolDecl::Code { name, .. } => Some(name),
             ToolDecl::Mcp { name, .. } => Some(name),
             ToolDecl::OpenApi { name, .. } => Some(name),
-            _ => None,
         }
     }
 
-    /// 获取工具类型字符串。
+    /// 获取工具类别字符串。
     pub fn kind_str(&self) -> &'static str {
         match self {
             ToolDecl::Function { .. } => "function",
             ToolDecl::Custom { .. } => "custom",
-            ToolDecl::WebSearch => "web_search",
-            ToolDecl::FileSearch { .. } => "file_search",
+            ToolDecl::Web { .. } => "web",
+            ToolDecl::File { .. } => "file",
+            ToolDecl::Code { .. } => "code",
             ToolDecl::Mcp { .. } => "mcp",
             ToolDecl::OpenApi { .. } => "openapi",
-            ToolDecl::CodeInterpreter => "code_interpreter",
         }
     }
 
-    /// 创建带名称和描述的函数工具。
+    /// 创建 function 声明。
     pub fn function(name: impl Into<String>, description: impl Into<String>) -> Self {
         ToolDecl::Function {
             name: name.into(),
@@ -136,7 +176,7 @@ impl ToolDecl {
         }
     }
 
-    /// 创建带名称的自定义工具。
+    /// 创建 custom 声明。
     pub fn custom(name: impl Into<String>) -> Self {
         ToolDecl::Custom {
             name: name.into(),
@@ -145,7 +185,23 @@ impl ToolDecl {
         }
     }
 
-    /// 创建 MCP 工具。
+    /// 创建 web 声明。
+    pub fn web(name: impl Into<String>) -> Self {
+        ToolDecl::Web {
+            name: name.into(),
+            description: String::new(),
+        }
+    }
+
+    /// 创建 file 声明。
+    pub fn file(name: impl Into<String>) -> Self {
+        ToolDecl::File {
+            name: name.into(),
+            description: String::new(),
+        }
+    }
+
+    /// 创建 MCP 声明。
     pub fn mcp(name: impl Into<String>, server_url: impl Into<String>, tool_name: impl Into<String>) -> Self {
         ToolDecl::Mcp {
             name: name.into(),

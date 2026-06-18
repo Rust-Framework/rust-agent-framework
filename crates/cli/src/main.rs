@@ -17,6 +17,10 @@ use runner::ReplRunner;
 // ── API Key ────────────────────────────────────────────────────
 const DEEPSEEK_API_KEY: &str = "sk-b8136a230aea467e8cdfe4649cab2d3e";
 
+fn cli_agent_yaml_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("cli-agent.yaml")
+}
+
 fn api_key() -> String {
     std::env::var("DEEPSEEK_API_KEY")
         .unwrap_or_else(|_| DEEPSEEK_API_KEY.to_string())
@@ -40,7 +44,7 @@ async fn build_agent(
     skill_memory: &Arc<SkillMemoryContextProvider>,
 ) -> anyhow::Result<Arc<dyn rust_agent_core::IAgent>> {
     DeclAgentBuilder::new()
-        .from_yaml_file("cli-agent.yaml")
+        .from_yaml_file(cli_agent_yaml_path())
         .with_model(model_id)
         .with_api_key(&api_key())
         .with_tool("echo", |_| Ok(Arc::new(Echo)))
@@ -85,7 +89,7 @@ async fn main() -> anyhow::Result<()> {
             let key = key.clone();
             Box::pin(async move {
                 let a = DeclAgentBuilder::new()
-                    .from_yaml_file("cli-agent.yaml")
+                    .from_yaml_file(cli_agent_yaml_path())
                     .with_model(&model)
                     .with_api_key(&key)
                     .with_tool("echo", |_| Ok(Arc::new(Echo)))
@@ -101,7 +105,7 @@ async fn main() -> anyhow::Result<()> {
             let key = key2.clone();
             Box::pin(async move {
                 let a = DeclAgentBuilder::new()
-                    .from_yaml_file("cli-agent.yaml")
+                    .from_yaml_file(cli_agent_yaml_path())
                     .with_model("deepseek-v4-flash")
                     .with_api_key(&key)
                     .with_tool("echo", |_| Ok(Arc::new(Echo)))

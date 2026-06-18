@@ -64,6 +64,7 @@ pub type RestartFn = Box<
 ///
 /// 封装了 rustyline REPL 循环、命令处理、流式输出渲染和 Token 用量统计。
 /// 通过 `.on_switch_model()` 和 `.on_restart()` 回调支持运行时 Agent 重建。
+#[allow(dead_code)]
 pub struct ReplRunner {
     agent: Arc<dyn IAgent>,
     session: Option<Arc<dyn ISession>>,
@@ -74,6 +75,7 @@ pub struct ReplRunner {
     restart: Option<RestartFn>,
 }
 
+#[allow(dead_code)]
 impl ReplRunner {
     /// 创建运行器。`agent` 为要对话的 Agent 实例。
     pub fn new(agent: Arc<dyn IAgent>) -> Self {

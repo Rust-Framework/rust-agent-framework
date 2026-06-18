@@ -1,6 +1,6 @@
 # Crate 地图
 
-RAF workspace 包含 15 个 crate，按职责分为三层：核心层（必选）、运行时层（常用）和扩展层（可选）。本章提供完整的依赖关系图和各 crate 的详细说明。
+RAF workspace 包含 16 个 crate，按职责分为三层：核心层（必选）、运行时层（常用）和扩展层（可选）。本章提供完整的依赖关系图和各 crate 的详细说明。
 
 ## 全部 16 个 Crate
 
@@ -20,9 +20,9 @@ RAF workspace 包含 15 个 crate，按职责分为三层：核心层（必选�
 | `rust-agent-mcp` | `crates/mcp` | MCP 协议客户端与工具适配 | 扩展层 |
 | `rust-agent-cli` | `crates/cli` | CLI 交互界面 + ReplRunner 组件 | 工具 |
 | `rust-agent-host` | `crates/host` | Agent 宿主运行环境 | 工具 |
-| (workspace root) | `/` | Workspace 配置和共享依赖 | 元 |
+| `rust-agent-workflow-pro` | `crates/workflow-pro` | 业务流程基础设施、Agent 管理、SAGA、审计 | 扩展层 |
 
-> **注意**：虽然 `default-members` 包含了 13 个 crate（排除 `host`），但 `rust-agent-core`、`rust-agent-client`、`rust-agent-framework` 三个是必选的"核心三件套"。
+> **注意**：虽然 `default-members` 包含了 14 个 crate（排除 `host`），但 `rust-agent-core`、`rust-agent-client`、`rust-agent-framework` 三个是必选的"核心三件套"。
 
 ## 依赖关系图
 
@@ -72,6 +72,8 @@ graph TB
 
     Workflow --> |编排| Host
     Host --> |宿主| CLI
+
+    Framework --> |运行时| CLI
 
     Framework --> |运行时| CLI
     Decl --> |声明式构建| CLI
@@ -265,6 +267,31 @@ rust-agent-macros = { git = "...", package = "rust-agent-macros" }
 
 依赖 `syn`、`quote`、`proc-macro2`（仅编译时）。
 
+### rust-agent-workflow-pro
+
+业务流程基础设施层，在 workflow 引擎之上提供可序列化流程定义、标准活动节点、Agent 管理、SAGA 补偿、审计追踪和 SLA 监控。
+
+```toml
+rust-agent-workflow-pro = { git = "...", package = "rust-agent-workflow-pro" }
+```
+
+**外部依赖**：`tokio`、`serde_yaml`（流程定义序列化）
+
+**导出**：
+
+```rust
+pub use ProcessDefinition;   // 流程定义 DSL（YAML/JSON → WorkflowGraph）
+pub use ProcessInstance;     // 流程实例生命周期状态机
+pub use IProcessRepository;  // 流程存储抽象
+pub use ServiceTask, UserTask, ScriptTask, SendTask, ReceiveTask, BusinessRuleTask, CallActivity, NoneTask;  // 标准活动节点
+pub use SagaOrchestrator;    // SAGA 事务编排器
+pub use AgentTeam, AgentPool, DynamicRouter;  // Agent 管理与路由
+pub use BusinessVariables;   // 类型化业务变量
+pub use AuditTrail;          // 审计追踪
+pub use ProcessMetricsCollector, SlaTracker;  // 可观测性
+pub use IMessageBroker;      // 消息代理抽象
+```
+
 ## 工具层 Crate
 
 ### rust-agent-cli
@@ -343,6 +370,7 @@ rust-agent-cli = "..."
 客户端层 → 核心层
 框架运行时层 → 核心层 + 客户端层（通过 IChatClient trait）
 扩展层 → 框架运行时层（通过 IAgent trait 和 ContextProvider trait）
+业务层 → 扩展层（通过 IExecutor、IWorkflowContext 等已有 trait）
 工具层 → 扩展层 + 框架运行时层
 ```
 

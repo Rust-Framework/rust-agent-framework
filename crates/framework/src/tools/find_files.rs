@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use rust_agent_core::{IScopeTool, ITool, ToolResult, WorkspaceScope};

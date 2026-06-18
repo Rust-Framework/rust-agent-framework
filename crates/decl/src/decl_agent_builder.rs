@@ -193,7 +193,11 @@ impl DeclAgentBuilder {
             builder = builder.add_context_provider_shared(Arc::clone(cp));
         }
 
-        let tool_resolver = crate::resolver::tool_resolver::ToolResolver::new();
+        let mut tool_resolver = crate::resolver::tool_resolver::ToolResolver::new();
+        for (name, factory) in &self.tool_factories {
+            let factory = Arc::clone(factory);
+            tool_resolver.register_factory(name, move |args| factory(args));
+        }
         let tools = tool_resolver.resolve_all(&tools_list).await?;
         for tool in tools {
             builder = builder.with_tool(ToolWrapper(tool));

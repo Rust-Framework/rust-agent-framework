@@ -96,7 +96,7 @@
 | [10.3](10-macros-declarative/declarative-config.md) | 声明式 Agent/Workflow 配置 |
 | [10.4](10-macros-declarative/agent-schema.md) | AgentSchema v1.0 规范 |
 
-## 第 11 章：多智能体编排
+## 第 11 章：多智能体编排与业务流程引擎
 
 | 小节 | 标题 |
 |------|------|
@@ -110,6 +110,13 @@
 | [11.8](11-multi-agent/group-chat-workflow.md) | GroupChatWorkflow 群聊编排 |
 | [11.9](11-multi-agent/magentic-workflow.md) | MagenticWorkflow 自主编排 |
 | [11.10](11-multi-agent/vote-workflow.md) | VoteWorkflow 投票聚合 |
+| [11.11](11-multi-agent/process-definition.md) | 流程定义与编译（ProcessDefinition DSL） |
+| [11.12](11-multi-agent/process-instance.md) | 流程实例与状态管理 |
+| [11.13](11-multi-agent/standard-activities.md) | 标准活动节点（8 种 IExecutor） |
+| [11.14](11-multi-agent/saga-compensation.md) | SAGA 事务与补偿链 |
+| [11.15](11-multi-agent/agent-team-pool.md) | Agent 团队与池化管理 |
+| [11.16](11-multi-agent/advanced-gateways-events.md) | 增强网关、事件与定时调度 |
+| [11.17](11-multi-agent/observability.md) | 消息关联、审计与 SLA |
 
 ## 第 12 章：扩展能力
 

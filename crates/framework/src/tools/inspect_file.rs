@@ -1,10 +1,9 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use rust_agent_core::{IScopeTool, ITool, ScopePolicy, ToolResult, WorkspaceScope};
+use rust_agent_core::{IScopeTool, ITool, ToolResult, WorkspaceScope};
 use rust_agent_macros::tool;
 
-use super::path_guard::{resolve_safe, ScopeStatus};
+use super::path_guard::resolve_safe;
 
 #[tool(description = "Returns metadata about a file or directory: type, size in bytes, modification time, permissions.")]
 pub struct InspectFile {

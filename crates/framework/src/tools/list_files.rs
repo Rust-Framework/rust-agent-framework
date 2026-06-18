@@ -1,10 +1,9 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use rust_agent_core::{IScopeTool, ITool, ScopePolicy, ToolResult, WorkspaceScope};
+use rust_agent_core::{IScopeTool, ITool, ToolResult, WorkspaceScope};
 use rust_agent_macros::tool;
 
-use super::path_guard::{resolve_safe, ScopeStatus};
+use super::path_guard::resolve_safe;
 
 #[tool(description = "Lists files and directories at the given path. Returns name, type (file/dir/symlink), and size for each entry.")]
 pub struct ListFiles {

@@ -1,10 +1,9 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use rust_agent_core::{IScopeTool, ITool, ToolResult, WorkspaceScope};
 use rust_agent_macros::tool;
 
-use super::path_guard::{resolve_safe, ScopeStatus};
+use super::path_guard::resolve_safe;
 
 const MAX_MATCHES: usize = 200;
 const MAX_LINE_DISPLAY: usize = 300;

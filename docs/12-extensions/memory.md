@@ -29,9 +29,12 @@ sequenceDiagram
     end
 ```
 
+
+
 ## SkillMemoryContextProvider
 
 核心上下文提供器，负责：
+
 1. **Pre-invocation**：注入记忆检索指令和工具
 2. **Post-invocation**：触发后台记忆整合
 
@@ -118,7 +121,7 @@ async fn on_invoked(&self, agent, session, request_messages, response, error) ->
 
 ## 客户端解析
 
-`SkillMemoryContextProvider` 自动从主 Agent 发现 ChatClient，用于生成 MemoryAgent：
+`SkillMemoryContextProvider` 自动从主 Agent 发现或通过 `memory_agent_client` 指定 ChatClient，用于生成 MemoryAgent：
 
 ```rust
 fn resolve_client(&self, agent: &dyn IAgent) -> Option<Arc<dyn IChatClient>> {
@@ -272,3 +275,4 @@ async fn agent_with_memory() -> anyhow::Result<()> {
 4. **token 消耗**：每次对话前会注入 ~200 tokens 的记忆检索指令
 5. **整合频率**：默认每 3 轮触发整合，可通过 `with_consolidation_interval()` 调整
 6. **合并策略**：使用 `enqueue_latest` 而非 FIFO 队列，避免积压
+

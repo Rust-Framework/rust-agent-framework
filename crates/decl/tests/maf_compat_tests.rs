@@ -34,8 +34,9 @@ mod tests {
         if let AgentDocument::Definition(def) = &doc {
             if let AgentKindData::Prompt(data) = &def.kind_data {
                 assert_eq!(data.tools.len(), 2);
-                assert_eq!(data.tools[0].kind_str(), "web_search");
-                assert_eq!(data.tools[1].kind_str(), "function");
+                assert_eq!(data.tools[0].kind_str(), "web");
+                assert_eq!(data.tools[0].name(), Some("web_search"));
+                assert_eq!(data.tools[1].kind_str(), "file");
                 assert_eq!(data.tools[1].name(), Some("read_file"));
             }
         }

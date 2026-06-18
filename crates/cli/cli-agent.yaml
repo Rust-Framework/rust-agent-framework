@@ -25,8 +25,10 @@ instructions: |
   6. Tool call results from earlier turns are already in conversation history. Read each file once per conversation — never re-read files you've already accessed.
 
 tools:
-  - kind: web_search
-  - kind: web_fetch
+  - kind: web
+    name: web_search
+  - kind: web
+    name: web_fetch
   - kind: function
     name: echo
     description: Echoes back the input text

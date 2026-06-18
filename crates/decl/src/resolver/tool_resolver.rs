@@ -18,21 +18,21 @@ pub type ToolFactoryFn =
 
 /// 将 `ToolDecl` 解析为具体的 `Arc<dyn ITool>`。
 ///
-/// 支持所有 7 种 MAF 工具类型，内置解析器处理 `function`、`web_search` 和
-/// `code_interpreter`。`custom`、`mcp`、`openapi` 和 `file_search`
-/// 需要工厂注册或外部插件系统。
-///
-/// MCP 工具通过 `register_mcp_server()` 或 `register_mcp_server_arc()`
-/// 注册已连接的 MCP 服务器实例来解析。
+/// 按 `(kind, name)` 二元组分派：
+/// - `function`、`custom` → 查工厂映射
+/// - `web`    → `web_search` / `web_fetch`
+/// - `file`   → `read_file` / `write_file` / ... 11 个文件系统工具
+/// - `code`   → `code_interpreter`
+/// - `mcp`    → MCP 远程工具
+/// - `openapi`→ OpenAPI 规范工具（需外部解析器）
 pub struct ToolResolver {
-    /// 按名称键控的自定义工具工厂。
+    /// 按名称键控的自定义工具工厂（`function` 和 `custom` 共用）。
     factories: HashMap<String, ToolFactoryFn>,
     /// 已注册的 MCP 服务器客户端，按 server_url 键控。
     mcp_servers: HashMap<String, Arc<McpServerClient>>,
 }
 
 impl ToolResolver {
-    /// 创建无自定义工厂的新工具解析器。
     pub fn new() -> Self {
         Self {
             factories: HashMap::new(),
@@ -52,10 +52,7 @@ impl ToolResolver {
         self.factories.insert(name.into(), Box::new(factory));
     }
 
-    /// 注册一个 MCP 服务器客户端，按 server_url 键控。
-    ///
-    /// 注册后，任何引用相同 `server_url` 的 `ToolDecl::Mcp` 声明
-    /// 都将使用此客户端进行解析。
+    /// 注册 MCP 服务器客户端。
     pub fn register_mcp_server(
         &mut self,
         server_url: impl Into<String>,
@@ -65,7 +62,7 @@ impl ToolResolver {
             .insert(server_url.into(), Arc::new(server));
     }
 
-    /// 使用已共享的 Arc 注册 MCP 服务器客户端。
+    /// 使用 Arc 注册 MCP 服务器客户端。
     pub fn register_mcp_server_arc(
         &mut self,
         server_url: impl Into<String>,
@@ -79,33 +76,34 @@ impl ToolResolver {
         self.mcp_servers.keys().map(|s| s.as_str()).collect()
     }
 
-    /// 将单个工具声明解析为 ITool。
+    /// 解析单个工具声明。
     pub async fn resolve(&self, tool: &ToolDecl) -> crate::Result<Arc<dyn ITool>> {
         match tool {
-            ToolDecl::Function { name, description, parameters, bindings } => {
-                resolve_function(name, description, parameters, bindings)
+            // ── 用户注册 / 工厂注册 ──
+            ToolDecl::Function { name, .. } => {
+                self.lookup_factory(name, &HashMap::new())
             }
             ToolDecl::Custom { name, config, .. } => {
-                let factory = self.factories.get(name).ok_or_else(|| {
-                    DeclError::Missing(format!(
-                        "No factory registered for custom tool '{}'",
-                        name
-                    ))
-                })?;
-                factory(config.clone())
+                self.lookup_factory(name, config)
             }
-            ToolDecl::WebSearch => Ok(Arc::new(WebSearch)),
-            ToolDecl::FileSearch { .. } => Err(DeclError::Unsupported(
-                "FileSearch tools require vector store integration".into(),
-            )),
+
+            // ── Web 工具 ──
+            ToolDecl::Web { name, .. } => self.resolve_web(name),
+
+            // ── 文件系统工具 ──
+            ToolDecl::File { name, .. } => self.resolve_file(name),
+
+            // ── 代码执行工具 ──
+            ToolDecl::Code { name, .. } => self.resolve_code(name),
+
+            // ── MCP ──
             ToolDecl::Mcp { name, server_url, tool_name, .. } => {
                 resolve_mcp(&self.mcp_servers, name, server_url.as_deref(), tool_name.as_deref()).await
             }
+
+            // ── OpenAPI ──
             ToolDecl::OpenApi { .. } => Err(DeclError::Unsupported(
                 "OpenAPI tools require spec parsing + HTTP client".into(),
-            )),
-            ToolDecl::CodeInterpreter => Err(DeclError::Unsupported(
-                "CodeInterpreter requires sandbox execution environment".into(),
             )),
         }
     }
@@ -118,6 +116,54 @@ impl ToolResolver {
         }
         Ok(resolved)
     }
+
+    // ── 内部方法 ──
+
+    fn lookup_factory(&self, name: &str, config: &HashMap<String, serde_json::Value>) -> crate::Result<Arc<dyn ITool>> {
+        let factory = self.factories.get(name).ok_or_else(|| {
+            DeclError::Unsupported(format!(
+                "Unknown tool '{}' — not a built-in and no factory registered. \
+                 Built-in tools: kind=web (web_search, web_fetch), kind=file (read_file, etc.), kind=code (code_interpreter). \
+                 User tools: register via with_tool() or register_factory().",
+                name
+            ))
+        })?;
+        factory(config.clone())
+    }
+
+    fn resolve_web(&self, name: &str) -> crate::Result<Arc<dyn ITool>> {
+        match name {
+            "web_search" => Ok(Arc::new(WebSearch)),
+            "web_fetch" => Ok(Arc::new(WebFetch)),
+            other => self.lookup_factory(other, &HashMap::new()),
+        }
+    }
+
+    fn resolve_file(&self, name: &str) -> crate::Result<Arc<dyn ITool>> {
+        match name {
+            "read_file" => Ok(Arc::new(ReadFile { scope: None })),
+            "write_file" => Ok(Arc::new(WriteFile { scope: None })),
+            "edit_file" => Ok(Arc::new(EditFile { scope: None })),
+            "list_files" => Ok(Arc::new(ListFiles { scope: None })),
+            "inspect_file" => Ok(Arc::new(InspectFile { scope: None })),
+            "make_directory" => Ok(Arc::new(MakeDirectory { scope: None })),
+            "remove_path" => Ok(Arc::new(RemovePath { scope: None })),
+            "move_file" => Ok(Arc::new(MoveFile { scope: None })),
+            "find_files" => Ok(Arc::new(FindFiles { scope: None })),
+            "search_file" => Ok(Arc::new(SearchFile { scope: None })),
+            "run_command" => Ok(Arc::new(RunCommand { scope: None, timeout_secs: None })),
+            other => self.lookup_factory(other, &HashMap::new()),
+        }
+    }
+
+    fn resolve_code(&self, name: &str) -> crate::Result<Arc<dyn ITool>> {
+        match name {
+            "code_interpreter" => Err(DeclError::Unsupported(
+                "CodeInterpreter requires sandbox execution environment".into(),
+            )),
+            other => self.lookup_factory(other, &HashMap::new()),
+        }
+    }
 }
 
 impl Default for ToolResolver {
@@ -126,43 +172,8 @@ impl Default for ToolResolver {
     }
 }
 
-/// 通过查找内置工具和框架工具来解析 Function 工具。
-fn resolve_function(
-    name: &str,
-    _description: &str,
-    _parameters: &Option<crate::schema::PropertySchema>,
-    _bindings: &[crate::tools::ToolBinding],
-) -> crate::Result<Arc<dyn ITool>> {
-    // Map function names to built-in framework tools
-    let tool: Arc<dyn ITool> = match name {
-        "read_file" => Arc::new(ReadFile { scope: None }),
-        "write_file" => Arc::new(WriteFile { scope: None }),
-        "edit_file" => Arc::new(EditFile { scope: None }),
-        "list_files" => Arc::new(ListFiles { scope: None }),
-        "inspect_file" => Arc::new(InspectFile { scope: None }),
-        "make_directory" => Arc::new(MakeDirectory { scope: None }),
-        "remove_path" => Arc::new(RemovePath { scope: None }),
-        "move_file" => Arc::new(MoveFile { scope: None }),
-        "find_files" => Arc::new(FindFiles { scope: None }),
-        "search_file" => Arc::new(SearchFile { scope: None }),
-        "run_command" => Arc::new(RunCommand { scope: None, timeout_secs: None }),
-        "web_search" => Arc::new(WebSearch),
-        "web_fetch" => Arc::new(WebFetch),
-        other => {
-            return Err(DeclError::Unsupported(format!(
-                "Unknown function tool '{}'",
-                other
-            )));
-        }
-    };
-    Ok(tool)
-}
+// ── MCP 解析 ──
 
-/// 解析 MCP 工具声明为 `Arc<dyn ITool>`。
-///
-/// 从已注册的 MCP 服务器列表中查找指定的服务器 URL，
-/// 发现其工具列表，并返回匹配的工具。如果指定了 `tool_name`，
-/// 则精确匹配；否则使用声明中的 `name` 字段匹配。
 async fn resolve_mcp(
     mcp_servers: &HashMap<String, Arc<McpServerClient>>,
     name: &str,
@@ -170,9 +181,7 @@ async fn resolve_mcp(
     tool_name: Option<&str>,
 ) -> crate::Result<Arc<dyn ITool>> {
     let server_url = server_url.ok_or_else(|| {
-        DeclError::Unsupported(
-            "MCP tool declaration requires a server_url".into(),
-        )
+        DeclError::Unsupported("MCP tool declaration requires a server_url".into())
     })?;
 
     let server = mcp_servers.get(server_url).ok_or_else(|| {
@@ -185,7 +194,6 @@ async fn resolve_mcp(
 
     let effective_tool_name = tool_name.unwrap_or(name);
 
-    // Try to discover tools from the server and find the matching one
     let tools = server
         .discover_tools()
         .await

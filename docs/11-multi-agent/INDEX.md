@@ -1,8 +1,8 @@
-# 第 11 章：多智能体编排
+# 第 11 章：多智能体编排与业务流程引擎
 
-本章全面介绍 RAF 的多智能体编排系统——基于图驱动的工作流引擎，通过六种 Builder 构建专业化编排模式，统一收敛为 IAgent 门面，并提供检查点持久化、事件驱动和全链路流式可观测性。
+本章全面介绍 RAF 的多智能体编排系统和业务流程引擎——基于图驱动的工作流引擎，通过六种 Builder 构建专业化编排模式，统一收敛为 IAgent 门面，并在此基础上扩展声明式流程定义（ProcessDefinition）、标准活动节点、SAGA 事务补偿、Agent 团队管理、增强网关、定时调度、消息关联和 SLA 监控等完整的业务基础设施。
 
-本章适合需要构建复杂多 Agent 协作系统的架构师和高级开发者。
+本章适合需要构建复杂多 Agent 协作系统和业务流程自动化的架构师和高级开发者。
 
 ## 章节目录
 
@@ -18,6 +18,13 @@
 | [11.8](group-chat-workflow.md) | GroupChatWorkflow 群聊编排 | 多轮讨论、ISpeakerSelector、ITerminationCondition |
 | [11.9](magentic-workflow.md) | MagenticWorkflow 自主编排 | ReAct 推理循环、Orchestrator 调度、动态任务分解 |
 | [11.10](vote-workflow.md) | VoteWorkflow 投票聚合 | 多专家投票、多数决/加权聚合、IVoteAggregator |
+| [11.11](process-definition.md) | 流程定义与编译 | 声明式 YAML DSL、16 种 NodeKind、边条件路由、compile() 编译 |
+| [11.12](process-instance.md) | 流程实例与状态管理 | 6 状态生命周期、ProcessSnapshot、变量管理、引擎集成 |
+| [11.13](standard-activities.md) | 标准活动节点 | 8 种 BPMN 风格 IExecutor：ServiceTask 到 NoneTask |
+| [11.14](saga-compensation.md) | SAGA 事务与补偿链 | SagaOrchestrator、BackwardRecovery、ForwardRecovery |
+| [11.15](agent-team-pool.md) | Agent 团队与池化管理 | AgentTeam 能力注册、AgentPool 心跳/健康、DynamicRouter 路由 |
+| [11.16](advanced-gateways-events.md) | 增强网关、事件与定时调度 | EventBasedGateway、ComplexGateway、BoundaryEvent、TimerTrigger、CronTrigger |
+| [11.17](observability.md) | 消息关联、审计与 SLA | MessageCorrelation、IMessageBroker、AuditTrail、SlaTracker |
 
 ## 快速导航
 
@@ -31,6 +38,13 @@
 - **想让多个 Agent 讨论？** → [11.8 群聊编排](group-chat-workflow.md)
 - **想让 Agent 自主完成任务？** → [11.9 自主编排](magentic-workflow.md)
 - **想实现投票决策？** → [11.10 投票聚合](vote-workflow.md)
+- **想用 YAML 定义业务流程？** → [11.11 流程定义 DSL](process-definition.md)
+- **想管理流程生命周期？** → [11.12 流程实例](process-instance.md)
+- **想使用标准活动节点？** → [11.13 标准活动节点](standard-activities.md)
+- **想实现分布式事务？** → [11.14 SAGA 补偿](saga-compensation.md)
+- **想管理 Agent 团队？** → [11.15 Agent 团队与池化](agent-team-pool.md)
+- **想使用增强网关和定时调度？** → [11.16 增强网关与事件](advanced-gateways-events.md)
+- **想集成消息中间件和审计？** → [11.17 消息关联与可观测性](observability.md)
 
 ## 设计理念
 
@@ -40,6 +54,9 @@
 4. **引擎能力共享**：所有编排模式内部由 WorkflowEngine 驱动，自动获得检查点、重试、超时、补偿、定时器
 5. **流式可观测性**：`WorkflowEvent` 流覆盖全生命周期，支持多节点独立打字机效果、工具调用卡片、Token 用量仪表
 6. **事件驱动扩展**：外部事件可通过 `ExternalEvent` + `EventBus` 注入引擎，支持人工审批、消息队列等集成
+7. **声明式流程定义**：`ProcessDefinition` 支持 YAML/JSON 声明式定义，通过 `compile()` 编译为引擎图
+8. **业务基础设施**：SAGA 事务补偿、消息关联、审计追踪、SLA 监控、Agent 池化管理——完整的业务流程支持
+9. **零侵入分层**：引擎层定义 trait 和执行原语，业务层提供 DSL 抽象和可插拔实现，通过已有 trait 交互
 
 ---
 

@@ -58,6 +58,9 @@ pub use engine::{
     ExternalEvent, IWorkflowContext,
     MessageEnvelope, NodeChunk, ResumeCommand, RetryBackoff, RetryCondition, RetryOptions,
     UsageInfo, WorkflowConfig, WorkflowEngine, WorkflowEvent, WorkflowOutput, WorkflowRuntime,
+    TimerTrigger, CronTrigger,
+    CorrelationKey, MessageCorrelation,
+    BoundaryEvent, BoundaryEventKind, EventDefinition, IntermediateEvent, IntermediateEventKind,
 };
 
 // ── 执行器 ──
@@ -69,6 +72,7 @@ pub use executor::{
 // ── 图 ──
 pub use graph::{ComparisonOp, ExpressionCondition, VariableCondition, VariableEdgeCondition};
 pub use graph::{Edge, LoopConfig, Node, RequestPort, WorkflowGraph};
+pub use graph::{ComplexGatewayCondition, EventBasedGatewayCondition, SubCondition, ComparisonOperator};
 
 // ── WorkflowAgent ──
 pub use workflow_agent::WorkflowAgent;

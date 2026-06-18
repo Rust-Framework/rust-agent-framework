@@ -67,11 +67,10 @@ fn parse_prompt_agent_with_all_fields_json() {
             }
         },
         "tools": [
-            { "kind": "web_search" },
+            { "kind": "web", "name": "web_search" },
             {
-                "kind": "function",
-                "name": "read_file",
-                "description": "Read file contents"
+                "kind": "file",
+                "name": "read_file"
             }
         ],
         "template": {
@@ -203,8 +202,8 @@ fn model_options_builder() {
 
 #[test]
 fn tool_decl_kind_str() {
-    assert_eq!(ToolDecl::WebSearch.kind_str(), "web_search");
-    assert_eq!(ToolDecl::CodeInterpreter.kind_str(), "code_interpreter");
+    assert_eq!(ToolDecl::web("web_search").kind_str(), "web");
+    assert_eq!(ToolDecl::file("read_file").kind_str(), "file");
 
     let func = ToolDecl::function("my_fn", "My function");
     assert_eq!(func.kind_str(), "function");
@@ -215,16 +214,15 @@ fn tool_decl_kind_str() {
 fn tool_resolver_web_search() {
     let resolver = ToolResolver::new();
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let tool = rt.block_on(resolver.resolve(&ToolDecl::WebSearch)).unwrap();
+    let tool = rt.block_on(resolver.resolve(&ToolDecl::web("web_search"))).unwrap();
     assert_eq!(tool.name(), "web_search");
 }
 
 #[test]
-fn tool_resolver_function_builtin() {
+fn tool_resolver_file_builtin() {
     let resolver = ToolResolver::new();
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let tool_decl = ToolDecl::function("read_file", "Read file");
-    let tool = rt.block_on(resolver.resolve(&tool_decl)).unwrap();
+    let tool = rt.block_on(resolver.resolve(&ToolDecl::file("read_file"))).unwrap();
     assert_eq!(tool.name(), "read_file");
 }
 

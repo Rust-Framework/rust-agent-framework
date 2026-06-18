@@ -241,7 +241,8 @@ instructions: |
   Respond concisely in the user's language.
 
 tools:
-  - kind: web_search
+  - kind: web
+    name: web_search
   - kind: function
     name: echo
     description: Echoes back the input text

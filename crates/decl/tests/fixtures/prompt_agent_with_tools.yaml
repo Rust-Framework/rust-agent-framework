@@ -10,7 +10,7 @@ model:
     api_key: $OPENAI_API_KEY
 instructions: You are a helpful assistant with tool access.
 tools:
-  - kind: web_search
-  - kind: function
+  - kind: web
+    name: web_search
+  - kind: file
     name: read_file
-    description: Read the contents of a file
