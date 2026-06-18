@@ -209,6 +209,8 @@ fn expand_tool_fn(description: &str, func: syn::ItemFn) -> TokenStream {
 
 fn expand_tool_struct(description: &str, input: DeriveInput) -> TokenStream {
     let name = &input.ident;
+    let tool_name = struct_name_to_tool_name(&name.to_string());
+    let tool_name_lit = proc_macro2::Literal::string(&tool_name);
 
     let expanded = quote! {
         #input
@@ -216,7 +218,7 @@ fn expand_tool_struct(description: &str, input: DeriveInput) -> TokenStream {
         #[::async_trait::async_trait]
         impl rust_agent_core::ITool for #name {
             fn name(&self) -> &str {
-                stringify!(#name)
+                #tool_name_lit
             }
 
             fn description(&self) -> &str {
@@ -324,4 +326,29 @@ fn to_pascal_case(s: &str) -> String {
             }
         })
         .collect()
+}
+
+/// Convert CamelCase struct name to the exposed tool name.
+///
+/// Examples:
+/// - `ReadFile` → `"read_file"`
+/// - `LoadSkillTool` → `"load_skill"`  (strips trailing `_tool`)
+/// - `RunCommand` → `"run_command"`
+fn struct_name_to_tool_name(name: &str) -> String {
+    let mut result = String::new();
+    for ch in name.chars() {
+        if ch.is_uppercase() {
+            if !result.is_empty() {
+                result.push('_');
+            }
+            result.push(ch.to_ascii_lowercase());
+        } else {
+            result.push(ch);
+        }
+    }
+    // Strip trailing _tool suffix: structs named `XxxTool` expose tool name `xxx`
+    if result.ends_with("_tool") {
+        result.truncate(result.len() - 5);
+    }
+    result
 }
