@@ -211,8 +211,8 @@ impl IContextProvider for WebSearchContextProvider {
         "WebSearchContextProvider"
     }
 
-    fn kind(&self) -> &str {
-        "websearch"
+    fn kind(&self) -> rust_agent_core::ContextProviderKind {
+        rust_agent_core::ContextProviderKind::Unknown
     }
 
     async fn on_invoking(

@@ -206,6 +206,86 @@ resolver.register_mcp_server("stdio://filesystem-server", server);
 let tools = resolver.resolve_all(&agent_def.tools).await?;
 ```
 
+## kind 字段溯源：声明式与运行时的双向映射
+
+声明式配置中的 `kind` 字段并非凭空定义，而是与 RAF 运行时的 trait 方法**双向绑定**：
+
+### tools 节点的 kind 映射
+
+`tools` 列表中每个工具的 `kind` 值**来源于 `ITool::kind()` 的返回值**。由 `#[tool(kind = "xxx")]` 宏属性在编译期注入：
+
+| YAML/JSON `kind` | `ITool::kind()` 返回值 | 来源 | 说明 |
+|---|---|---|---|
+| `function` | `"function"` | `#[tool(kind = "function")]` | 用户注册的函数工具，**description 必须在 YAML 中提供** |
+| `custom` | `"custom"` | `#[tool(kind = "custom")]` | 工厂注册的自定义工具，**description 必须在 YAML 中提供** |
+| `web` | `"web"` | `#[tool(kind = "web")]` | 网络搜索/抓取工具，description 由宏内置 |
+| `file` | `"file"` | `#[tool(kind = "file")]` | 文件系统工具（11 个），description 由宏内置 |
+| `shell` | `"shell"` | `#[tool(kind = "shell")]` | Shell 命令执行，description 由宏内置 |
+| `skills` | `"skills"` | `#[tool(kind = "skills")]` | 技能加载和资源工具，description 由宏内置 |
+| `code` | `"code"` | `#[tool(kind = "code")]` | 代码解释器/沙箱，description 由宏内置 |
+| `mcp` | `"mcp"` | MCP 工具实现 | MCP 远程工具，description 由 MCP 服务器提供 |
+| `openapi` | `"openapi"` | OpenAPI 工具实现 | OpenAPI 规范工具 |
+
+### 关键规则：何时需要写 description
+
+| 工具类别 | `description` 字段 | 原因 |
+|---|---|---|
+| `web` / `file` / `shell` / `skills` / `code` | **无需配置** | `#[tool]` 宏在编译期硬编码了 description，`ToolResolver` 创建的实例自带描述 |
+| `function` / `custom` | **必须在 YAML 中提供** | 这两个类别由用户定义，没有内建描述 |
+| `mcp` | **无需配置** | 描述由远程 MCP 服务器的 `tools/list` 响应提供 |
+
+```yaml
+# 正确：内置工具只需 name，description 由代码内建
+tools:
+  - kind: file
+    name: read_file            # ✅ 无需 description
+  - kind: web
+    name: web_search           # ✅ 无需 description
+
+# 正确：自定义工具必须提供 description
+tools:
+  - kind: function
+    name: echo
+    description: 将输入文本原样返回   # ✅ 必须提供
+  - kind: custom
+    name: weather_lookup
+    description: 查询指定城市的天气   # ✅ 必须提供
+```
+
+### contexts 节点的 kind 映射
+
+`contexts` 列表中每个提供器的 `kind` 值**来源于 `IContextProvider::kind()` 的返回值**：
+
+| YAML/JSON `kind` | `IContextProvider::kind()` 返回值 | 运行时 Provider |
+|---|---|---|
+| `memory` | `"memory"` | `SkillMemoryContextProvider` |
+| `skills` | `"skills"` | `AgentSkillsProvider` |
+| `mcp` | `"mcp"` | MCP Context Provider |
+| `workspace` | `"workspace"` | `WorkspaceContextProvider` |
+| `knowledge` | `"knowledge"` | RAG Knowledge Provider |
+| `wiki` | `"wiki"` | Wiki Knowledge Provider |
+
+> **注意**：`history`（对话历史管理）由 `AgentBuilder` 内置自动注入 `InMemoryHistoryProvider`（kind = `"history"`），无需在 `contexts` 中声明。`websearch` 属于工具（`tools → kind: web`），不在此处配置。
+
+### 扩展自定义 kind
+
+如果你实现了 `IContextProvider` 并覆写了 `kind()` 返回自定义值，可以在 YAML 中通过 `with_context()` 注入：
+
+```rust
+struct MyCustomProvider;
+
+impl IContextProvider for MyCustomProvider {
+    fn kind(&self) -> &str { "my_custom_kind" }  // 自定义 kind
+    // ...
+}
+
+// 声明式构建时注入
+let agent = DeclAgentBuilder::new()
+    .from_yaml_file("agent.yaml")
+    .with_context(Arc::new(MyCustomProvider))
+    .build().await?;
+```
+
 ## 便捷函数
 
 ### `quick_agent()` — 一行加载 Agent

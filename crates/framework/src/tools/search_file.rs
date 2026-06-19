@@ -8,6 +8,7 @@ use super::path_guard::resolve_safe;
 const MAX_MATCHES: usize = 200;
 const MAX_LINE_DISPLAY: usize = 300;
 
+#[derive(Default)]
 pub struct SearchFile {
     pub scope: Option<Arc<WorkspaceScope>>,
 }

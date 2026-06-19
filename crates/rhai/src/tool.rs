@@ -133,8 +133,8 @@ impl ITool for RhaiTool {
         Ok(rust_agent_core::ToolResult::success(result))
     }
 
-    fn kind(&self) -> &str {
-        "custom"
+    fn kind(&self) -> rust_agent_core::ToolKind {
+        rust_agent_core::ToolKind::Custom
     }
 }
 

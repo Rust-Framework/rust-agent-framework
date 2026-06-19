@@ -7,6 +7,7 @@ use super::path_guard::{resolve_safe, ScopeStatus};
 
 const MAX_RESULTS: usize = 500;
 
+#[derive(Default)]
 pub struct FindFiles {
     pub scope: Option<Arc<WorkspaceScope>>,
 }

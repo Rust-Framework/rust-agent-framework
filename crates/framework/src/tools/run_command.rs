@@ -17,6 +17,7 @@ const MAX_ERROR: usize = 100 * 1024; // error/warning 模式单流限制
 const MAX_WARNING_STDOUT: usize = 200 * 1024; // warning 模式 stdout（过滤后）
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
+#[derive(Default)]
 pub struct RunCommand {
     pub scope: Option<Arc<WorkspaceScope>>,
     pub timeout_secs: Option<u64>,
@@ -75,8 +76,8 @@ impl ITool for RunCommand {
         self.call(arguments).await
     }
 
-    fn kind(&self) -> &str {
-        "file"
+    fn kind(&self) -> rust_agent_core::ToolKind {
+        rust_agent_core::ToolKind::Shell
     }
 }
 

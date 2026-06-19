@@ -8,6 +8,7 @@ use super::path_guard::{resolve_safe, ScopeStatus};
 const MAX_FILE_SIZE: u64 = 512 * 1024;
 const MAX_LINE_LEN: usize = 2000;
 
+#[derive(Default)]
 pub struct ReadFile {
     pub scope: Option<Arc<WorkspaceScope>>,
 }

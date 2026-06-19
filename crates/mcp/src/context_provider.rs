@@ -95,8 +95,8 @@ impl IContextProvider for McpContextProvider {
         "McpContextProvider"
     }
 
-    fn kind(&self) -> &str {
-        "mcp"
+    fn kind(&self) -> rust_agent_core::ContextProviderKind {
+        rust_agent_core::ContextProviderKind::Mcp
     }
 
     async fn on_invoking(

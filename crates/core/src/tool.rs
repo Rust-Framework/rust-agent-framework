@@ -95,11 +95,9 @@ pub trait ITool: AsAny + Send + Sync {
 
     /// 工具分类——与 ToolDecl 的 kind 标签对应。
     ///
-    /// 返回: `"web"` | `"file"` | `"shell"` | `"skills"` | `"code"` | `"function"` | `"custom"` | `"mcp"` | `"openapi"`
-    ///
-    /// 默认返回 `"unknown"`，内置工具和宏生成的结构体应覆写此方法。
-    fn kind(&self) -> &str {
-        "unknown"
+    /// 默认返回 `ToolKind::Unknown`，内置工具和宏生成的结构体应覆写此方法。
+    fn kind(&self) -> crate::ToolKind {
+        crate::ToolKind::Unknown
     }
 }
 
@@ -158,7 +156,7 @@ impl ITool for ApprovalRequiredTool {
     fn requires_approval(&self) -> bool {
         true
     }
-    fn kind(&self) -> &str {
+    fn kind(&self) -> crate::ToolKind {
         self.inner.kind()
     }
 }

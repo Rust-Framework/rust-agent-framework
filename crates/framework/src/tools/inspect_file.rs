@@ -5,6 +5,7 @@ use rust_agent_macros::tool;
 
 use super::path_guard::resolve_safe;
 
+#[derive(Default)]
 pub struct InspectFile {
     pub scope: Option<Arc<WorkspaceScope>>,
 }

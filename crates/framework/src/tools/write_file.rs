@@ -7,6 +7,7 @@ use super::path_guard::{resolve_safe_new, ScopeStatus};
 
 const MAX_CONTENT_SIZE: usize = 1_000_000;
 
+#[derive(Default)]
 pub struct WriteFile {
     pub scope: Option<Arc<WorkspaceScope>>,
 }

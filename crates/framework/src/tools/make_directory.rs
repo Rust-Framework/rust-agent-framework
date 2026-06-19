@@ -5,6 +5,7 @@ use rust_agent_macros::tool;
 
 use super::path_guard::{resolve_safe_new, ScopeStatus};
 
+#[derive(Default)]
 pub struct MakeDirectory {
     pub scope: Option<Arc<WorkspaceScope>>,
 }

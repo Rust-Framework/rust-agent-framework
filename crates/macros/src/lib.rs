@@ -247,8 +247,8 @@ fn expand_tool_fn(description: &str, kind: &str, func: syn::ItemFn) -> TokenStre
                 Ok(self.call(#(args.#arg_names),*).await)
             }
 
-            fn kind(&self) -> &str {
-                #kind
+            fn kind(&self) -> rust_agent_core::ToolKind {
+                rust_agent_core::ToolKind::from_macro_literal(#kind)
             }
         }
     };
@@ -282,8 +282,8 @@ fn expand_tool_struct(description: &str, kind: &str, input: DeriveInput) -> Toke
                 self.call(arguments).await
             }
 
-            fn kind(&self) -> &str {
-                #kind
+            fn kind(&self) -> rust_agent_core::ToolKind {
+                rust_agent_core::ToolKind::from_macro_literal(#kind)
             }
         }
     };
@@ -499,8 +499,8 @@ fn expand_tool_impl(description: &str, kind: &str, item_impl: syn::ItemImpl) -> 
                 self.call(#(args.#arg_names),*).await
             }
 
-            fn kind(&self) -> &str {
-                #kind
+            fn kind(&self) -> rust_agent_core::ToolKind {
+                rust_agent_core::ToolKind::from_macro_literal(#kind)
             }
         }
 

@@ -1,0 +1,377 @@
+{
+    "$schema": "https://json-schema.org/draft-07/schema",
+    "$id": "https://gitcode.com/rf2026/rust-agent-framework/agent-decl-1.0.json",
+    "title": "RAF Agent Declaration Schema",
+    "description": "JSON Schema for declarative Agent configuration in Rust Agent Framework (MAF AgentSchema v1.0 compatible).",
+    "type": "object",
+    "required": ["kind", "name", "model"],
+    "properties": {
+        "kind": {
+            "type": "string",
+            "description": "Agent type discriminator",
+            "enum": ["prompt", "workflow", "hosted"]
+        },
+        "name": {
+            "type": "string",
+            "description": "Unique agent identifier"
+        },
+        "displayName": {
+            "type": "string",
+            "description": "Human-readable display name for UI"
+        },
+        "description": {
+            "type": "string",
+            "description": "Description of the agent's capabilities and purpose"
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Arbitrary key-value metadata (author, version, tags, etc.)",
+            "additionalProperties": true
+        },
+        "instructions": {
+            "type": "string",
+            "description": "System instructions for the LLM"
+        },
+        "additionalInstructions": {
+            "type": "string",
+            "description": "Additional instructions appended after instructions"
+        },
+        "model": {
+            "type": "object",
+            "description": "LLM model configuration",
+            "required": ["id"],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Model ID (e.g., deepseek-v4-flash, gpt-4o)"
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "Provider identifier",
+                    "enum": ["openai", "deepseek", "custom"]
+                },
+                "connection": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {
+                            "type": "string",
+                            "description": "Connection type",
+                            "enum": ["key", "entra", "remote", "anonymous"]
+                        },
+                        "api_key": {
+                            "type": "string",
+                            "description": "API key. Supports $ENV_VAR syntax to read from environment variables."
+                        },
+                        "auth_mode": {
+                            "type": "string",
+                            "description": "Authentication mode",
+                            "enum": ["key", "entra_id"]
+                        },
+                        "base_url": {
+                            "type": "string",
+                            "description": "Custom API endpoint URL"
+                        }
+                    }
+                },
+                "options": {
+                    "type": "object",
+                    "description": "Model inference parameters",
+                    "properties": {
+                        "temperature": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 2
+                        },
+                        "maxTokens": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "topP": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                        },
+                        "frequencyPenalty": {
+                            "type": "number"
+                        },
+                        "presencePenalty": {
+                            "type": "number"
+                        },
+                        "seed": {
+                            "type": "integer"
+                        },
+                        "stop": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        },
+        "template": {
+            "type": "object",
+            "description": "Prompt template configuration",
+            "required": ["format"],
+            "properties": {
+                "format": {
+                    "type": "string",
+                    "enum": ["mustache", "plain"]
+                },
+                "content": {
+                    "type": "string"
+                },
+                "sourcePath": {
+                    "type": "string"
+                }
+            }
+        },
+        "inputSchema": {
+            "$ref": "#/definitions/PropertySchema"
+        },
+        "outputSchema": {
+            "$ref": "#/definitions/PropertySchema"
+        },
+        "tools": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/ToolDecl"
+            }
+        },
+        "contexts": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/ContextProviderDecl"
+            }
+        },
+        "maxToolRounds": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 10,
+            "description": "Maximum number of tool-calling rounds before forced stop"
+        },
+        "subAgents": {
+            "type": "array",
+            "items": {
+                "$ref": "#"
+            }
+        }
+    },
+    "definitions": {
+        "PropertySchema": {
+            "type": "object",
+            "properties": {
+                "strict": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "properties": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/Property"
+                    }
+                },
+                "examples": {
+                    "type": "array",
+                    "items": { "type": "object" }
+                }
+            }
+        },
+        "Property": {
+            "type": "object",
+            "required": ["name", "kind", "description"],
+            "properties": {
+                "name": { "type": "string" },
+                "kind": {
+                    "type": "string",
+                    "enum": ["string", "integer", "float", "boolean", "array", "object"]
+                },
+                "description": { "type": "string" },
+                "required": { "type": "boolean", "default": false },
+                "default": {},
+                "enumValues": {
+                    "type": "array"
+                }
+            }
+        },
+        "ToolDecl": {
+            "type": "object",
+            "required": ["kind"],
+            "oneOf": [
+                {
+                    "properties": {
+                        "kind": { "const": "function" },
+                        "name": { "type": "string" },
+                        "description": { "type": "string" },
+                        "parameters": { "$ref": "#/definitions/PropertySchema" },
+                        "bindings": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": { "type": "string" },
+                                    "input": { "type": "string" }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["name", "description"]
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "custom" },
+                        "name": { "type": "string" },
+                        "description": { "type": "string" },
+                        "config": { "type": "object" }
+                    },
+                    "required": ["name", "description"]
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "web" },
+                        "name": {
+                            "type": "string",
+                            "enum": ["web_search", "web_fetch", ""]
+                        },
+                        "description": { "type": "string" }
+                    }
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "file" },
+                        "name": {
+                            "type": "string",
+                            "enum": [
+                                "read_file", "write_file", "edit_file",
+                                "list_files", "inspect_file",
+                                "make_directory", "remove_path", "move_file",
+                                "find_files", "search_file", "run_command",
+                                ""
+                            ]
+                        },
+                        "description": { "type": "string" }
+                    }
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "code" },
+                        "name": { "type": "string", "enum": ["code_interpreter", ""] },
+                        "description": { "type": "string" }
+                    }
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "mcp" },
+                        "name": { "type": "string" },
+                        "server_url": { "type": "string" },
+                        "tool_name": { "type": "string" },
+                        "approval_mode": { "type": "string" }
+                    },
+                    "required": ["name", "server_url"]
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "openapi" },
+                        "name": { "type": "string" },
+                        "specUrl": { "type": "string" },
+                        "operation_id": { "type": "string" }
+                    },
+                    "required": ["name", "specUrl"]
+                }
+            ]
+        },
+        "ContextProviderDecl": {
+            "type": "object",
+            "required": ["kind", "name"],
+            "oneOf": [
+                {
+                    "properties": {
+                        "kind": { "const": "memory" },
+                        "name": { "type": "string" },
+                        "config": {
+                            "type": "object",
+                            "properties": {
+                                "directory": { "type": "string", "default": "logs/memory" },
+                                "enabled": { "type": "boolean", "default": true },
+                                "consolidationInterval": { "type": "integer", "default": 3 }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "skills" },
+                        "name": { "type": "string" },
+                        "config": {
+                            "type": "object",
+                            "properties": {
+                                "directory": { "type": "string" }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "workspace" },
+                        "name": { "type": "string" },
+                        "config": {
+                            "type": "object",
+                            "properties": {
+                                "root": { "type": "string", "default": "." },
+                                "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                        "read", "allow", "allow_all",
+                                        "approve", "ask", "approve_outside",
+                                        "deny", "restrict", "deny_outside"
+                                    ],
+                                    "default": "read"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "mcp" },
+                        "name": { "type": "string" },
+                        "config": {
+                            "type": "object",
+                            "properties": {
+                                "serverUrl": { "type": "string" },
+                                "command": { "type": "string" },
+                                "args": {
+                                    "type": "array",
+                                    "items": { "type": "string" }
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "knowledge" },
+                        "name": { "type": "string" },
+                        "config": {
+                            "type": "object",
+                            "properties": {
+                                "source": { "type": "string" }
+                            }
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "wiki" },
+                        "name": { "type": "string" },
+                        "config": {
+                            "type": "object",
+                            "properties": {
+                                "source": { "type": "string" }
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+    }
+}

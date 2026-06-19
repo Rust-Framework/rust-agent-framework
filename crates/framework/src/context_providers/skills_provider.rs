@@ -154,8 +154,8 @@ impl IContextProvider for AgentSkillsProvider {
         "AgentSkillsProvider"
     }
 
-    fn kind(&self) -> &str {
-        "skills"
+    fn kind(&self) -> rust_agent_core::ContextProviderKind {
+        rust_agent_core::ContextProviderKind::Skills
     }
 
     async fn on_invoking(

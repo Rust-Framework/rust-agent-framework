@@ -105,8 +105,8 @@ impl IContextProvider for SkillMemoryContextProvider {
         "SkillMemoryContextProvider"
     }
 
-    fn kind(&self) -> &str {
-        "memory"
+    fn kind(&self) -> rust_agent_core::ContextProviderKind {
+        rust_agent_core::ContextProviderKind::Memory
     }
 
     async fn on_invoking(

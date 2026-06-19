@@ -6,6 +6,7 @@ use rust_agent_macros::tool;
 
 use super::path_guard::{resolve_safe, ScopeStatus};
 
+#[derive(Default)]
 pub struct RemovePath {
     pub scope: Option<Arc<WorkspaceScope>>,
 }

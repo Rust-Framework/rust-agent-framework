@@ -117,8 +117,8 @@ impl ITool for McpTool {
         })))
     }
 
-    fn kind(&self) -> &str {
-        "mcp"
+    fn kind(&self) -> rust_agent_core::ToolKind {
+        rust_agent_core::ToolKind::Mcp
     }
 }
 

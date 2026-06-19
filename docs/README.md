@@ -25,9 +25,9 @@
 | 第 5 章 | [上下文提供器](05-context-providers/) | IContextProvider、历史管理、技能注入 |
 | 第 6 章 | [会话管理](06-sessions/) | ISession、会话存储、TTL 管理 |
 | 第 7 章 | [人机协同与审批](07-hitl-approval/) | ApprovalRequiredTool、审批流、中断恢复 |
-| 第 8 章 | [工作区管理](08-workspace-management/) | WorkspaceScope、路径守卫、跨范围审批 |
+| 第 8 章 | [工作区管理](08-workspace-management/) | WorkspaceScope、路径守卫、跨范围审批、声明式工作区 |
 | 第 9 章 | [ChatClient 管道](09-chat-client-pipeline/) | 装饰器模式、工具调用循环、LLM 提供商 |
-| 第 10 章 | [宏与声明式配置](10-macros-declarative/) | #[tool] 宏、JSON/YAML/TOML 配置 |
+| 第 10 章 | [宏与声明式配置](10-macros-declarative/) | #[tool] 宏、JSON/YAML/TOML 配置、字段参考手册、实战教程 |
 | 第 11 章 | [多智能体编排技术](11-multi-agent/) | 六种编排模式、图驱动引擎、检查点、IAgent 门面 |
 | 第 12 章 | [业务流程编排引擎](12-process-engine/) | 流程定义 DSL、标准活动节点、SAGA 补偿、Agent 池化 |
 | 第 13 章 | [扩展能力](13-extensions/) | 网络搜索、RAG、Wiki、技能系统、Rhai 脚本、MCP 集成 |

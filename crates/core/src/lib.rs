@@ -4,6 +4,7 @@ pub mod compression;
 pub mod context_provider;
 pub mod error;
 pub mod incremental_json;
+pub mod kind;
 pub mod message;
 pub mod model_metadata;
 pub mod run_options;
@@ -14,6 +15,8 @@ pub mod token_counter;
 pub mod tool;
 pub mod types;
 pub mod workspace;
+
+pub use kind::{ToolKind, ContextProviderKind};
 
 // Re-export interfaces
 pub use agent::IAgent;

@@ -95,6 +95,10 @@
 | [10.2](10-macros-declarative/macro-type-mapping.md) | Rust 类型到 JSON Schema 映射 |
 | [10.3](10-macros-declarative/declarative-config.md) | 声明式 Agent/Workflow 配置 |
 | [10.4](10-macros-declarative/agent-schema.md) | AgentSchema v1.0 规范 |
+| [10.5](10-macros-declarative/config-reference.md) | 声明式配置完整字段参考 |
+| [10.6](10-macros-declarative/declarative-tutorial.md) | 声明式 Agent 配置实战教程 |
+| [10.7](10-macros-declarative/migration-guide.md) | AgentBuilder → 声明式迁移指南 |
+| [10.8](10-macros-declarative/integration-patterns.md) | 组件联动规则（workspace+tools 路由等） |
 
 ## 第 11 章：多智能体编排技术
 

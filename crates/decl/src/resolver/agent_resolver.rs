@@ -16,6 +16,11 @@ use crate::resolver::tool_resolver::ToolResolver;
 /// - `Prompt` Agent → 通过 `AgentBuilder` 构建
 /// - `Workflow` Agent → 委托给 `WorkflowResolver`
 /// - `Container` Agent → 尚不支持（返回错误）
+#[deprecated(
+    since = "0.2",
+    note = "Use `DeclAgentBuilder::from_definition(def).build()` instead. \
+            DeclAgentBuilder provides the same functionality plus full context provider support."
+)]
 pub struct AgentResolver {
     tool_resolver: ToolResolver,
     /// 已解析 Agent 的注册表，按名称键控。
@@ -178,7 +183,7 @@ impl ITool for ToolWrapper {
         self.0.execute(arguments).await
     }
 
-    fn kind(&self) -> &str {
+    fn kind(&self) -> rust_agent_core::ToolKind {
         self.0.kind()
     }
 }
@@ -186,6 +191,11 @@ impl ITool for ToolWrapper {
 // ── Convenience Functions ──
 
 /// 快速一行程序：从文件解析 `AgentDocument` 并构建 Agent。
+#[deprecated(
+    since = "0.2",
+    note = "Use `DeclAgentBuilder::quick(path).await` instead. \
+            Supports YAML, JSON, and TOML with automatic format detection."
+)]
 pub async fn quick_agent(path: &str) -> crate::Result<Arc<dyn IAgent>> {
     let doc = crate::document::AgentDocument::from_json_file(path)?;
     let def = doc.inner_definition();

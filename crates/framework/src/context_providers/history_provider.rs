@@ -42,8 +42,8 @@ impl IContextProvider for InMemoryHistoryProvider {
         "InMemoryHistoryProvider"
     }
 
-    fn kind(&self) -> &str {
-        "history"
+    fn kind(&self) -> rust_agent_core::ContextProviderKind {
+        rust_agent_core::ContextProviderKind::History
     }
 
     async fn on_invoking(

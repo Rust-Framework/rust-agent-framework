@@ -8,6 +8,7 @@
 | [8.2](workspace-context-provider.md) | WorkspaceContextProvider |
 | [8.3](path-guard.md) | 路径守卫与跨范围检测 |
 | [8.4](cross-scope-approval.md) | 跨范围审批集成 |
+| [8.5](declarative-workspace.md) | 声明式工作区配置与工具联动 |
 
 ## 快速导航
 

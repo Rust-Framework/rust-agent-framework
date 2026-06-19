@@ -46,6 +46,21 @@ pub struct PromptAgentData {
 }
 ```
 
+### contexts 字段实现状态
+
+`contexts` 中的 `kind` 值映射到 `IContextProvider::kind()` 返回值。各 provider 在声明式路径下的实现状态：
+
+| kind | 运行时 Provider | 声明式路径实现状态 |
+|------|----------------|:---:|
+| `memory` | `SkillMemoryContextProvider` | ✅ 已实现（仅 `name: "skill-memory"`） |
+| `skills` | `AgentSkillsProvider` | ✅ 已实现（通过 `scan()` 扫描目录） |
+| `workspace` | `WorkspaceContextProvider` | ✅ 已实现（`root` + `policy` 配置） |
+| `mcp` | `McpContextProvider` | ⚠️ 需代码注入（需异步连接，通过 `with_context()` 注入） |
+| `knowledge` | RAG Knowledge Provider | ❌ 待实现（通过 `with_context()` 注入自定义实现） |
+| `wiki` | Wiki Knowledge Provider | ❌ 待实现（通过 `with_context()` 注入自定义实现） |
+
+`history`（对话历史管理）由 `AgentBuilder` 内置自动注入 `InMemoryHistoryProvider`，无需在 `contexts` 中声明。
+
 ### Model 配置
 
 ```rust

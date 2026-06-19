@@ -196,17 +196,17 @@ impl ToolResolver {
 
     fn resolve_file(&self, name: &str) -> crate::Result<Arc<dyn ITool>> {
         match name {
-            "read_file" => Ok(Arc::new(ReadFile { scope: None })),
-            "write_file" => Ok(Arc::new(WriteFile { scope: None })),
-            "edit_file" => Ok(Arc::new(EditFile { scope: None })),
-            "list_files" => Ok(Arc::new(ListFiles { scope: None })),
-            "inspect_file" => Ok(Arc::new(InspectFile { scope: None })),
-            "make_directory" => Ok(Arc::new(MakeDirectory { scope: None })),
-            "remove_path" => Ok(Arc::new(RemovePath { scope: None })),
-            "move_file" => Ok(Arc::new(MoveFile { scope: None })),
-            "find_files" => Ok(Arc::new(FindFiles { scope: None })),
-            "search_file" => Ok(Arc::new(SearchFile { scope: None })),
-            "run_command" => Ok(Arc::new(RunCommand { scope: None, timeout_secs: None })),
+            "read_file" => Ok(Arc::new(ReadFile::default())),
+            "write_file" => Ok(Arc::new(WriteFile::default())),
+            "edit_file" => Ok(Arc::new(EditFile::default())),
+            "list_files" => Ok(Arc::new(ListFiles::default())),
+            "inspect_file" => Ok(Arc::new(InspectFile::default())),
+            "make_directory" => Ok(Arc::new(MakeDirectory::default())),
+            "remove_path" => Ok(Arc::new(RemovePath::default())),
+            "move_file" => Ok(Arc::new(MoveFile::default())),
+            "find_files" => Ok(Arc::new(FindFiles::default())),
+            "search_file" => Ok(Arc::new(SearchFile::default())),
+            "run_command" => Ok(Arc::new(RunCommand::default())),
             other => self.lookup_factory(other, &HashMap::new()),
         }
     }

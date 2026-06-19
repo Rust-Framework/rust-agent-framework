@@ -109,7 +109,7 @@ impl ITool for ToolWrapper {
         self.0.execute(arguments).await
     }
 
-    fn kind(&self) -> &str {
+    fn kind(&self) -> rust_agent_core::ToolKind {
         self.0.kind()
     }
 }

@@ -196,10 +196,6 @@ impl ITool for HttpGetTool {
         })
     }
 
-    fn kind(&self) -> &str {
-        "function"
-    }
-
     async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult> {
         #[derive(Deserialize)]
         struct Args {

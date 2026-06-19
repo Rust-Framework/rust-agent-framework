@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use futures_util::StreamExt;
 use rust_agent_core::{
-    AgentRunOptions, ChatMessage, IAgent, IChatClient, ITool, MessageRole,
-    ToolRegistry,
+    AgentRunOptions, ChatMessage, IAgent, IChatClient, IScopeTool, ITool, MessageRole,
+    ToolRegistry, WorkspaceScope,
 };
 
 use crate::tools::{ReadFile, WriteFile};
@@ -62,9 +62,13 @@ pub(crate) async fn run_memory_agent(
         return ConsolidationStatus::Skipped;
     }
 
+    let scope = Arc::new(WorkspaceScope::new(&memory_dir, "memory"));
+    let read_file = ReadFile::default().create_scoped(Arc::clone(&scope));
+    let write_file = WriteFile::default().create_scoped(Arc::clone(&scope));
+
     let mut registry = ToolRegistry::new();
-    registry.register(ReadFile { scope: None });
-    registry.register(WriteFile { scope: None });
+    registry.register_arc(read_file);
+    registry.register_arc(write_file);
 
     let tools: Vec<Arc<dyn ITool>> = registry
         .list()

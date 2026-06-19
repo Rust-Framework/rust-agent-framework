@@ -42,11 +42,9 @@ pub trait IContextProvider: Send + Sync {
 
     /// 提供器分类——与 ContextProviderDecl 的 kind 标签对应。
     ///
-    /// 返回: `"memory"` | `"skills"` | `"mcp"` | `"workspace"` | `"websearch"` | `"history"` | ...
-    ///
-    /// 默认返回 `"unknown"`，子类可覆写。
-    fn kind(&self) -> &str {
-        "unknown"
+    /// 默认返回 `ContextProviderKind::Unknown`，子类可覆写。
+    fn kind(&self) -> crate::ContextProviderKind {
+        crate::ContextProviderKind::Unknown
     }
 
     async fn on_invoking(

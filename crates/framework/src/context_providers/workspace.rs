@@ -24,9 +24,9 @@ use crate::tools::{
 ///     .with_policy(ScopePolicy::ApproveOutside);
 ///
 /// let provider = WorkspaceContextProvider::new(Arc::new(scope))
-///     .add_tool(ReadFile { scope: None })
-///     .add_tool(WriteFile { scope: None })
-///     .add_tool(RunCommand { scope: None, timeout_secs: None });
+///     .add_tool(ReadFile::default())
+///     .add_tool(WriteFile::default())
+///     .add_tool(RunCommand::default());
 /// ```
 pub struct WorkspaceContextProvider {
     scope: Arc<WorkspaceScope>,
@@ -42,7 +42,7 @@ impl WorkspaceContextProvider {
         }
     }
 
-    /// 添加需要工作区管理的工具。
+    /// 添加需要工作区管理的工具（构造器模式，消费 self）。
     ///
     /// 内部处理：
     /// 1. 若工具实现 `IScopeTool` → 自动调用 `create_scoped()` 注入 scope
@@ -62,6 +62,27 @@ impl WorkspaceContextProvider {
 
         self.tools.push(tool);
         self
+    }
+
+    /// 添加已解析为 `Arc<dyn ITool>` 的工具（不消费 self，用于声明式构建路径）。
+    ///
+    /// 与 `add_tool()` 执行相同的两阶段处理（scope 注入 + 审批包裹），
+    /// 但接受 `Arc<dyn ITool>` 并通过 `&mut self` 修改，适合在工具解析完成后
+    /// 将工具路由到工作区管理的场景。
+    pub fn add_tool_arc(&mut self, tool: Arc<dyn ITool>) {
+        let mut tool = tool;
+
+        // Step 1: scope 注入（检测 IScopeTool）
+        if let Some(scoped) = try_inject_scope(&tool, Arc::clone(&self.scope)) {
+            tool = scoped;
+        }
+
+        // Step 2: 审批包裹（按策略）
+        if self.scope.policy == ScopePolicy::ApproveOutside {
+            tool = Arc::new(ApprovalRequiredTool::new(tool));
+        }
+
+        self.tools.push(tool);
     }
 
     fn build_instructions(&self) -> String {
@@ -95,50 +116,47 @@ fn try_inject_scope(
 
     // 为每个已知工具类型尝试下转型并调用 create_scoped
     if any.downcast_ref::<ReadFile>().is_some() {
-        let dummy = ReadFile { scope: None };
+        let dummy = ReadFile::default();
         return Some(dummy.create_scoped(scope));
     }
     if any.downcast_ref::<WriteFile>().is_some() {
-        let dummy = WriteFile { scope: None };
+        let dummy = WriteFile::default();
         return Some(dummy.create_scoped(scope));
     }
     if any.downcast_ref::<EditFile>().is_some() {
-        let dummy = EditFile { scope: None };
+        let dummy = EditFile::default();
         return Some(dummy.create_scoped(scope));
     }
     if any.downcast_ref::<ListFiles>().is_some() {
-        let dummy = ListFiles { scope: None };
+        let dummy = ListFiles::default();
         return Some(dummy.create_scoped(scope));
     }
     if any.downcast_ref::<InspectFile>().is_some() {
-        let dummy = InspectFile { scope: None };
+        let dummy = InspectFile::default();
         return Some(dummy.create_scoped(scope));
     }
     if any.downcast_ref::<MakeDirectory>().is_some() {
-        let dummy = MakeDirectory { scope: None };
+        let dummy = MakeDirectory::default();
         return Some(dummy.create_scoped(scope));
     }
     if any.downcast_ref::<RemovePath>().is_some() {
-        let dummy = RemovePath { scope: None };
+        let dummy = RemovePath::default();
         return Some(dummy.create_scoped(scope));
     }
     if any.downcast_ref::<MoveFile>().is_some() {
-        let dummy = MoveFile { scope: None };
+        let dummy = MoveFile::default();
         return Some(dummy.create_scoped(scope));
     }
     if any.downcast_ref::<FindFiles>().is_some() {
-        let dummy = FindFiles { scope: None };
+        let dummy = FindFiles::default();
         return Some(dummy.create_scoped(scope));
     }
     if any.downcast_ref::<SearchFile>().is_some() {
-        let dummy = SearchFile { scope: None };
+        let dummy = SearchFile::default();
         return Some(dummy.create_scoped(scope));
     }
     if any.downcast_ref::<RunCommand>().is_some() {
-        let dummy = RunCommand {
-            scope: None,
-            timeout_secs: None,
-        };
+        let dummy = RunCommand::default();
         return Some(dummy.create_scoped(scope));
     }
     None
@@ -150,8 +168,8 @@ impl IContextProvider for WorkspaceContextProvider {
         "WorkspaceContextProvider"
     }
 
-    fn kind(&self) -> &str {
-        "workspace"
+    fn kind(&self) -> rust_agent_core::ContextProviderKind {
+        rust_agent_core::ContextProviderKind::Workspace
     }
 
     async fn on_invoking(
