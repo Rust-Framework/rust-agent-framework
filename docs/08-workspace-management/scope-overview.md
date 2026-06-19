@@ -83,6 +83,34 @@ pub enum ScopePolicy {
 | `ApproveOutside` | 直接执行 | 需审批 | 需审批 | 生产环境、需要审计 |
 | `DenyOutside` | 直接执行 | 工具级拒绝 | 工具级拒绝 | 沙箱环境、CI/CD |
 
+### 从配置字符串解析策略
+
+`ScopePolicy::from_config_str` 将 YAML/JSON/TOML 中的策略字符串统一解析为 `ScopePolicy` 枚举值。未知值会回退为 `DenyOutside`（安全优先，fail closed），并记录 `ERROR` 级别日志。
+
+```rust
+/// 从配置字符串解析策略。未知值返回 `DenyOutside`（安全优先）。
+///
+/// 支持的别名：
+///   allow_all / allow / read   → AllowAll
+///   approve_outside / approve / ask  → ApproveOutside
+///   deny_outside / deny / restrict   → DenyOutside
+pub fn from_config_str(s: &str) -> Self {
+    match s {
+        "allow_all" | "allow" | "read" => ScopePolicy::AllowAll,
+        "approve_outside" | "approve" | "ask" => ScopePolicy::ApproveOutside,
+        "deny_outside" | "deny" | "restrict" => ScopePolicy::DenyOutside,
+        _ => ScopePolicy::DenyOutside,
+    }
+}
+```
+
+| 配置字符串 | 别名 | 解析结果 |
+|-----------|------|---------|
+| `"read"` | `"allow"`, `"allow_all"` | `ScopePolicy::AllowAll` |
+| `"approve"` | `"ask"`, `"approve_outside"` | `ScopePolicy::ApproveOutside` |
+| `"deny"` | `"restrict"`, `"deny_outside"` | `ScopePolicy::DenyOutside` |
+| 其他任何值 | — | `ScopePolicy::DenyOutside`（fail closed） |
+
 ### AllowAll
 
 不限制 Agent 的操作范围。工具在工作区内外的操作都直接执行。适用于开发环境和完全受信任的场景。

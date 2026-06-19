@@ -85,14 +85,11 @@ impl IPlanner for ReActPlanner {
 
 /// 规划决策——规划器产出的下一步动作
 ///
-/// 当前为线性决策（继续/终止），未来可扩展为 DAG 节点。
+/// 当前为线性决策（终止/超限），未来可扩展为 DAG 节点。
+/// `Continue` 变体已移除——当前 `FunctionInvokingChatClient` 的
+/// 工具调用循环由 LLM 响应直接驱动，无需规划器介入。
 #[derive(Debug, Clone)]
 pub enum PlannerDecision {
-    /// 继续工具调用循环
-    Continue {
-        /// 本轮要执行的工具调用（由 LLM 决定）
-        _tool_calls: Vec<String>,
-    },
     /// 终止循环，返回最终响应
     Stop,
     /// 达到最大轮次

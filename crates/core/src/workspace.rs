@@ -17,6 +17,22 @@ pub enum ScopePolicy {
     DenyOutside,
 }
 
+impl ScopePolicy {
+    /// 从配置字符串解析策略。未知值返回 `DenyOutside`（安全优先）。
+    ///
+    /// 支持的别名：`allow_all`/`allow`/`read` → AllowAll，
+    /// `approve_outside`/`approve`/`ask` → ApproveOutside，
+    /// `deny_outside`/`deny`/`restrict` → DenyOutside。
+    pub fn from_config_str(s: &str) -> Self {
+        match s {
+            "allow_all" | "allow" | "read" => ScopePolicy::AllowAll,
+            "approve_outside" | "approve" | "ask" => ScopePolicy::ApproveOutside,
+            "deny_outside" | "deny" | "restrict" => ScopePolicy::DenyOutside,
+            _ => ScopePolicy::DenyOutside,
+        }
+    }
+}
+
 /// 工作区范围定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceScope {

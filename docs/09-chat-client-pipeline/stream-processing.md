@@ -248,13 +248,19 @@ pub struct AgentResponseConverter {
     model_id: Option<String>,
     executor_id: String,
     properties: HashMap<String, serde_json::Value>,
-    // 内部状态
-    tool_accumulators: HashMap<String, ToolCallAccumulator>,  // 并行工具调用支持
-    index_to_call_id: HashMap<usize, String>,                // 旧版 ToolCallDelta 索引映射
-    ended_calls: HashSet<String>,
-    args_parsers: HashMap<String, StreamingArgsParser>,       // 实时 JSON 解析
+    // 内部状态（合并后的单一映射）
+    tool_states: HashMap<String, ToolCallState>,   // call_id → 累加器 + 结束标记 + 解析器
+    index_to_call_id: HashMap<usize, String>,       // 旧版 ToolCallDelta 索引映射
     response_id: Option<String>,
     response_model: Option<String>,
+}
+
+/// 每个工具调用的聚合状态。
+#[derive(Default)]
+struct ToolCallState {
+    acc: ToolCallAccumulator,       // 名称 + 参数累积 + start 去重
+    ended: bool,                    // 防止重复 ToolCallEnd
+    parser: StreamingArgsParser,    // 实时 JSON 解析
 }
 
 impl AgentResponseConverter {

@@ -205,6 +205,8 @@ contexts:
 - LLM 看到错误后可调整行为或告知用户
 - **适用场景**：沙箱环境、CI/CD、自动化测试
 
+> **策略解析**：`DeclAgentBuilder` 通过 `ScopePolicy::from_config_str()` 解析 YAML 中的 `policy` 字段。支持的别名见 [8.1 工作区范围](./scope-overview.md#从配置字符串解析策略)。未知值会回退为 `DenyOutside`（安全优先，fail closed），并记录 `ERROR` 级别日志。
+
 ## 与 AgentBuilder 手工构建的对比
 
 | 维度 | AgentBuilder 手工构建 | 声明式配置 |

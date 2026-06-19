@@ -256,6 +256,8 @@ let converted = futures_util::stream::unfold(
 
 **目的**：通知 ContextProvider 调用已完成，持久化消息，更新会话。
 
+> **代码组织**：Phase 3 的核心逻辑已提取为 `ChatClientAgent::spawn_post_invocation_handler()` 方法，将 `run()` 从约 330 行缩减至约 150 行。详见 [ChatClientAgent 文档](./chat-client-agent.md#方法提取spawn_post_invocation_handler)。
+
 ### 3.1 Channel 分叉
 
 Phase 3 通过 `tokio::sync::mpsc::unbounded_channel` 实现非阻塞执行：

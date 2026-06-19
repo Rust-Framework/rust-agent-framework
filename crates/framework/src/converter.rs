@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::collections::HashSet;
 
 use chrono::Utc;
 use rust_agent_core::{
@@ -21,6 +20,24 @@ struct ToolCallAccumulator {
     start_emitted: bool,
 }
 
+/// Per-call state combining accumulator, end tracking, and streaming JSON parser.
+#[derive(Default)]
+struct ToolCallState {
+    acc: ToolCallAccumulator,
+    ended: bool,
+    parser: StreamingArgsParser,
+}
+
+impl std::fmt::Debug for ToolCallState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolCallState")
+            .field("acc", &self.acc)
+            .field("ended", &self.ended)
+            .field("parser", &"<StreamingArgsParser>")
+            .finish()
+    }
+}
+
 /// 将 AgentResponseUpdate（内部 SSE 层）转换为 AgentResponseResult（公共 API）。
 ///
 /// 通过以 call_id（String）而非位置索引为键的累加器，支持并行工具调用。
@@ -31,18 +48,13 @@ pub struct AgentResponseConverter {
     executor_id: String,
     properties: HashMap<String, serde_json::Value>,
     // Internal state
-    /// Active tool call accumulators keyed by call_id (supports parallel calls).
-    tool_accumulators: HashMap<String, ToolCallAccumulator>,
+    /// Active tool call states keyed by call_id (supports parallel calls).
+    /// Combines accumulator, end tracking, and streaming JSON parser in one map.
+    tool_states: HashMap<String, ToolCallState>,
     /// Maps tool call index → real call_id. Resolves id=None in subsequent
     /// ToolCallDelta events: after the first delta establishes the call ID,
     /// later deltas with id=None are routed to the correct accumulator.
     index_to_call_id: HashMap<usize, String>,
-    /// Set of call_ids that have received ToolCallEnd — prevents duplicate End emission.
-    ended_calls: HashSet<String>,
-    /// Per-call streaming JSON parsers for incremental argument parsing.
-    /// When ToolCallArgs deltas arrive, they are fed into the parser which
-    /// emits ToolCallArgsParsed / ToolCallArgsProgress content in real time.
-    args_parsers: HashMap<String, StreamingArgsParser>,
     response_id: Option<String>,
     response_model: Option<String>,
 }
@@ -54,10 +66,8 @@ impl AgentResponseConverter {
             model_id: None,
             executor_id,
             properties: options.properties.clone(),
-            tool_accumulators: HashMap::new(),
+            tool_states: HashMap::new(),
             index_to_call_id: HashMap::new(),
-            ended_calls: HashSet::new(),
-            args_parsers: HashMap::new(),
             response_id: None,
             response_model: None,
         }
@@ -105,9 +115,9 @@ impl AgentResponseConverter {
 
             // ── New explicit lifecycle events (preferred transport format) ──
             AgentResponseUpdate::ToolCallStart { id, name } => {
-                let acc = self.tool_accumulators.entry(id.clone()).or_default();
-                acc.name = Some(name.clone());
-                acc.start_emitted = true;
+                let state = self.tool_states.entry(id.clone()).or_default();
+                state.acc.name = Some(name.clone());
+                state.acc.start_emitted = true;
 
                 contents.push(Content::ToolCallStart(ToolCallStartContent {
                     meta: self.build_meta(),
@@ -123,21 +133,21 @@ impl AgentResponseConverter {
                     };
                 }
 
-                let acc = self.tool_accumulators.entry(id.clone()).or_default();
+                let meta = self.build_meta();
+                let state = self.tool_states.entry(id.clone()).or_default();
                 // If we haven't seen a ToolCallStart for this call_id yet,
                 // we can't emit args (tool name unknown). Accumulate silently.
-                if acc.name.is_some() {
-                    acc.args.push_str(&args_delta);
+                if state.acc.name.is_some() {
+                    state.acc.args.push_str(&args_delta);
                     contents.push(Content::ToolCallArgs(ToolCallArgsContent {
-                        meta: self.build_meta(),
+                        meta: meta.clone(),
                         call_id: id.clone(),
                         args_delta: args_delta.clone(),
                     }));
 
                     // Feed into streaming JSON parser for incremental arg progress
-                    let parser = self.args_parsers.entry(id.clone()).or_default();
-                    parser.push_bytes(args_delta.as_bytes());
-                    let parse_events = parser.poll(&id);
+                    state.parser.push_bytes(args_delta.as_bytes());
+                    let parse_events = state.parser.poll(&id);
                     for ev in parse_events {
                         match ev {
                             ArgsEvent::Parsed {
@@ -147,7 +157,7 @@ impl AgentResponseConverter {
                             } => {
                                 contents.push(Content::ToolCallArgsParsed(
                                     ToolCallArgsParsedContent {
-                                        meta: self.build_meta(),
+                                        meta: meta.clone(),
                                         call_id,
                                         name,
                                         value,
@@ -162,7 +172,7 @@ impl AgentResponseConverter {
                             } => {
                                 contents.push(Content::ToolCallArgsProgress(
                                     ToolCallArgsProgressContent {
-                                        meta: self.build_meta(),
+                                        meta: meta.clone(),
                                         call_id,
                                         name,
                                         received,
@@ -174,24 +184,21 @@ impl AgentResponseConverter {
                     }
                 } else {
                     // Accumulate args even without a name (may get name later via legacy delta).
-                    acc.args.push_str(&args_delta);
+                    state.acc.args.push_str(&args_delta);
                 }
             }
             AgentResponseUpdate::ToolCallEnd { id } => {
-                if self.ended_calls.contains(&id) {
+                let state = self.tool_states.entry(id.clone()).or_default();
+                if state.ended {
                     // Duplicate end — ignore
                     return ConvertOutput {
                         contents,
                         events,
                     };
                 }
-                self.ended_calls.insert(id.clone());
+                state.ended = true;
 
-                let emit_end = {
-                    let acc = self.tool_accumulators.get(&id);
-                    // Only emit End if we previously emitted a Start
-                    acc.map(|a| a.start_emitted).unwrap_or(false)
-                };
+                let emit_end = state.acc.start_emitted;
 
                 if emit_end {
                     contents.push(Content::ToolCallEnd(ToolCallEndContent {
@@ -222,17 +229,17 @@ impl AgentResponseConverter {
                     self.index_to_call_id.insert(index, real_id.clone());
                 }
 
-                // Pre-compute meta to avoid borrow conflict with tool_accumulators entry
+                // Pre-compute meta to avoid borrow conflict with tool_states entry
                 let meta = self.build_meta();
 
-                let acc = self.tool_accumulators.entry(call_id.clone()).or_default();
+                let state = self.tool_states.entry(call_id.clone()).or_default();
 
                 // Emit ToolCallStart if this is the first time we see this call and
                 // we have a name (or this is the first delta with a name).
                 if let Some(ref new_name) = name {
-                    if !acc.start_emitted {
-                        acc.name = Some(new_name.clone());
-                        acc.start_emitted = true;
+                    if !state.acc.start_emitted {
+                        state.acc.name = Some(new_name.clone());
+                        state.acc.start_emitted = true;
 
                         contents.push(Content::ToolCallStart(ToolCallStartContent {
                             meta: meta.clone(),
@@ -240,10 +247,10 @@ impl AgentResponseConverter {
                             name: new_name.clone(),
                         }));
                     }
-                } else if !acc.start_emitted && acc.name.is_some() {
+                } else if !state.acc.start_emitted && state.acc.name.is_some() {
                     // We already know the name from a previous delta — emit Start now
-                    acc.start_emitted = true;
-                    let acc_name = acc.name.clone().expect("ToolCallDelta acc.name was checked with is_some() above");
+                    state.acc.start_emitted = true;
+                    let acc_name = state.acc.name.clone().expect("ToolCallDelta acc.name was checked with is_some() above");
                     contents.push(Content::ToolCallStart(ToolCallStartContent {
                         meta: meta.clone(),
                         call_id: call_id.clone(),
@@ -252,8 +259,8 @@ impl AgentResponseConverter {
                 }
 
                 // Emit args delta if the tool name is known
-                if !arguments_delta.is_empty() && acc.name.is_some() {
-                    acc.args.push_str(&arguments_delta);
+                if !arguments_delta.is_empty() && state.acc.name.is_some() {
+                    state.acc.args.push_str(&arguments_delta);
                     contents.push(Content::ToolCallArgs(ToolCallArgsContent {
                         meta: meta.clone(),
                         call_id: call_id.clone(),
@@ -261,9 +268,8 @@ impl AgentResponseConverter {
                     }));
 
                     // Feed into streaming JSON parser for incremental arg progress
-                    let parser = self.args_parsers.entry(call_id.clone()).or_default();
-                    parser.push_bytes(arguments_delta.as_bytes());
-                    let parse_events = parser.poll(&call_id);
+                    state.parser.push_bytes(arguments_delta.as_bytes());
+                    let parse_events = state.parser.poll(&call_id);
                     for ev in parse_events {
                         match ev {
                             ArgsEvent::Parsed {
@@ -300,18 +306,16 @@ impl AgentResponseConverter {
                     }
                 } else {
                     // Accumulate silently until we know the name
-                    acc.args.push_str(&arguments_delta);
+                    state.acc.args.push_str(&arguments_delta);
                 }
             }
 
             AgentResponseUpdate::ToolCalled { id, result, error } => {
-                // Clean up accumulators — the tool has been executed and its
-                // result reported.  Removing from the accumulator prevents stale
+                // Clean up state — the tool has been executed and its
+                // result reported.  Removing prevents stale
                 // ToolCallingContent re-emission in finalize() when subsequent
                 // loop iterations end with Finish(Stop).
-                self.tool_accumulators.remove(&id);
-                self.args_parsers.remove(&id);
-                self.ended_calls.remove(&id);
+                self.tool_states.remove(&id);
 
                 contents.push(Content::ToolCalled(ToolCalledContent {
                     meta: self.build_meta(),
@@ -389,14 +393,14 @@ impl AgentResponseConverter {
 
         // Emit ToolCallEnd for any tool calls that were started but not yet ended
         // (covers cases where the stream ends without explicit End events).
-        let call_ids: Vec<String> = self.tool_accumulators.keys().cloned().collect();
+        let call_ids: Vec<String> = self.tool_states.keys().cloned().collect();
         let meta = self.build_meta();
         for call_id in &call_ids {
-            if self.ended_calls.contains(call_id) {
-                continue;
-            }
-            if let Some(acc) = self.tool_accumulators.get(call_id) {
-                if acc.start_emitted && acc.name.is_some() {
+            if let Some(state) = self.tool_states.get(call_id) {
+                if state.ended {
+                    continue;
+                }
+                if state.acc.start_emitted && state.acc.name.is_some() {
                     contents.push(Content::ToolCallEnd(ToolCallEndContent {
                         meta: meta.clone(),
                         call_id: call_id.clone(),
@@ -430,18 +434,18 @@ impl AgentResponseConverter {
     /// Flush all accumulated tool call deltas as complete ToolCallingContent.
     /// This is the final emission when the stream ends with a ToolCalls finish_reason.
     fn flush_tool_calls(&mut self) -> Vec<Content> {
-        let call_ids: Vec<String> = self.tool_accumulators.keys().cloned().collect();
+        let call_ids: Vec<String> = self.tool_states.keys().cloned().collect();
         let mut result = Vec::new();
         let meta = self.build_meta();
         for call_id in call_ids {
-            if let Some(acc) = self.tool_accumulators.remove(&call_id) {
-                if acc.name.is_some() && !acc.args.is_empty() {
-                    let arguments = serde_json::from_str(&acc.args)
-                        .unwrap_or_else(|_| serde_json::Value::String(acc.args.clone()));
+            if let Some(state) = self.tool_states.remove(&call_id) {
+                if state.acc.name.is_some() && !state.acc.args.is_empty() {
+                    let arguments = serde_json::from_str(&state.acc.args)
+                        .unwrap_or_else(|_| serde_json::Value::String(state.acc.args.clone()));
                     result.push(Content::ToolCalling(ToolCallingContent {
                         meta: meta.clone(),
                         call_id,
-                        name: acc.name.expect("flush_tool_calls acc.name checked with is_some() above"),
+                        name: state.acc.name.expect("flush_tool_calls acc.name checked with is_some() above"),
                         arguments,
                     }));
                 }

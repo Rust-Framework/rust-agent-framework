@@ -181,6 +181,29 @@ pub fn build(self) -> Result<Arc<dyn IAgent>> {
 | `converter::AgentResponseConverter` | SSE 增量 → 结构化 Content/Event |
 | `memory::memory_context::build_turn_transcript` | 构建本轮对话完整记录 |
 
+### 方法提取：`spawn_post_invocation_handler`
+
+`run()` 方法原本约 330 行，Phase 3（Post-invocation）的 channel 分叉逻辑已提取为独立方法 `spawn_post_invocation_handler`（位于 `impl ChatClientAgent` 块中）：
+
+```rust
+impl ChatClientAgent {
+    fn spawn_post_invocation_handler(
+        &self,
+        converted: impl Stream<Item = Result<AgentResponseResult>> + Send + 'static,
+        session: Option<Arc<dyn ISession>>,
+        request_messages: Vec<ChatMessage>,
+        caller_messages: Vec<ChatMessage>,
+    ) -> impl Stream<Item = Result<AgentResponseResult>> + Send + 'static
+}
+```
+
+该方法负责：
+1. 通过 `tokio::sync::mpsc::unbounded_channel` 分叉流式响应
+2. 后台收集完整响应后调用所有 `IContextProvider::on_invoked` 钩子
+3. 将 assistant/tool 消息持久化到 session
+
+提取后 `run()` 方法缩减至约 150 行，职责更清晰：Phase 1（预调用）→ Phase 1.5（压缩）→ Phase 2（LLM 调用）→ Phase 3（委托给 `spawn_post_invocation_handler`）。
+
 ## 下一步
 
 理解 `ChatClientAgent` 的结构后，请阅读 **[AgentBuilder 构建器](./agent-builder.md)** 了解流畅构建器模式的完整使用指南。

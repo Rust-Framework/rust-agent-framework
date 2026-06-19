@@ -298,7 +298,7 @@ contexts:
 | config 键 | 类型 | 默认值 | 说明 |
 |-----------|------|--------|------|
 | `root` | string | `"."` | 工作区根目录（绝对路径或当前目录相对的路径） |
-| `policy` | string | `"read"` | 越界策略 |
+| `policy` | string | `"approve"` | 越界策略。未知值回退为 `DenyOutside`（fail closed），并记录 ERROR 日志 |
 
 #### policy 值映射
 

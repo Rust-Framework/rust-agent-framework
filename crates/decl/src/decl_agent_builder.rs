@@ -558,19 +558,14 @@ impl DeclAgentBuilder {
                     .and_then(|v| v.as_str())
                     .unwrap_or("approve");
 
-                let policy = match policy_str {
-                    "allow_all" | "allow" | "read" => ScopePolicy::AllowAll,
-                    "approve_outside" | "approve" | "ask" => ScopePolicy::ApproveOutside,
-                    "deny_outside" | "deny" | "restrict" => ScopePolicy::DenyOutside,
-                    other => {
-                        tracing::error!(
-                            "Unknown workspace policy '{}' for '{}', falling back to DenyOutside (fail closed). \
-                             Valid values: read/allow/allow_all, approve/ask/approve_outside, deny/restrict/deny_outside",
-                            other, ws_name
-                        );
-                        ScopePolicy::DenyOutside
-                    }
-                };
+                let policy = ScopePolicy::from_config_str(policy_str);
+                if policy == ScopePolicy::DenyOutside && policy_str != "deny_outside" && policy_str != "deny" && policy_str != "restrict" {
+                    tracing::error!(
+                        "Unknown workspace policy '{}' for '{}', falling back to DenyOutside (fail closed). \
+                         Valid values: read/allow/allow_all, approve/ask/approve_outside, deny/restrict/deny_outside",
+                        policy_str, ws_name
+                    );
+                }
 
                 let scope = WorkspaceScope::new(root, ws_name.as_str())
                     .with_policy(policy);
@@ -678,22 +673,7 @@ impl DeclAgentBuilder {
         }
     }
 
-    #[allow(dead_code)]
-    fn parse_workspace_policy(_policy_str: &str) -> ScopePolicy {
-        match _policy_str {
-            "allow_all" | "allow" | "read" => ScopePolicy::AllowAll,
-            "approve_outside" | "approve" | "ask" => ScopePolicy::ApproveOutside,
-            "deny_outside" | "deny" | "restrict" => ScopePolicy::DenyOutside,
-            other => {
-                tracing::error!(
-                    "Unknown workspace policy '{}'. Falling back to DenyOutside (fail closed). \
-                     Valid values: read/allow/allow_all, approve/ask/approve_outside, deny/restrict/deny_outside",
-                    other
-                );
-                ScopePolicy::DenyOutside
-            }
-        }
-    }
+    
 
     /// 构建 workspace 提供器并将 IScopeTool 工具路由到 workspace.add_tool_arc()，
     /// 以完成 scope 注入 + 审批包裹两阶段处理。
@@ -718,18 +698,13 @@ impl DeclAgentBuilder {
             .and_then(|v| v.as_str())
             .unwrap_or("approve");
 
-        let policy = match policy_str {
-            "allow_all" | "allow" | "read" => ScopePolicy::AllowAll,
-            "approve_outside" | "approve" | "ask" => ScopePolicy::ApproveOutside,
-            "deny_outside" | "deny" | "restrict" => ScopePolicy::DenyOutside,
-                    other => {
-                        tracing::error!(
-                            "Unknown workspace policy '{}' for '{}', falling back to DenyOutside",
-                            other, ws_name
-                        );
-                        ScopePolicy::DenyOutside
-                    }
-        };
+        let policy = ScopePolicy::from_config_str(policy_str);
+        if policy == ScopePolicy::DenyOutside && policy_str != "deny_outside" && policy_str != "deny" && policy_str != "restrict" {
+            tracing::error!(
+                "Unknown workspace policy '{}' for '{}', falling back to DenyOutside",
+                policy_str, ws_name
+            );
+        }
 
         let scope = WorkspaceScope::new(root, ws_name.as_str()).with_policy(policy);
         let mut provider =

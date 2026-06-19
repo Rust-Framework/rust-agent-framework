@@ -77,13 +77,17 @@ pub trait ISession: Send + Sync {
     fn get_last_request_hash(&self) -> Option<u64> { None }
 
     /// 获取会话创建时间戳
+    ///
+    /// 默认返回 `DateTime::UNIX_EPOCH`（哨兵值）。实现者应覆写以返回实际时间。
     fn created_at(&self) -> DateTime<Utc> {
-        Utc::now() // 默认回退
+        DateTime::UNIX_EPOCH
     }
 
     /// 获取最后活动时间戳
+    ///
+    /// 默认返回 `DateTime::UNIX_EPOCH`（哨兵值）。实现者应覆写以返回实际时间。
     fn last_active_at(&self) -> DateTime<Utc> {
-        Utc::now() // 默认回退
+        DateTime::UNIX_EPOCH
     }
 
     /// 更新最后活动时间戳

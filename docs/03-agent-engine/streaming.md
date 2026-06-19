@@ -68,21 +68,29 @@ pub struct AgentResponseConverter {
     executor_id: String,
     properties: HashMap<String, serde_json::Value>,
 
-    // 并行工具调用状态管理
-    tool_accumulators: HashMap<String, ToolCallAccumulator>,  // call_id → 累加器
-    index_to_call_id: HashMap<usize, String>,                 // 旧版 delta 的索引映射
-    ended_calls: HashSet<String>,                             // 已结束的调用
-    args_parsers: HashMap<String, StreamingArgsParser>,       // 实时 JSON 解析器
+    // 并行工具调用状态管理（合并为单一映射）
+    tool_states: HashMap<String, ToolCallState>,  // call_id → 累加器 + 结束标记 + 实时解析器
+    index_to_call_id: HashMap<usize, String>,      // 旧版 delta 的索引映射
 
     response_id: Option<String>,
     response_model: Option<String>,
 }
 
+/// 每个工具调用的完整状态，将累加器、结束追踪和流式 JSON 解析器合并在一起。
+/// 相比旧版使用 4 个独立 HashMap（tool_accumulators、ended_calls、args_parsers、
+/// index_to_call_id），合并后减少了状态管理复杂度。
 #[derive(Debug, Default)]
 struct ToolCallAccumulator {
     name: Option<String>,
     args: String,              // 累积的 JSON 参数字符串
     start_emitted: bool,       // 防止重复发出 ToolCallStart
+}
+
+#[derive(Default)]
+struct ToolCallState {
+    acc: ToolCallAccumulator,
+    ended: bool,               // 调用是否已结束（防止重复 ToolCallEnd）
+    parser: StreamingArgsParser, // 实时 JSON 解析器
 }
 ```
 

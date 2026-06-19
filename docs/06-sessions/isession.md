@@ -46,8 +46,8 @@ pub trait ISession: Send + Sync {
     fn get_last_request_hash(&self) -> Option<u64> { None }
 
     // ── TTL 支持 ──
-    fn created_at(&self) -> DateTime<Utc> { Utc::now() }
-    fn last_active_at(&self) -> DateTime<Utc> { Utc::now() }
+    fn created_at(&self) -> DateTime<Utc> { DateTime::UNIX_EPOCH }
+    fn last_active_at(&self) -> DateTime<Utc> { DateTime::UNIX_EPOCH }
     async fn touch_last_active(&self) {}
 }
 ```
@@ -103,11 +103,11 @@ pub trait ISession: Send + Sync {
 
 | 方法 | 说明 |
 |------|------|
-| `created_at()` | 会话创建时间戳，默认返回当前时间 |
-| `last_active_at()` | 最后活动时间戳，默认返回当前时间 |
+| `created_at()` | 会话创建时间戳。默认返回 `DateTime::UNIX_EPOCH`（哨兵值），实现者**必须覆写**以返回实际时间，否则 TTL 清理将无法正确判断会话是否过期 |
+| `last_active_at()` | 最后活动时间戳。默认返回 `DateTime::UNIX_EPOCH`（哨兵值），实现者**必须覆写**以返回实际时间 |
 | `touch_last_active()` | 更新最后活动时间戳为当前时间 |
 
-这些方法用于 `SessionTTLOptions` 驱动的过期清理——会话存储的 `cleanup_expired()` 方法依赖它们判断会话是否过期。
+> **设计说明**：默认实现返回 `DateTime::UNIX_EPOCH` 而非 `Utc::now()`。`Utc::now()` 作为默认值会导致未覆写 `created_at` / `last_active_at` 的实现者每次调用都返回不同的时间戳，造成 TTL 计算错误（新会话被误判为刚创建，过期会话被误判为活跃）。哨兵值使问题显式化——如果 TTL 清理发现所有会话的创建时间都是 1970-01-01，说明具体实现未正确覆写这两个方法。
 
 ## SessionMetadata
 
