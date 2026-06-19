@@ -17,13 +17,13 @@ use crate::config::HostConfig;
 pub struct DeclLoader<'a> {
     /// Directory containing agent declaration files.
     agents_dir: &'a str,
-    /// Host configuration (for provider fallback).
-    config: &'a HostConfig,
+    /// Host configuration (reserved for future use).
+    _config: &'a HostConfig,
 }
 
 impl<'a> DeclLoader<'a> {
     pub fn new(agents_dir: &'a str, config: &'a HostConfig) -> Self {
-        Self { agents_dir, config }
+        Self { agents_dir, _config: config }
     }
 
     /// Load all agent declarations from the directory.
@@ -67,5 +67,4 @@ impl<'a> DeclLoader<'a> {
 
         Ok(agents)
     }
-
-    /// }
+}

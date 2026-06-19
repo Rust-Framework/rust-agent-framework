@@ -84,6 +84,7 @@ pub use actions::{
 };
 
 // ── Resolver ──
+#[allow(deprecated)]
 pub use resolver::{
     AgentResolver, McpRequestExecutor, ToolResolver, WorkflowResolver,
     quick_agent, quick_workflow, ToolFactoryFn,

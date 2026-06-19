@@ -3,8 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextResult, IAgent, IContextProvider,
-    ISession, ITool, Result,
+    IContextProvider, ITool, Result,
 };
 
 use super::agent_skill::AgentSkill;
@@ -154,34 +153,19 @@ impl IContextProvider for AgentSkillsProvider {
         "AgentSkillsProvider"
     }
 
-    fn kind(&self) -> rust_agent_core::ContextProviderKind {
-        rust_agent_core::ContextProviderKind::Skills
+    fn kind(&self) -> &str {
+        "skills"
     }
 
-    async fn on_invoking(
-        &self,
-        _agent: &dyn IAgent,
-        _session: &dyn ISession,
-        _messages: &[ChatMessage],
-        _options: &AgentRunOptions,
-    ) -> Result<ContextResult> {
-        Ok(ContextResult {
-            instructions: Some(self.build_advertise()),
-            tools: self.build_tools(),
-            ..Default::default()
-        })
+    async fn enrich_instructions(&self, _ctx: &rust_agent_core::ProviderContext<'_>) -> Result<Option<String>> {
+        Ok(Some(self.build_advertise()))
     }
 
-    async fn on_invoked(
-        &self,
-        _agent: &dyn IAgent,
-        _session: &dyn ISession,
-        _request_messages: &[ChatMessage],
-        _response: Option<&AgentResponse>,
-        _error: Option<&rust_agent_core::AgentError>,
-    ) -> Result<()> {
-        Ok(())
+    async fn enrich_tools(&self, _ctx: &rust_agent_core::ProviderContext<'_>) -> Result<Vec<Arc<dyn ITool>>> {
+        Ok(self.build_tools())
     }
+
+    // on_invoked 不再覆写——使用默认空实现
 }
 
 // ── Tests ──

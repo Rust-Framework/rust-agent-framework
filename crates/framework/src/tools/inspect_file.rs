@@ -28,7 +28,8 @@ fn format_system_time(t: Option<std::time::SystemTime>) -> String {
 
 #[tool(
     description = "返回文件或目录的元数据：类型、字节大小、修改时间、权限。",
-    kind = "file"
+    kind = "file",
+    scope_tool = true
 )]
 impl InspectFile {
     async fn call(

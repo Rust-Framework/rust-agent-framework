@@ -147,6 +147,12 @@ pub struct FetchConfig {
     /// 用于指定特定网站的内容区域。例如：
     /// `{"example.com": "#article-body", "blog.example.com": ".post"}`.
     pub domain_selectors: Option<HashMap<String, String>>,
+    /// 是否使用 servo-fetch（JS 渲染）进行抓取（默认：true）。
+    ///
+    /// 设为 false 时跳过 servo-fetch，直接使用 reqwest + scraper 抓取。
+    /// 适用于 servo-fetch worker 二进制不可用或目标站点已知会触发
+    /// Servo 栈溢出崩溃的场景。
+    pub use_servo: bool,
 }
 
 impl Default for FetchConfig {
@@ -162,6 +168,7 @@ impl Default for FetchConfig {
             fallback_enabled: true,
             quality_threshold: 0.4,
             domain_selectors: None,
+            use_servo: true,
         }
     }
 }

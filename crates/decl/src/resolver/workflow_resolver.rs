@@ -3,6 +3,7 @@ use rust_agent_workflow::graph::WorkflowGraph;
 use crate::compiler::compile_workflow;
 use crate::definition::{AgentDefinition, AgentKindData};
 use crate::error::DeclError;
+#[allow(deprecated)]
 use crate::resolver::agent_resolver::AgentResolver;
 use crate::workflow_decl::WorkflowAgentData;
 
@@ -19,12 +20,14 @@ use crate::workflow_decl::WorkflowAgentData;
 /// - 终端与对话：EndWorkflow / EndConversation / CreateConversation / AddConversationMessage
 ///
 /// 编译架构：ActionDecl → CompileNode(IR) → WorkflowGraph
+#[allow(deprecated)]
 pub struct WorkflowResolver<'a> {
     agent_resolver: &'a mut AgentResolver,
 }
 
 impl<'a> WorkflowResolver<'a> {
     /// 使用给定的 Agent 解析器创建新的工作流解析器。
+    #[allow(deprecated)]
     pub fn new(agent_resolver: &'a mut AgentResolver) -> Self {
         Self { agent_resolver }
     }
@@ -38,6 +41,7 @@ impl<'a> WorkflowResolver<'a> {
 }
 
 /// 将工作流 Agent 定义解析为图。
+#[allow(deprecated)]
 pub async fn resolve_workflow(def: &AgentDefinition) -> crate::Result<WorkflowGraph> {
     match &def.kind_data {
         AgentKindData::Workflow(data) => {

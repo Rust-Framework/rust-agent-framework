@@ -3,8 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextResult, IAgent, IContextProvider,
-    IChatClient, ISession, ITool, Result,
+    IAgent, IContextProvider, IChatClient, ITool, Result,
 };
 
 use crate::context_providers::agent_skill::AgentSkill;
@@ -105,35 +104,26 @@ impl IContextProvider for SkillMemoryContextProvider {
         "SkillMemoryContextProvider"
     }
 
-    fn kind(&self) -> rust_agent_core::ContextProviderKind {
-        rust_agent_core::ContextProviderKind::Memory
+    fn kind(&self) -> &str {
+        "memory"
     }
 
-    async fn on_invoking(
-        &self,
-        _agent: &dyn IAgent,
-        _session: &dyn ISession,
-        _messages: &[ChatMessage],
-        _options: &AgentRunOptions,
-    ) -> Result<ContextResult> {
-        Ok(ContextResult {
-            instructions: Some(self.build_advertise()),
-            tools: self.build_tools(),
-            ..Default::default()
-        })
+    async fn enrich_instructions(&self, _ctx: &rust_agent_core::ProviderContext<'_>) -> Result<Option<String>> {
+        Ok(Some(self.build_advertise()))
     }
 
-    async fn on_invoked(
-        &self,
-        agent: &dyn IAgent,
-        session: &dyn ISession,
-        _request_messages: &[ChatMessage],
-        response: Option<&AgentResponse>,
-        _error: Option<&rust_agent_core::AgentError>,
-    ) -> Result<()> {
+    async fn enrich_tools(&self, _ctx: &rust_agent_core::ProviderContext<'_>) -> Result<Vec<Arc<dyn ITool>>> {
+        Ok(self.build_tools())
+    }
+
+    async fn on_invoked(&self, ctx: &rust_agent_core::InvokedContext<'_>) -> Result<()> {
         if !self.enabled {
             return Ok(());
         }
+
+        let agent = ctx.agent;
+        let session = ctx.session;
+        let response = ctx.response;
 
         let client = match self.resolve_client(agent) {
             Some(c) => c,

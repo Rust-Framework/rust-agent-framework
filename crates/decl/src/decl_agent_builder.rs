@@ -415,7 +415,7 @@ impl DeclAgentBuilder {
         //     确保所有 Agent 都有默认的会话历史管理。
         let has_history = all_context_providers
             .iter()
-            .any(|p| p.kind() == rust_agent_core::ContextProviderKind::History);
+            .any(|p| p.kind() == "history");
         if !has_history {
             use rust_agent_framework::InMemoryHistoryProvider;
             all_context_providers
@@ -766,26 +766,12 @@ impl Default for DeclAgentBuilder {
 /// IScopeTool 的工具应通过 `WorkspaceContextProvider::add_tool_arc()` 注册，
 /// 以获取 scope 注入和审批包裹。其余工具直接注册到 AgentBuilder。
 fn partition_scope_tools(tools: Vec<Arc<dyn ITool>>) -> (Vec<Arc<dyn ITool>>, Vec<Arc<dyn ITool>>) {
-    use rust_agent_core::AsAny;
-
     let mut scope_tools = Vec::new();
     let mut other_tools = Vec::new();
 
     for tool in tools {
-        let any = tool.as_any();
-        // 与 WorkspaceContextProvider::try_inject_scope() 保持同步
-        if any.downcast_ref::<rust_agent_framework::tools::ReadFile>().is_some()
-            || any.downcast_ref::<rust_agent_framework::tools::WriteFile>().is_some()
-            || any.downcast_ref::<rust_agent_framework::tools::EditFile>().is_some()
-            || any.downcast_ref::<rust_agent_framework::tools::ListFiles>().is_some()
-            || any.downcast_ref::<rust_agent_framework::tools::InspectFile>().is_some()
-            || any.downcast_ref::<rust_agent_framework::tools::MakeDirectory>().is_some()
-            || any.downcast_ref::<rust_agent_framework::tools::RemovePath>().is_some()
-            || any.downcast_ref::<rust_agent_framework::tools::MoveFile>().is_some()
-            || any.downcast_ref::<rust_agent_framework::tools::FindFiles>().is_some()
-            || any.downcast_ref::<rust_agent_framework::tools::SearchFile>().is_some()
-            || any.downcast_ref::<rust_agent_framework::tools::RunCommand>().is_some()
-        {
+        // 统一检测机制——通过 ITool::as_scope_tool() 检测，无需硬编码类型列表
+        if tool.as_scope_tool().is_some() {
             scope_tools.push(tool);
         } else {
             other_tools.push(tool);
@@ -798,31 +784,10 @@ fn partition_scope_tools(tools: Vec<Arc<dyn ITool>>) -> (Vec<Arc<dyn ITool>>, Ve
 // ── 验证 ──
 
 /// 配置验证报告。
-#[derive(Debug, Clone, Default)]
-pub struct ValidationReport {
-    /// 致命错误（Agent 无法运行）。
-    pub errors: Vec<String>,
-    /// 警告（可运行但可能不符合预期）。
-    pub warnings: Vec<String>,
-    /// 已成功解析的工具列表。
-    pub resolved_tools: Vec<String>,
-    /// 已成功构造的上下文提供器列表。
-    pub resolved_providers: Vec<String>,
-    /// 解析出的模型 ID。
-    pub resolved_model: Option<String>,
-}
-
-impl ValidationReport {
-    /// 配置是否有效（无致命错误）。
-    pub fn is_valid(&self) -> bool {
-        self.errors.is_empty()
-    }
-
-    /// 是否有任何问题。
-    pub fn has_issues(&self) -> bool {
-        !self.errors.is_empty() || !self.warnings.is_empty()
-    }
-}
+///
+/// Re-export 自 `rust_agent_framework`，统一 AgentBuilder 和 DeclAgentBuilder
+/// 的验证报告类型，消除重复定义。
+pub use rust_agent_framework::ValidationReport;
 
 /// 已知的内置工具名称列表（用于模糊匹配提示）。
 const KNOWN_TOOL_NAMES: &[&str] = &[

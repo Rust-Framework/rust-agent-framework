@@ -10,6 +10,36 @@ use crate::ChatClientAgent;
 use crate::chat_client_decorators::FunctionInvokingChatClient;
 use crate::context_providers::history_provider::InMemoryHistoryProvider;
 
+/// AgentBuilder 配置验证报告。
+///
+/// 对标 MAF 的构建时验证机制。在调用 `build()` 前可通过 `validate()`
+/// 提前发现所有可静态检测的配置错误，避免错误推迟到运行时。
+#[derive(Debug, Clone, Default)]
+pub struct ValidationReport {
+    /// 致命错误（Agent 无法运行）。
+    pub errors: Vec<String>,
+    /// 警告（可运行但可能不符合预期）。
+    pub warnings: Vec<String>,
+    /// 已注册的工具名称列表。
+    pub resolved_tools: Vec<String>,
+    /// 已注册的上下文提供器名称列表。
+    pub resolved_providers: Vec<String>,
+    /// 解析出的模型 ID（声明式构建器填充）。
+    pub resolved_model: Option<String>,
+}
+
+impl ValidationReport {
+    /// 配置是否有效（无致命错误）。
+    pub fn is_valid(&self) -> bool {
+        self.errors.is_empty()
+    }
+
+    /// 是否有任何问题。
+    pub fn has_issues(&self) -> bool {
+        !self.errors.is_empty() || !self.warnings.is_empty()
+    }
+}
+
 /// 以流畅的构建器模式创建 Agent，提供合理的默认值。
 ///
 /// ## 内置上下文提供器
@@ -50,6 +80,7 @@ pub struct AgentBuilder<C> {
     properties: HashMap<String, serde_json::Value>,
     description: String,
     max_tool_rounds: usize,
+    planner: Option<Arc<dyn crate::planner::IPlanner>>,
     compression_strategy: Option<Arc<dyn ICompressionStrategy>>,
     token_counter: Option<Arc<dyn ITokenCounter>>,
 }
@@ -70,6 +101,7 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
             properties: HashMap::new(),
             description: String::new(),
             max_tool_rounds: 10,
+            planner: None,
             compression_strategy: None,
             token_counter: None,
         }
@@ -113,6 +145,17 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
     /// 设置最大工具调用轮数
     pub fn max_tool_rounds(mut self, rounds: usize) -> Self {
         self.max_tool_rounds = rounds;
+        self
+    }
+
+    /// 注入规划策略
+    ///
+    /// 对标 MAF 的 `FunctionCallingStepwisePlanner` / `SequentialPlanner`。
+    /// 注入后，planner 的 `max_rounds` 将覆盖 `max_tool_rounds`。
+    /// 未注入时使用默认的 `ReActPlanner` 行为。
+    pub fn planner(mut self, planner: Arc<dyn crate::planner::IPlanner>) -> Self {
+        self.max_tool_rounds = planner.max_rounds();
+        self.planner = Some(planner);
         self
     }
 
@@ -176,11 +219,65 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         self
     }
 
+    /// 验证配置的完整性和正确性，不启动 LLM。
+    ///
+    /// 返回 `ValidationReport`，包含错误、警告、已注册的工具和提供器列表。
+    /// 建议在 `build()` 前调用以提前发现配置错误。
+    pub fn validate(&self) -> ValidationReport {
+        let mut report = ValidationReport::default();
+
+        // 验证 chat_client
+        if self.chat_client.is_none() {
+            report.errors.push("chat_client is required but not set".into());
+        }
+
+        // 验证 agent_id
+        if self.agent_id.trim().is_empty() {
+            report.errors.push("agent_id is required but empty".into());
+        }
+
+        // 验证 max_tool_rounds
+        if self.max_tool_rounds == 0 {
+            report.warnings.push(
+                "max_tool_rounds is 0; tools will never be invoked".into(),
+            );
+        }
+
+        // 验证工具名称唯一性（检测潜在冲突）
+        let mut seen_names = std::collections::HashSet::new();
+        for tool in &self.tools {
+            let name = tool.name();
+            if !seen_names.insert(name.to_string()) {
+                report.warnings.push(format!(
+                    "Duplicate tool name '{}' detected; registration will fail in build()",
+                    name
+                ));
+            }
+            report.resolved_tools.push(name.to_string());
+        }
+
+        // 记录已注册的上下文提供器
+        for provider in &self.context_providers {
+            report.resolved_providers.push(provider.name().to_string());
+        }
+
+        report
+    }
+
     /// 构建 Agent，采用 ChatClient 管道模式
     ///
     /// 注册工具时，IChatClient 会被包裹在 `FunctionInvokingChatClient`
     /// 装饰器中（MAF 管道模式）。
     pub fn build(self) -> Result<Arc<dyn IAgent>> {
+        // 构建前验证配置——任何编译期可检测的错误不应推迟到运行时
+        let report = self.validate();
+        if !report.is_valid() {
+            return Err(rust_agent_core::AgentError::ConfigError(format!(
+                "Validation failed: {}",
+                report.errors.join("; ")
+            )));
+        }
+
         let chat_client = self.chat_client.ok_or_else(|| {
             rust_agent_core::AgentError::ConfigError("chat_client is required".into())
         })?;
@@ -190,13 +287,16 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         let pipeline_client = if !self.tools.is_empty() {
             let tools = self.tools.clone();
             let max_rounds = self.max_tool_rounds;
+            let planner = self.planner.clone();
             ChatClientBuilder::new()
                 .leaf(leaf)
                 .use_decorator(Box::new(move |inner| {
-                    Arc::new(
-                        FunctionInvokingChatClient::new(inner, tools.clone())
-                            .with_max_rounds(max_rounds),
-                    )
+                    let mut fic = FunctionInvokingChatClient::new(inner, tools.clone())
+                        .with_max_rounds(max_rounds);
+                    if let Some(p) = &planner {
+                        fic = fic.with_planner(p.clone());
+                    }
+                    Arc::new(fic)
                 }))
                 .build()?
         } else {
@@ -221,7 +321,9 @@ impl<C: IChatClient + 'static> AgentBuilder<C> {
         if !self.tools.is_empty() {
             let mut registry = ToolRegistry::new();
             for t in &self.tools {
-                registry.register_arc(Arc::clone(t));
+                registry
+                    .register_arc(Arc::clone(t))
+                    .map_err(|e| rust_agent_core::AgentError::ConfigError(e.to_string()))?;
             }
             agent = agent.with_tools(registry);
         }

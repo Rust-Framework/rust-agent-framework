@@ -23,7 +23,8 @@ impl IScopeTool for ReadFile {
 
 #[tool(
     description = "读取本地文件系统中的文件内容，支持通过 offset/limit 指定行范围。",
-    kind = "file"
+    kind = "file",
+    scope_tool = true
 )]
 impl ReadFile {
     async fn call(

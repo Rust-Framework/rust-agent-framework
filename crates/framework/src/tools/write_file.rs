@@ -22,7 +22,8 @@ impl IScopeTool for WriteFile {
 
 #[tool(
     description = "创建新文件或覆盖已有文件写入指定内容。",
-    kind = "file"
+    kind = "file",
+    scope_tool = true
 )]
 impl WriteFile {
     async fn call(

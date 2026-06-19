@@ -62,6 +62,12 @@ impl WorkspaceScope {
 ///
 /// 实现此 trait 的工具由 `WorkspaceContextProvider` 在 `add_tool()` 时
 /// 自动注入 `WorkspaceScope`，无需工具构造函数传参。
+///
+/// # 自动检测
+///
+/// 实现此 trait 的工具应同时覆写 `ITool::as_scope_tool()` 返回 `Some(self)`，
+/// 使 `WorkspaceContextProvider` 能统一检测 scope-aware 工具，无需维护
+/// 硬编码的类型列表。`#[scope_tool]` 宏（待实现）将自动完成此覆写。
 pub trait IScopeTool: ITool {
     /// 使用指定工作区范围创建工具的新实例。
     ///

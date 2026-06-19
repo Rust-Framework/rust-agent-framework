@@ -20,7 +20,8 @@ impl IScopeTool for ListFiles {
 
 #[tool(
     description = "列出指定路径下的文件和目录。返回每个条目的名称、类型（file/dir/symlink）和大小。",
-    kind = "file"
+    kind = "file",
+    scope_tool = true
 )]
 impl ListFiles {
     async fn call(

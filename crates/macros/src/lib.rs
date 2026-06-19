@@ -46,21 +46,21 @@ use syn::parse::Parser;
 /// 可通过 `kind = "..."` 指定分类（`"web"`/`"file"`/`"shell"`/`"skills"`/`"function"`...），默认 `"function"`。
 #[proc_macro_attribute]
 pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let (description, kind) = parse_attr(attr);
+    let (description, kind, scope_tool) = parse_attr(attr);
 
     // 1. Standalone async fn (external crates like websearch-ai)
     if let Ok(func) = syn::parse::<syn::ItemFn>(item.clone()) {
-        return expand_tool_fn(&description, &kind, func);
+        return expand_tool_fn(&description, &kind, scope_tool, func);
     }
 
     // 2. Impl block with typed call method (recommended pattern for stateful tools)
     if let Ok(impl_block) = syn::parse::<syn::ItemImpl>(item.clone()) {
-        return expand_tool_impl(&description, &kind, impl_block);
+        return expand_tool_impl(&description, &kind, scope_tool, impl_block);
     }
 
     // 3. Struct (backward-compatible, parameters() returns empty schema)
     if let Ok(input) = syn::parse::<DeriveInput>(item.clone()) {
-        return expand_tool_struct(&description, &kind, input);
+        return expand_tool_struct(&description, &kind, scope_tool, input);
     }
 
     syn::Error::new(
@@ -71,14 +71,18 @@ pub fn tool(attr: TokenStream, item: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Parse `description = "..."` and `kind = "..."` from the attribute token stream.
-fn parse_attr(attr: TokenStream) -> (String, String) {
+/// Parse `description = "..."`, `kind = "..."`, and `scope_tool = true/false` from the attribute token stream.
+///
+/// `kind` 为开放字符串——不做封闭枚举校验，插件可自定义任意分类值。
+/// 仅校验非空。对标开闭原则（OCP）：新增分类无需修改框架。
+fn parse_attr(attr: TokenStream) -> (String, String, bool) {
     let mut description = String::new();
     let mut kind = String::new();
+    let mut scope_tool = false;
 
     let attr_str = attr.to_string().trim().to_string();
     if attr_str.is_empty() {
-        return (description, "function".to_string());
+        return (description, "function".to_string(), false);
     }
 
     // Strip outer parens if present
@@ -101,7 +105,16 @@ fn parse_attr(attr: TokenStream) -> (String, String) {
                 }
             } else if nv.path.is_ident("kind") {
                 if let Expr::Lit(ExprLit { lit: Lit::Str(s), .. }) = nv.value {
-                    kind = s.value().to_lowercase();
+                    let raw = s.value();
+                    // 开放分类：仅校验非空，不做枚举约束
+                    if raw.trim().is_empty() {
+                        panic!("tool kind cannot be empty string");
+                    }
+                    kind = raw;
+                }
+            } else if nv.path.is_ident("scope_tool") {
+                if let Expr::Lit(ExprLit { lit: Lit::Bool(b), .. }) = nv.value {
+                    scope_tool = b.value;
                 }
             }
         }
@@ -111,10 +124,10 @@ fn parse_attr(attr: TokenStream) -> (String, String) {
         kind = "function".to_string();
     }
 
-    (description, kind)
+    (description, kind, scope_tool)
 }
 
-fn expand_tool_fn(description: &str, kind: &str, func: syn::ItemFn) -> TokenStream {
+fn expand_tool_fn(description: &str, kind: &str, scope_tool: bool, func: syn::ItemFn) -> TokenStream {
     let func_name = &func.sig.ident;
     let func_name_str = func_name.to_string();
     let struct_name_str = to_pascal_case(&func_name_str);
@@ -123,6 +136,13 @@ fn expand_tool_fn(description: &str, kind: &str, func: syn::ItemFn) -> TokenStre
         &format!("{}Args", struct_name_str),
         func_name.span(),
     );
+
+    // 生成 as_scope_tool() 实现——scope_tool 为 true 时返回 Some(self)
+    let scope_tool_impl = if scope_tool {
+        quote! { Some(self) }
+    } else {
+        quote! { None }
+    };
 
     // Extract parameters
     let mut param_idents: Vec<syn::Ident> = Vec::new();
@@ -200,10 +220,13 @@ fn expand_tool_fn(description: &str, kind: &str, func: syn::ItemFn) -> TokenStre
     let arg_names = &param_idents;
 
     let expanded = quote! {
-        #[derive(::serde::Deserialize)]
+        #[derive(::serde::Deserialize, Clone, Debug)]
         #[allow(non_snake_case)]
-        #[doc(hidden)]
-        struct #args_struct_name {
+        /// 工具参数结构体——由 `#[tool]` 宏自动生成。
+        ///
+        /// 公开 API：可通过 Rust 代码类型安全地构造工具调用，
+        /// 而非仅走 JSON 路径。对标 MAF 的类型化工具契约。
+        pub struct #args_struct_name {
             #(#arg_fields),*
         }
 
@@ -247,8 +270,12 @@ fn expand_tool_fn(description: &str, kind: &str, func: syn::ItemFn) -> TokenStre
                 Ok(self.call(#(args.#arg_names),*).await)
             }
 
-            fn kind(&self) -> rust_agent_core::ToolKind {
-                rust_agent_core::ToolKind::from_macro_literal(#kind)
+            fn kind(&self) -> &str {
+                #kind
+            }
+
+            fn as_scope_tool(&self) -> Option<&dyn rust_agent_core::IScopeTool> {
+                #scope_tool_impl
             }
         }
     };
@@ -256,10 +283,17 @@ fn expand_tool_fn(description: &str, kind: &str, func: syn::ItemFn) -> TokenStre
     expanded.into()
 }
 
-fn expand_tool_struct(description: &str, kind: &str, input: DeriveInput) -> TokenStream {
+fn expand_tool_struct(description: &str, kind: &str, scope_tool: bool, input: DeriveInput) -> TokenStream {
     let name = &input.ident;
     let tool_name = struct_name_to_tool_name(&name.to_string());
     let tool_name_lit = proc_macro2::Literal::string(&tool_name);
+
+    // 生成 as_scope_tool() 实现
+    let scope_tool_impl = if scope_tool {
+        quote! { Some(self) }
+    } else {
+        quote! { None }
+    };
 
     let expanded = quote! {
         #input
@@ -282,8 +316,12 @@ fn expand_tool_struct(description: &str, kind: &str, input: DeriveInput) -> Toke
                 self.call(arguments).await
             }
 
-            fn kind(&self) -> rust_agent_core::ToolKind {
-                rust_agent_core::ToolKind::from_macro_literal(#kind)
+            fn kind(&self) -> &str {
+                #kind
+            }
+
+            fn as_scope_tool(&self) -> Option<&dyn rust_agent_core::IScopeTool> {
+                #scope_tool_impl
             }
         }
     };
@@ -293,7 +331,7 @@ fn expand_tool_struct(description: &str, kind: &str, input: DeriveInput) -> Toke
 
 /// Expand `#[tool]` on an inherent impl block containing a `call` method
 /// with typed parameters and `#[param(desc)]` annotations.
-fn expand_tool_impl(description: &str, kind: &str, item_impl: syn::ItemImpl) -> TokenStream {
+fn expand_tool_impl(description: &str, kind: &str, scope_tool: bool, item_impl: syn::ItemImpl) -> TokenStream {
     // Validate: must be inherent impl (no trait)
     if item_impl.trait_.is_some() {
         return syn::Error::new(
@@ -335,6 +373,14 @@ fn expand_tool_impl(description: &str, kind: &str, item_impl: syn::ItemImpl) -> 
 
     let tool_name = struct_name_to_tool_name(&struct_name.to_string());
     let tool_name_lit = proc_macro2::Literal::string(&tool_name);
+
+    // 生成 as_scope_tool() 实现
+    let scope_tool_impl = if scope_tool {
+        quote! { Some(self) }
+    } else {
+        quote! { None }
+    };
+
     let args_struct_name = syn::Ident::new(
         &format!("{}CallArgs", struct_name),
         struct_name.span(),
@@ -458,10 +504,13 @@ fn expand_tool_impl(description: &str, kind: &str, item_impl: syn::ItemImpl) -> 
         .collect();
 
     let expanded = quote! {
-        #[derive(::serde::Deserialize)]
+        #[derive(::serde::Deserialize, Clone, Debug)]
         #[allow(non_snake_case)]
-        #[doc(hidden)]
-        struct #args_struct_name {
+        /// 工具参数结构体——由 `#[tool]` 宏自动生成。
+        ///
+        /// 公开 API：可通过 Rust 代码类型安全地构造工具调用，
+        /// 而非仅走 JSON 路径。对标 MAF 的类型化工具契约。
+        pub struct #args_struct_name {
             #(#arg_fields),*
         }
 
@@ -499,8 +548,12 @@ fn expand_tool_impl(description: &str, kind: &str, item_impl: syn::ItemImpl) -> 
                 self.call(#(args.#arg_names),*).await
             }
 
-            fn kind(&self) -> rust_agent_core::ToolKind {
-                rust_agent_core::ToolKind::from_macro_literal(#kind)
+            fn kind(&self) -> &str {
+                #kind
+            }
+
+            fn as_scope_tool(&self) -> Option<&dyn rust_agent_core::IScopeTool> {
+                #scope_tool_impl
             }
         }
 

@@ -22,7 +22,8 @@ impl IScopeTool for FindFiles {
 
 #[tool(
     description = "在指定目录下按 glob 模式查找文件。",
-    kind = "file"
+    kind = "file",
+    scope_tool = true
 )]
 impl FindFiles {
     async fn call(

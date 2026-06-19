@@ -3,64 +3,98 @@ use std::sync::Arc;
 
 use crate::{AgentResponse, AgentRunOptions, ChatMessage, IAgent, ISession, ITool, Result};
 
-/// 上下文注入载体 — Provider 在 Pre-invocation 阶段返回的上下文增强内容
+// ── ProviderContext ──────────────────────────────────────────────────────
+
+/// Pre-invocation 上下文——替代长参数列表，对应 MAF 的 FilterContext。
 ///
-/// 对标 MAF 的 `AIContext` 返回类型：
-/// - instructions: 追加到 system prompt 的指令文本
-/// - messages: 注入到消息列表的消息
-/// - tools: 本次调用可用的动态工具
-/// - replace_messages: 若为 true，则**替换**已累积的消息；默认 false（追加）
-#[derive(Default)]
-pub struct ContextResult {
-    pub instructions: Option<String>,
-    pub messages: Vec<ChatMessage>,
-    pub tools: Vec<Arc<dyn ITool>>,
-    pub replace_messages: bool,
+/// 在 `enrich_instructions`/`enrich_messages`/`enrich_tools` 调用时传入，
+/// 提供 Agent、Session、消息和运行选项的只读引用。
+pub struct ProviderContext<'a> {
+    pub agent: &'a dyn IAgent,
+    pub session: &'a dyn ISession,
+    pub messages: &'a [ChatMessage],
+    pub options: &'a AgentRunOptions,
 }
 
-impl std::fmt::Debug for ContextResult {
-    /// 格式化上下文注入内容用于调试输出
+/// Post-invocation 上下文——Agent 调用完成后的后处理上下文。
+pub struct InvokedContext<'a> {
+    pub agent: &'a dyn IAgent,
+    pub session: &'a dyn ISession,
+    pub request_messages: &'a [ChatMessage],
+    pub response: Option<&'a AgentResponse>,
+    pub error: Option<&'a crate::AgentError>,
+}
+
+// ── MessageInjection ─────────────────────────────────────────────────────
+
+/// 消息注入结果——Provider 在 Pre-invocation 阶段返回的消息增强内容。
+///
+/// `replace = true` 时替换已累积的消息（压缩策略用此清空前面累积的消息）；
+/// 默认 `false`（追加）。
+#[derive(Default)]
+pub struct MessageInjection {
+    pub messages: Vec<ChatMessage>,
+    pub replace: bool,
+}
+
+impl std::fmt::Debug for MessageInjection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ContextResult")
-            .field("instructions", &self.instructions)
-            .field("messages", &self.messages)
-            .field("tools", &self.tools.len())
-            .field("replace_messages", &self.replace_messages)
+        f.debug_struct("MessageInjection")
+            .field("messages", &self.messages.len())
+            .field("replace", &self.replace)
             .finish()
     }
 }
 
-/// 上下文提供器 trait — Agent 调用生命周期的核心扩展点
+// ── IContextProvider ─────────────────────────────────────────────────────
+
+/// 上下文提供器 trait — Agent 调用生命周期的核心扩展点。
 ///
-/// 对标 MAF 的 `AIContextProvider` 抽象类。
-/// Provider 可按注册顺序执行，靠后的 Provider 可设置 `replace_messages = true`
-/// 来替换前面 Provider 累积的消息。这天然支持压缩策略（截断/摘要等）。
+/// 对标 MAF 的 `AIContextProvider`，但拆分为 4 个独立关注点：
+/// - `enrich_instructions`：Prompt 注入（对应 MAF 的 `IPromptFilter`）
+/// - `enrich_messages`：消息管理（对应 MAF 的消息过滤）
+/// - `enrich_tools`：动态工具（对应 MAF 的 `IAutoFunctionInvocationFilter`）
+/// - `on_invoked`：后处理钩子（对应 MAF 的 `IFunctionFilter`）
+///
+/// 每个方法有默认空实现，Provider 只需覆写关注的方法。
+/// 这消除了"上帝接口"反模式——`WorkspaceContextProvider` 不再被迫实现空的 `on_invoked`。
 #[async_trait]
 pub trait IContextProvider: Send + Sync {
     /// 提供器唯一标识名。
     fn name(&self) -> &str;
 
-    /// 提供器分类——与 ContextProviderDecl 的 kind 标签对应。
+    /// 提供器分类——开放字符串，由实现者自行定义。
     ///
-    /// 默认返回 `ContextProviderKind::Unknown`，子类可覆写。
-    fn kind(&self) -> crate::ContextProviderKind {
-        crate::ContextProviderKind::Unknown
+    /// 内置约定值：`"memory"`、`"skills"`、`"mcp"`、`"workspace"`、
+    /// `"knowledge"`、`"wiki"`、`"history"`。
+    /// 默认返回 `"unknown"`。
+    fn kind(&self) -> &str {
+        "unknown"
     }
 
-    async fn on_invoking(
-        &self,
-        agent: &dyn IAgent,
-        session: &dyn ISession,
-        messages: &[ChatMessage],
-        options: &AgentRunOptions,
-    ) -> Result<ContextResult>;
+    /// 注入指令文本到 system prompt（对应 MAF 的 `IPromptFilter`）。
+    ///
+    /// 返回 `Some(text)` 追加到 system prompt；`None` 表示不注入。
+    async fn enrich_instructions(&self, _ctx: &ProviderContext<'_>) -> Result<Option<String>> {
+        Ok(None)
+    }
 
-    async fn on_invoked(
-        &self,
-        agent: &dyn IAgent,
-        session: &dyn ISession,
-        request_messages: &[ChatMessage],
-        response: Option<&AgentResponse>,
-        error: Option<&crate::AgentError>,
-    ) -> Result<()>;
+    /// 注入消息到对话历史（对应 MAF 的消息过滤）。
+    ///
+    /// `replace = true` 时替换前面 Provider 累积的消息（压缩策略用此）。
+    async fn enrich_messages(&self, _ctx: &ProviderContext<'_>) -> Result<MessageInjection> {
+        Ok(Default::default())
+    }
+
+    /// 提供动态工具（对应 MAF 的 `IAutoFunctionInvocationFilter`）。
+    async fn enrich_tools(&self, _ctx: &ProviderContext<'_>) -> Result<Vec<Arc<dyn ITool>>> {
+        Ok(vec![])
+    }
+
+    /// 后处理钩子——Agent 调用完成后执行（对应 MAF 的 `IFunctionFilter`）。
+    ///
+    /// 用于记忆持久化、日志审计等。默认空实现——不需要后处理的 Provider 无需覆写。
+    async fn on_invoked(&self, _ctx: &InvokedContext<'_>) -> Result<()> {
+        Ok(())
+    }
 }

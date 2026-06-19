@@ -44,5 +44,13 @@ default = ["rustls-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
 native-tls = ["reqwest/native-tls"]
 
+# ── servo-fetch 子进程 worker 二进制 ──
+# 将 servo-fetch 运行在独立子进程中，隔离 Servo 引擎的栈溢出崩溃
+# （StyleThread stack overflow / STATUS_STACK_OVERFLOW）。
+# 父进程通过 spawn + timeout 调用此 worker，崩溃时自动回退到 scraper。
+[[bin]]
+name = "servo-fetch-worker"
+path = "src/bin/servo_fetch_worker.rs"
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

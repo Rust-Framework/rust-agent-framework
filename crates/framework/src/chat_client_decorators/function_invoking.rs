@@ -30,6 +30,9 @@ pub struct FunctionInvokingChatClient {
     inner: Arc<dyn IChatClient>,
     tools: Vec<Arc<dyn ITool>>,
     max_rounds: usize,
+    /// 规划策略——当前仅用于诊断和未来扩展。
+    /// 工具调用循环逻辑仍由本装饰器的状态机实现（等价于 ReActPlanner）。
+    planner: Option<Arc<dyn crate::planner::IPlanner>>,
 }
 
 impl FunctionInvokingChatClient {
@@ -43,6 +46,7 @@ impl FunctionInvokingChatClient {
             inner,
             tools,
             max_rounds: 10,
+            planner: None,
         }
     }
 
@@ -51,8 +55,26 @@ impl FunctionInvokingChatClient {
         self
     }
 
+    /// 注入规划策略。
+    ///
+    /// 当前实现中，planner 仅用于诊断和 `max_rounds` 来源。
+    /// 未来版本将让 planner 完全接管循环决策逻辑。
+    pub fn with_planner(mut self, planner: Arc<dyn crate::planner::IPlanner>) -> Self {
+        self.max_rounds = planner.max_rounds();
+        self.planner = Some(planner);
+        self
+    }
+
     pub fn tools(&self) -> &[Arc<dyn ITool>] {
         &self.tools
+    }
+
+    /// 当前生效的规划器名称（用于诊断）
+    pub fn planner_name(&self) -> &str {
+        self.planner
+            .as_ref()
+            .map(|p| p.name())
+            .unwrap_or("ReActPlanner(default)")
     }
 }
 

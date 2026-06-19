@@ -76,8 +76,12 @@ impl ITool for RunCommand {
         self.call(arguments).await
     }
 
-    fn kind(&self) -> rust_agent_core::ToolKind {
-        rust_agent_core::ToolKind::Shell
+    fn kind(&self) -> &str {
+        "shell"
+    }
+
+    fn as_scope_tool(&self) -> Option<&dyn rust_agent_core::IScopeTool> {
+        Some(self)
     }
 }
 

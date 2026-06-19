@@ -20,7 +20,8 @@ impl IScopeTool for MakeDirectory {
 
 #[tool(
     description = "创建目录及其所有父目录（类似 mkdir -p）。",
-    kind = "file"
+    kind = "file",
+    scope_tool = true
 )]
 impl MakeDirectory {
     async fn call(

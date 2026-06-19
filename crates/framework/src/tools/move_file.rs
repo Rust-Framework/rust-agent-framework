@@ -20,7 +20,8 @@ impl IScopeTool for MoveFile {
 
 #[tool(
     description = "移动或重命名文件或目录。",
-    kind = "file"
+    kind = "file",
+    scope_tool = true
 )]
 impl MoveFile {
     async fn call(

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::Result;
@@ -93,12 +93,58 @@ pub trait ITool: AsAny + Send + Sync {
         false
     }
 
-    /// 工具分类——与 ToolDecl 的 kind 标签对应。
+    /// 工具分类——开放字符串，由实现者自行定义。
     ///
-    /// 默认返回 `ToolKind::Unknown`，内置工具和宏生成的结构体应覆写此方法。
-    fn kind(&self) -> crate::ToolKind {
-        crate::ToolKind::Unknown
+    /// 内置约定值：`"function"`、`"file"`、`"shell"`、`"code"`、`"mcp"`、
+    /// `"web"`、`"skills"`、`"custom"`、`"openapi"`。
+    /// 插件可返回任意自定义字符串，框架不做封闭枚举约束。
+    /// 默认返回 `"unknown"`。
+    fn kind(&self) -> &str {
+        "unknown"
     }
+
+    /// 尝试将此工具转换为 `IScopeTool` 引用。
+    ///
+    /// 默认返回 `None`。实现 `IScopeTool` 的工具应覆写此方法返回 `Some(self)`，
+    /// 使 `WorkspaceContextProvider` 能统一检测 scope-aware 工具，无需维护
+    /// 硬编码的类型列表。
+    ///
+    /// 对标 MAF 原则 3：Trait 即契约，组合即架构。此方法消除了
+    /// `try_inject_scope()` 和 `partition_scope_tools()` 中的 11 类型 downcast 列表。
+    fn as_scope_tool(&self) -> Option<&dyn crate::IScopeTool> {
+        None
+    }
+}
+
+// ── Callable trait ──────────────────────────────────────────────────────
+
+/// 类型安全的工具调用路径——对标 MAF 的类型化工具契约。
+///
+/// `#[tool]` 宏生成的结构体同时实现 `ITool`（LLM 路径，走 JSON）和
+/// `Callable<Args, Ret>`（Rust 路径，类型安全）。外部调用者可通过
+/// Rust 代码类型安全地构造工具调用，避免 JSON 序列化往返开销。
+///
+/// # 零成本抽象
+///
+/// `Callable::call()` 直接调用 `self.call(args)`，无装箱/拆箱开销。
+/// 这与 MAF 的反射调用形成对比——Rust 在编译期生成直接调用。
+///
+/// # 示例
+///
+/// ```ignore
+/// // Rust 路径：类型安全，零序列化开销
+/// let tool = ReadFile;
+/// let args = ReadFileArgs { path: "test.txt".into() };
+/// let result = tool.call(args).await?;
+///
+/// // LLM 路径：通过 ITool::execute，走 JSON
+/// let json_args = serde_json::to_value(&args)?;
+/// let result = tool.execute(json_args).await?;
+/// ```
+#[async_trait]
+pub trait Callable<Args, Ret> {
+    /// 类型安全的调用方法——直接调用，无 JSON 序列化往返。
+    async fn call(&self, args: Args) -> Ret;
 }
 
 // ── ApprovalRequiredTool ─────────────────────────────────────────────────
@@ -156,7 +202,7 @@ impl ITool for ApprovalRequiredTool {
     fn requires_approval(&self) -> bool {
         true
     }
-    fn kind(&self) -> crate::ToolKind {
+    fn kind(&self) -> &str {
         self.inner.kind()
     }
 }
@@ -174,20 +220,155 @@ pub struct ToolApprovalResponse {
     pub reason: Option<String>,
 }
 
-/// ToolRegistry — 管理工具注册和查找，遵循 MAF 模式。
+// ── Plugin ───────────────────────────────────────────────────────────────
+
+/// 插件——封装一组工具为一个可注册单元，对应 MAF 的 KernelPlugin。
+///
+/// 插件提供命名空间隔离：[`ToolRegistry::register_plugin`] 会将每个工具名
+/// 自动限定为 `"{namespace}/{tool_name}"`，使不同插件的同名工具可共存。
+///
+/// # 示例
+///
+/// ```ignore
+/// pub struct FilePlugin;
+///
+/// impl Plugin for FilePlugin {
+///     fn namespace(&self) -> &str { "file" }
+///     fn tools(&self) -> Vec<Arc<dyn ITool>> {
+///         vec![Arc::new(ReadFile::default()), Arc::new(WriteFile::default())]
+///     }
+/// }
+///
+/// registry.register_plugin(&FilePlugin)?;
+/// // "file/read_file" 和 "file/write_file" 可用，与 "db/read_file" 不冲突
+/// ```
+pub trait Plugin: Send + Sync {
+    /// 插件命名空间（如 `"file"`、`"db"`、`"rag"`）。
+    fn namespace(&self) -> &str;
+
+    /// 插件提供的所有工具。
+    fn tools(&self) -> Vec<Arc<dyn ITool>>;
+}
+
+/// 命名空间包装器——将工具名限定为 `"{ns}/{original_name}"`。
+///
+/// 由 [`ToolRegistry::register_plugin`] 内部使用，用户无需直接构造。
+pub struct NamespacedTool {
+    full_name: String,
+    inner: Arc<dyn ITool>,
+}
+
+impl NamespacedTool {
+    pub fn new(namespace: &str, tool: Arc<dyn ITool>) -> Self {
+        Self {
+            full_name: format!("{}/{}", namespace, tool.name()),
+            inner: tool,
+        }
+    }
+}
+
+impl std::fmt::Debug for NamespacedTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NamespacedTool")
+            .field("full_name", &self.full_name)
+            .finish()
+    }
+}
+
+#[async_trait]
+impl ITool for NamespacedTool {
+    fn name(&self) -> &str { &self.full_name }
+    fn description(&self) -> &str { self.inner.description() }
+    fn parameters(&self) -> serde_json::Value { self.inner.parameters() }
+    async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult> {
+        self.inner.execute(arguments).await
+    }
+    fn requires_approval(&self) -> bool { self.inner.requires_approval() }
+    fn kind(&self) -> &str { self.inner.kind() }
+}
+
+// ── ToolRegistryError ────────────────────────────────────────────────────
+
+/// 工具注册错误。
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum ToolRegistryError {
+    /// 工具名冲突——已有同名工具注册，拒绝静默覆盖。
+    #[error("tool name conflict: '{name}' is already registered")]
+    Conflict { name: String },
+}
+
+// ── ToolRegistry ─────────────────────────────────────────────────────────
+
+/// 工具注册表——管理工具注册、查找和插件命名空间，对应 MAF 的 ToolRegistry。
+///
+/// 使用 `BTreeMap` 存储以支持 `"/"` 层级路径排序和命名空间前缀扫描。
+/// 注册时检测名称冲突，返回 `Err(ToolRegistryError::Conflict)` 而非静默覆盖。
 pub struct ToolRegistry {
-    tools: HashMap<String, Arc<dyn ITool>>,
+    tools: BTreeMap<String, Arc<dyn ITool>>,
 }
 
 impl ToolRegistry {
-    pub fn new() -> Self { Self { tools: HashMap::new() } }
+    pub fn new() -> Self { Self { tools: BTreeMap::new() } }
 
-    pub fn register(&mut self, tool: impl ITool + 'static) {
-        self.tools.insert(tool.name().to_string(), Arc::new(tool));
+    /// 注册单个工具。名称冲突时返回错误，而非静默覆盖。
+    pub fn register(&mut self, tool: impl ITool + 'static) -> std::result::Result<(), ToolRegistryError> {
+        self.register_arc(Arc::new(tool))
     }
 
-    pub fn register_arc(&mut self, tool: Arc<dyn ITool>) {
-        self.tools.insert(tool.name().to_string(), tool);
+    /// 注册 `Arc<dyn ITool>`。名称冲突时返回错误，而非静默覆盖。
+    pub fn register_arc(&mut self, tool: Arc<dyn ITool>) -> std::result::Result<(), ToolRegistryError> {
+        let name = tool.name().to_string();
+        if self.tools.contains_key(&name) {
+            return Err(ToolRegistryError::Conflict { name });
+        }
+        self.tools.insert(name, tool);
+        Ok(())
+    }
+
+    /// 原子化注册整个插件。每个工具名自动限定为 `"{namespace}/{tool_name}"`。
+    ///
+    /// 先检查所有工具名是否冲突，全部通过后才插入——保证原子性。
+    /// 对应 MAF 的 `KernelPlugin` 批量注册。
+    pub fn register_plugin(&mut self, plugin: &dyn Plugin) -> std::result::Result<(), ToolRegistryError> {
+        let ns = plugin.namespace();
+        let namespaced: Vec<Arc<dyn ITool>> = plugin
+            .tools()
+            .into_iter()
+            .map(|t| Arc::new(NamespacedTool::new(ns, t)) as Arc<dyn ITool>)
+            .collect();
+
+        // 冲突预检——全部通过后才插入
+        for tool in &namespaced {
+            let name = tool.name();
+            if self.tools.contains_key(name) {
+                return Err(ToolRegistryError::Conflict { name: name.to_string() });
+            }
+        }
+
+        // 原子插入
+        for tool in namespaced {
+            let name = tool.name().to_string();
+            self.tools.insert(name, tool);
+        }
+        Ok(())
+    }
+
+    /// 注销指定命名空间下的所有工具，返回移除的数量。
+    ///
+    /// 支持运行时动态卸载插件——对应 MAF 的插件生命周期管理。
+    pub fn unregister_namespace(&mut self, namespace: &str) -> usize {
+        let prefix = format!("{}/", namespace);
+        let keys: Vec<String> = self
+            .tools
+            .keys()
+            .filter(|k| k.starts_with(&prefix))
+            .cloned()
+            .collect();
+        let count = keys.len();
+        for k in keys {
+            self.tools.remove(&k);
+        }
+        count
     }
 
     pub fn get(&self, name: &str) -> Option<&Arc<dyn ITool>> {

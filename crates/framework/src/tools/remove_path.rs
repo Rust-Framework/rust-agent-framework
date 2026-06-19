@@ -21,7 +21,8 @@ impl IScopeTool for RemovePath {
 
 #[tool(
     description = "删除指定路径的文件或目录。",
-    kind = "file"
+    kind = "file",
+    scope_tool = true
 )]
 impl RemovePath {
     async fn call(

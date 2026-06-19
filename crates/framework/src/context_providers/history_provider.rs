@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use rust_agent_core::{
-    ChatMessage, ContextResult, IAgent, IContextProvider, ISession, MessageRole, Result,
-    AgentRunOptions, AgentResponse,
+    IContextProvider, MessageRole, Result,
 };
 
 /// 内存对话历史上下文提供器
@@ -42,39 +41,25 @@ impl IContextProvider for InMemoryHistoryProvider {
         "InMemoryHistoryProvider"
     }
 
-    fn kind(&self) -> rust_agent_core::ContextProviderKind {
-        rust_agent_core::ContextProviderKind::History
+    fn kind(&self) -> &str {
+        "history"
     }
 
-    async fn on_invoking(
-        &self,
-        _agent: &dyn IAgent,
-        session: &dyn ISession,
-        _messages: &[ChatMessage],
-        _options: &AgentRunOptions,
-    ) -> Result<ContextResult> {
-        let mut injection = ContextResult::default();
-
+    async fn enrich_messages(&self, ctx: &rust_agent_core::ProviderContext<'_>) -> Result<rust_agent_core::MessageInjection> {
         if self.load_messages {
-            let history = session.get_messages().await.unwrap_or_default();
-            injection.messages = history;
+            let history = ctx.session.get_messages().await.unwrap_or_default();
+            Ok(rust_agent_core::MessageInjection { messages: history, replace: false })
+        } else {
+            Ok(Default::default())
         }
-
-        Ok(injection)
     }
 
-    async fn on_invoked(
-        &self,
-        _agent: &dyn IAgent,
-        session: &dyn ISession,
-        request_messages: &[ChatMessage],
-        _response: Option<&AgentResponse>,
-        _error: Option<&rust_agent_core::AgentError>,
-    ) -> Result<()> {
+    async fn on_invoked(&self, ctx: &rust_agent_core::InvokedContext<'_>) -> Result<()> {
         // ChatClientAgent Phase 3 已负责持久化 assistant 消息（含工具调用和工具结果），
         // 此处只需持久化 user 消息。
-        // 使用 session.get_message_count() 实时获取计数（O(1)），
-        // 不再在 provider_state 中维护 last_message_count
+        let session = ctx.session;
+        let request_messages = ctx.request_messages;
+
         let existing_count = session.get_message_count();
         let system_count = request_messages
             .iter()

@@ -133,26 +133,28 @@ impl IAgent for ChatClientAgent {
         let mut merged_provider_tools = Vec::new();
 
         if let Some(ref sess) = session {
+            let ctx = rust_agent_core::ProviderContext {
+                agent: self,
+                session: sess.as_ref(),
+                messages: &messages,
+                options: &run_options,
+            };
             for provider in &self.context_providers {
-                let injection = provider
-                    .on_invoking(self, sess.as_ref(), &messages, &run_options)
-                    .await
-                    .unwrap_or_default();
-
-                if let Some(inst) = injection.instructions {
+                if let Some(inst) = provider.enrich_instructions(&ctx).await.unwrap_or(None) {
                     if !merged_instructions.is_empty() {
                         merged_instructions.push_str("\n\n");
                     }
                     merged_instructions.push_str(&inst);
                 }
 
-                if injection.replace_messages {
+                let injection = provider.enrich_messages(&ctx).await.unwrap_or_default();
+                if injection.replace {
                     // 替换模式：压缩策略等用此清空前面累积的消息
                     merged_provider_messages = injection.messages;
                 } else {
                     merged_provider_messages.extend(injection.messages);
                 }
-                merged_provider_tools.extend(injection.tools);
+                merged_provider_tools.extend(provider.enrich_tools(&ctx).await.unwrap_or_default());
             }
         }
 
@@ -372,10 +374,15 @@ impl IAgent for ChatClientAgent {
                 let proxy = AgentProxy { id: agent_id_proxy, metadata: agent_meta_proxy, chat_client: chat_client_proxy };
 
                 if let Some(ref sess) = session_for_invoked {
+                    let invoked_ctx = rust_agent_core::InvokedContext {
+                        agent: &proxy,
+                        session: sess.as_ref(),
+                        request_messages: &request_messages,
+                        response: Some(&response),
+                        error: None,
+                    };
                     for provider in providers.iter() {
-                        if let Err(e) = provider.on_invoked(
-                            &proxy, sess.as_ref(), &request_messages, Some(&response), None,
-                        ).await {
+                        if let Err(e) = provider.on_invoked(&invoked_ctx).await {
                             tracing::warn!(provider = %provider.name(), error = %e, "on_invoked failed");
                         }
                     }

@@ -14,6 +14,7 @@ pub mod mcp_executor;
 pub mod tool_resolver;
 pub mod workflow_resolver;
 
+#[allow(deprecated)]
 pub use agent_resolver::{quick_agent, AgentResolver};
 pub use mcp_executor::McpRequestExecutor;
 pub use tool_resolver::{ToolFactoryFn, ToolResolver};

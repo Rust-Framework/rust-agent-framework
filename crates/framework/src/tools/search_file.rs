@@ -23,7 +23,8 @@ impl IScopeTool for SearchFile {
 
 #[tool(
     description = "使用正则表达式搜索文件内容。返回匹配的行及文件路径和行号。",
-    kind = "file"
+    kind = "file",
+    scope_tool = true
 )]
 impl SearchFile {
     async fn call(

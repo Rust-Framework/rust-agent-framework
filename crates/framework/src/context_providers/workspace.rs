@@ -2,16 +2,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ApprovalRequiredTool, ChatMessage, ContextResult,
-    IAgent, IContextProvider, IScopeTool, ISession, ITool, ProviderState, Result, ScopePolicy,
+    ApprovalRequiredTool, IContextProvider, ITool, ProviderState, Result, ScopePolicy,
     WorkspaceScope,
 };
 use serde::{Deserialize, Serialize};
-
-use crate::tools::{
-    EditFile, FindFiles, InspectFile, ListFiles, MakeDirectory, MoveFile, ReadFile, RemovePath,
-    RunCommand, SearchFile, WriteFile,
-};
 
 /// 工作区管理的主入口。
 ///
@@ -106,60 +100,17 @@ impl WorkspaceContextProvider {
     }
 }
 
-/// 通过 `AsAny` 下转型检测 `IScopeTool` 并注入 scope。
+/// 通过 `ITool::as_scope_tool()` 检测 `IScopeTool` 并注入 scope。
+///
+/// 统一检测机制——无需维护硬编码的类型列表。任何实现 `IScopeTool`
+/// 并覆写 `as_scope_tool()` 的工具都会被自动检测。
 fn try_inject_scope(
     tool: &Arc<dyn ITool>,
     scope: Arc<WorkspaceScope>,
 ) -> Option<Arc<dyn ITool>> {
-    use rust_agent_core::AsAny;
-    let any = tool.as_any();
-
-    // 为每个已知工具类型尝试下转型并调用 create_scoped
-    if any.downcast_ref::<ReadFile>().is_some() {
-        let dummy = ReadFile::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    if any.downcast_ref::<WriteFile>().is_some() {
-        let dummy = WriteFile::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    if any.downcast_ref::<EditFile>().is_some() {
-        let dummy = EditFile::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    if any.downcast_ref::<ListFiles>().is_some() {
-        let dummy = ListFiles::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    if any.downcast_ref::<InspectFile>().is_some() {
-        let dummy = InspectFile::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    if any.downcast_ref::<MakeDirectory>().is_some() {
-        let dummy = MakeDirectory::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    if any.downcast_ref::<RemovePath>().is_some() {
-        let dummy = RemovePath::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    if any.downcast_ref::<MoveFile>().is_some() {
-        let dummy = MoveFile::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    if any.downcast_ref::<FindFiles>().is_some() {
-        let dummy = FindFiles::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    if any.downcast_ref::<SearchFile>().is_some() {
-        let dummy = SearchFile::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    if any.downcast_ref::<RunCommand>().is_some() {
-        let dummy = RunCommand::default();
-        return Some(dummy.create_scoped(scope));
-    }
-    None
+    tool.as_scope_tool().map(|scope_tool| {
+        scope_tool.create_scoped(scope)
+    })
 }
 
 #[async_trait]
@@ -168,23 +119,17 @@ impl IContextProvider for WorkspaceContextProvider {
         "WorkspaceContextProvider"
     }
 
-    fn kind(&self) -> rust_agent_core::ContextProviderKind {
-        rust_agent_core::ContextProviderKind::Workspace
+    fn kind(&self) -> &str {
+        "workspace"
     }
 
-    async fn on_invoking(
-        &self,
-        _agent: &dyn IAgent,
-        session: &dyn ISession,
-        _messages: &[ChatMessage],
-        _options: &AgentRunOptions,
-    ) -> Result<ContextResult> {
+    async fn enrich_instructions(&self, ctx: &rust_agent_core::ProviderContext<'_>) -> Result<Option<String>> {
         // 会话级持久化（仅首次，用于审计/调试）
         let state = ProviderState::<WorkspaceState>::new("WorkspaceContextProvider");
-        let ws = state.get_or_init(session);
+        let ws = state.get_or_init(ctx.session);
         if ws.scope_name.is_empty() {
             let _ = state.save(
-                session,
+                ctx.session,
                 &WorkspaceState {
                     scope_name: self.scope.name.clone(),
                     scope_root: self.scope.root.to_string_lossy().to_string(),
@@ -192,24 +137,14 @@ impl IContextProvider for WorkspaceContextProvider {
                 },
             );
         }
-
-        Ok(ContextResult {
-            instructions: Some(self.build_instructions()),
-            tools: self.tools.clone(),
-            ..Default::default()
-        })
+        Ok(Some(self.build_instructions()))
     }
 
-    async fn on_invoked(
-        &self,
-        _agent: &dyn IAgent,
-        _session: &dyn ISession,
-        _request_messages: &[ChatMessage],
-        _response: Option<&AgentResponse>,
-        _error: Option<&rust_agent_core::AgentError>,
-    ) -> Result<()> {
-        Ok(())
+    async fn enrich_tools(&self, _ctx: &rust_agent_core::ProviderContext<'_>) -> Result<Vec<Arc<dyn ITool>>> {
+        Ok(self.tools.clone())
     }
+
+    // on_invoked 不再覆写——使用默认空实现，消除样板代码
 }
 
 #[derive(Default, Serialize, Deserialize)]

@@ -29,6 +29,7 @@ pub struct AgentResolver {
     mcp_servers: HashMap<String, Arc<McpServerClient>>,
 }
 
+#[allow(deprecated)]
 impl AgentResolver {
     /// 使用默认工具解析器创建新的 Agent 解析器。
     pub fn new() -> Self {
@@ -130,6 +131,7 @@ impl AgentResolver {
     }
 }
 
+#[allow(deprecated)]
 impl Default for AgentResolver {
     fn default() -> Self {
         Self::new()
@@ -183,7 +185,7 @@ impl ITool for ToolWrapper {
         self.0.execute(arguments).await
     }
 
-    fn kind(&self) -> rust_agent_core::ToolKind {
+    fn kind(&self) -> &str {
         self.0.kind()
     }
 }
@@ -196,6 +198,7 @@ impl ITool for ToolWrapper {
     note = "Use `DeclAgentBuilder::quick(path).await` instead. \
             Supports YAML, JSON, and TOML with automatic format detection."
 )]
+#[allow(deprecated)]
 pub async fn quick_agent(path: &str) -> crate::Result<Arc<dyn IAgent>> {
     let doc = crate::document::AgentDocument::from_json_file(path)?;
     let def = doc.inner_definition();

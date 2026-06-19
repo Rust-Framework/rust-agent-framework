@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextResult, IAgent, IContextProvider,
-    ISession, ITool, MessageRole, Result,
+    ChatMessage, IContextProvider, ITool, MessageRole, Result,
 };
 
 use crate::{web_search, WebFetch, WebSearch, WebSearchSharedConfig};
@@ -211,17 +210,11 @@ impl IContextProvider for WebSearchContextProvider {
         "WebSearchContextProvider"
     }
 
-    fn kind(&self) -> rust_agent_core::ContextProviderKind {
-        rust_agent_core::ContextProviderKind::Skills
+    fn kind(&self) -> &str {
+        "skills"
     }
 
-    async fn on_invoking(
-        &self,
-        _agent: &dyn IAgent,
-        _session: &dyn ISession,
-        messages: &[ChatMessage],
-        _options: &AgentRunOptions,
-    ) -> Result<ContextResult> {
+    async fn enrich_instructions(&self, ctx: &rust_agent_core::ProviderContext<'_>) -> Result<Option<String>> {
         // 将当前 provider 的配置写入共享静态对象，供 WebSearch / WebFetch 工具读取
         crate::set_shared_config(WebSearchSharedConfig {
             proxy_url: self.proxy_url.clone(),
@@ -229,42 +222,29 @@ impl IContextProvider for WebSearchContextProvider {
             language: self.language.clone(),
         });
 
-        let mut injection = ContextResult {
-            instructions: Some(self.build_advertise()),
-            tools: self.build_tools(),
-            ..Default::default()
-        };
+        let mut instructions = self.build_advertise();
 
         if self.auto_search {
-            if let Some(search_results) = self.auto_search_context(messages).await {
-                // 将搜索结果追加到已有 instructions
-                let mut combined = injection.instructions.take().unwrap_or_default();
-                combined.push('\n');
-                combined.push_str(&search_results);
-                injection.instructions = Some(combined);
+            if let Some(search_results) = self.auto_search_context(ctx.messages).await {
+                instructions.push('\n');
+                instructions.push_str(&search_results);
             }
         }
 
         tracing::debug!(
             provider = self.name(),
-            tools = injection.tools.len(),
-            has_instructions = injection.instructions.is_some(),
-            "on_invoking complete"
+            has_instructions = true,
+            "enrich_instructions complete"
         );
 
-        Ok(injection)
+        Ok(Some(instructions))
     }
 
-    async fn on_invoked(
-        &self,
-        _agent: &dyn IAgent,
-        _session: &dyn ISession,
-        _request_messages: &[ChatMessage],
-        _response: Option<&AgentResponse>,
-        _error: Option<&rust_agent_core::AgentError>,
-    ) -> Result<()> {
-        Ok(())
+    async fn enrich_tools(&self, _ctx: &rust_agent_core::ProviderContext<'_>) -> Result<Vec<Arc<dyn ITool>>> {
+        Ok(self.build_tools())
     }
+
+    // on_invoked 不再覆写——使用默认空实现
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────

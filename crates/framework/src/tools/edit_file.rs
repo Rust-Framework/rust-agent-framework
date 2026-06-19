@@ -20,7 +20,8 @@ impl IScopeTool for EditFile {
 
 #[tool(
     description = "精确替换已有文件中的字符串。提供 old_str（要查找的原文本）和 new_str（替换为新文本）。old_str 必须在文件中唯一匹配一个连续块。",
-    kind = "file"
+    kind = "file",
+    scope_tool = true
 )]
 impl EditFile {
     async fn call(

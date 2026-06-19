@@ -4,7 +4,6 @@ pub mod compression;
 pub mod context_provider;
 pub mod error;
 pub mod incremental_json;
-pub mod kind;
 pub mod message;
 pub mod model_metadata;
 pub mod run_options;
@@ -16,8 +15,6 @@ pub mod tool;
 pub mod types;
 pub mod workspace;
 
-pub use kind::{ToolKind, ContextProviderKind};
-
 // Re-export interfaces
 pub use agent::IAgent;
 pub use chat_client::IChatClient;
@@ -25,7 +22,7 @@ pub use chat_client::ChatClientRunOptions;
 pub use chat_client::ChatClientBuilder;
 pub use chat_client::DelegatingChatClient;
 pub use compression::ICompressionStrategy;
-pub use context_provider::{ContextResult, IContextProvider};
+pub use context_provider::{IContextProvider, InvokedContext, MessageInjection, ProviderContext};
 pub use model_metadata::ModelMetadata;
 pub use run_options::AgentRunOptions;
 pub use run_options::ReasoningEffort;
@@ -33,7 +30,7 @@ pub use session::{AgentSession, ISession, ProviderState, ProviderStateStore, Ses
 pub use session_store::ISessionStore;
 pub use stream::{BoxStream, collect_agent_response};
 pub use token_counter::ITokenCounter;
-pub use tool::{ApprovalRequiredTool, AsAny, ITool, ToolApprovalResponse, ToolRegistry, ToolResult};
+pub use tool::{ApprovalRequiredTool, AsAny, Callable, ITool, NamespacedTool, Plugin, ToolApprovalResponse, ToolRegistry, ToolRegistryError, ToolResult};
 pub use workspace::{IScopeTool, ScopePolicy, WorkspaceScope};
 
 // Re-export core types

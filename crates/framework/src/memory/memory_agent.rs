@@ -67,8 +67,14 @@ pub(crate) async fn run_memory_agent(
     let write_file = WriteFile::default().create_scoped(Arc::clone(&scope));
 
     let mut registry = ToolRegistry::new();
-    registry.register_arc(read_file);
-    registry.register_arc(write_file);
+    if let Err(e) = registry.register_arc(read_file) {
+        tracing::error!(error = %e, "read_file tool registration failed");
+        return ConsolidationStatus::Error;
+    }
+    if let Err(e) = registry.register_arc(write_file) {
+        tracing::error!(error = %e, "write_file tool registration failed");
+        return ConsolidationStatus::Error;
+    }
 
     let tools: Vec<Arc<dyn ITool>> = registry
         .list()

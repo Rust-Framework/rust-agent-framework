@@ -48,7 +48,8 @@ pub(crate) fn get_shared_config() -> Option<&'static WebSearchSharedConfig> {
 }
 
 /// 注册所有 web 搜索工具。
-pub fn register_all(registry: &mut ToolRegistry) {
-    registry.register(WebSearch);
-    registry.register(WebFetch);
+pub fn register_all(registry: &mut ToolRegistry) -> std::result::Result<(), rust_agent_core::ToolRegistryError> {
+    registry.register(WebSearch)?;
+    registry.register(WebFetch)?;
+    Ok(())
 }

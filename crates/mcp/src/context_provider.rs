@@ -6,10 +6,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 
-use rust_agent_core::{
-    AgentResponse, AgentRunOptions, ChatMessage, ContextResult, IAgent, IContextProvider,
-    ISession, Result,
-};
+use rust_agent_core::{IContextProvider, Result};
 
 use crate::tool_adapter::McpServerClient;
 
@@ -95,17 +92,11 @@ impl IContextProvider for McpContextProvider {
         "McpContextProvider"
     }
 
-    fn kind(&self) -> rust_agent_core::ContextProviderKind {
-        rust_agent_core::ContextProviderKind::Mcp
+    fn kind(&self) -> &str {
+        "mcp"
     }
 
-    async fn on_invoking(
-        &self,
-        _agent: &dyn IAgent,
-        _session: &dyn ISession,
-        _messages: &[ChatMessage],
-        _options: &AgentRunOptions,
-    ) -> Result<ContextResult> {
+    async fn enrich_tools(&self, _ctx: &rust_agent_core::ProviderContext<'_>) -> Result<Vec<Arc<dyn rust_agent_core::ITool>>> {
         // Use cache if available, otherwise discover tools
         let mut cache = self.cache.lock().await;
         let cache_ref: &mut Option<Vec<Arc<dyn rust_agent_core::ITool>>> = &mut cache;
@@ -114,27 +105,13 @@ impl IContextProvider for McpContextProvider {
             *cache_ref = Some(tools);
         }
 
-        let tools: Vec<Arc<dyn rust_agent_core::ITool>> = cache_ref
+        Ok(cache_ref
             .as_ref()
             .cloned()
-            .unwrap_or_default();
-
-        Ok(ContextResult {
-            tools,
-            ..Default::default()
-        })
+            .unwrap_or_default())
     }
 
-    async fn on_invoked(
-        &self,
-        _agent: &dyn IAgent,
-        _session: &dyn ISession,
-        _request_messages: &[ChatMessage],
-        _response: Option<&AgentResponse>,
-        _error: Option<&rust_agent_core::AgentError>,
-    ) -> Result<()> {
-        Ok(())
-    }
+    // on_invoked 不再覆写——使用默认空实现
 }
 
 impl std::fmt::Debug for McpContextProvider {
