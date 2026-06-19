@@ -32,12 +32,12 @@ pub struct WorkspaceScope {
 }
 
 impl WorkspaceScope {
-    /// 创建默认 AllowAll 策略的工作区范围
+    /// 创建默认 ApproveOutside 策略的工作区范围（安全优先）。
     pub fn new(root: impl Into<PathBuf>, name: impl Into<String>) -> Self {
         Self {
             root: root.into(),
             name: name.into(),
-            policy: ScopePolicy::AllowAll,
+            policy: ScopePolicy::ApproveOutside,
             properties: HashMap::new(),
         }
     }

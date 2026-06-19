@@ -105,6 +105,15 @@ impl ToolResolver {
                 )),
             },
 
+            // ── Shell 命令执行 ──
+            ToolDecl::Shell { name, .. } => match name.as_deref() {
+                Some(n) => self.resolve_shell(n),
+                None => Err(DeclError::Unsupported(
+                    "kind: shell without name — use resolve_category() for bulk registration"
+                        .into(),
+                )),
+            },
+
             // ── 代码执行工具 ──
             ToolDecl::Code { name, .. } => match name.as_deref() {
                 Some(n) => self.resolve_code(n),
@@ -161,7 +170,9 @@ impl ToolResolver {
                 self.resolve_file("move_file")?,
                 self.resolve_file("find_files")?,
                 self.resolve_file("search_file")?,
-                self.resolve_file("run_command")?,
+            ]),
+            ToolDecl::Shell { .. } => Ok(vec![
+                self.resolve_shell("run_command")?,
             ]),
             ToolDecl::Code { .. } => Err(DeclError::Unsupported(
                 "code_interpreter requires sandbox execution environment".into(),
@@ -206,6 +217,12 @@ impl ToolResolver {
             "move_file" => Ok(Arc::new(MoveFile::default())),
             "find_files" => Ok(Arc::new(FindFiles::default())),
             "search_file" => Ok(Arc::new(SearchFile::default())),
+            other => self.lookup_factory(other, &HashMap::new()),
+        }
+    }
+
+    fn resolve_shell(&self, name: &str) -> crate::Result<Arc<dyn ITool>> {
+        match name {
             "run_command" => Ok(Arc::new(RunCommand::default())),
             other => self.lookup_factory(other, &HashMap::new()),
         }

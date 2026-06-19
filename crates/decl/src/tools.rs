@@ -103,6 +103,19 @@ pub enum ToolDecl {
         description: String,
     },
 
+    /// Shell 命令执行工具：`run_command`。
+    ///
+    /// description 由 `RunCommand` 内部生成（平台感知），YAML 无需提供。
+    #[serde(rename = "shell")]
+    Shell {
+        /// 工具名 — `"run_command"`。
+        #[serde(default)]
+        name: Option<String>,
+        /// 可选描述（覆盖内建描述）。
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        description: String,
+    },
+
     /// 代码执行工具：`code_interpreter`。
     ///
     /// description 由 `#[tool]` 宏内建，YAML 无需提供。
@@ -156,6 +169,7 @@ impl ToolDecl {
             ToolDecl::Custom { name, .. } => Some(name),
             ToolDecl::Web { name, .. } => name.as_deref(),
             ToolDecl::File { name, .. } => name.as_deref(),
+            ToolDecl::Shell { name, .. } => name.as_deref(),
             ToolDecl::Code { name, .. } => name.as_deref(),
             ToolDecl::Mcp { name, .. } => Some(name),
             ToolDecl::OpenApi { name, .. } => Some(name),
@@ -169,6 +183,7 @@ impl ToolDecl {
             ToolDecl::Custom { .. } => "custom",
             ToolDecl::Web { .. } => "web",
             ToolDecl::File { .. } => "file",
+            ToolDecl::Shell { .. } => "shell",
             ToolDecl::Code { .. } => "code",
             ToolDecl::Mcp { .. } => "mcp",
             ToolDecl::OpenApi { .. } => "openapi",
@@ -210,6 +225,14 @@ impl ToolDecl {
         }
     }
 
+    /// 创建 shell 声明。
+    pub fn shell(name: impl Into<String>) -> Self {
+        ToolDecl::Shell {
+            name: Some(name.into()),
+            description: String::new(),
+        }
+    }
+
     /// 创建 MCP 声明。
     pub fn mcp(name: impl Into<String>, server_url: impl Into<String>, tool_name: impl Into<String>) -> Self {
         ToolDecl::Mcp {
@@ -225,6 +248,7 @@ impl ToolDecl {
         match self {
             ToolDecl::Web { name, .. } => name.is_none(),
             ToolDecl::File { name, .. } => name.is_none(),
+            ToolDecl::Shell { name, .. } => name.is_none(),
             ToolDecl::Code { name, .. } => name.is_none(),
             _ => false,
         }

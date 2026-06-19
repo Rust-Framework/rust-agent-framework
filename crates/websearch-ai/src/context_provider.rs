@@ -212,7 +212,7 @@ impl IContextProvider for WebSearchContextProvider {
     }
 
     fn kind(&self) -> rust_agent_core::ContextProviderKind {
-        rust_agent_core::ContextProviderKind::Unknown
+        rust_agent_core::ContextProviderKind::Skills
     }
 
     async fn on_invoking(

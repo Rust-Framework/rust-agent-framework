@@ -101,7 +101,7 @@ fn parse_attr(attr: TokenStream) -> (String, String) {
                 }
             } else if nv.path.is_ident("kind") {
                 if let Expr::Lit(ExprLit { lit: Lit::Str(s), .. }) = nv.value {
-                    kind = s.value();
+                    kind = s.value().to_lowercase();
                 }
             }
         }

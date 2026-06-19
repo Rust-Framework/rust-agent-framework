@@ -9,7 +9,7 @@ use anyhow::Result;
 use tracing::{info, warn};
 
 use rust_agent_core::IAgent;
-use rust_agent_decl::{AgentDecl, AgentResolver, DefaultAgentResolver};
+use rust_agent_decl::DeclAgentBuilder;
 
 use crate::config::HostConfig;
 
@@ -34,7 +34,6 @@ impl<'a> DeclLoader<'a> {
             return Ok(Vec::new());
         }
 
-        let resolver = DefaultAgentResolver::new();
         let mut agents = Vec::new();
 
         let entries = std::fs::read_dir(dir)?;
@@ -47,33 +46,21 @@ impl<'a> DeclLoader<'a> {
                 continue;
             }
 
-            // Determine file format by extension
-            let extension = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
-
-            let decl = match extension {
-                "json" => {
-                    let content = std::fs::read_to_string(&path)?;
-                    AgentDecl::from_json_str(&content)?
-                }
-                _ => {
-                    warn!(path = %path.display(), extension, "Unsupported file extension, skipping");
-                    continue;
-                }
-            };
-
-            // Resolve model config: if the decl doesn't specify a model, fall back to host config
-            let decl = self.patch_model_config(decl);
-
-            match resolver.resolve(&decl).await {
+            // 使用 DeclAgentBuilder::from_file() 统一加载（自动检测 YAML/JSON/TOML）
+            match DeclAgentBuilder::new()
+                .from_file(&path)
+                .build()
+                .await
+            {
                 Ok(agent) => {
-                    info!(agent_id = %decl.id, path = %path.display(), "Loaded declarative agent");
+                    let file_name = path.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("(unknown)");
+                    info!(agent_id = file_name, path = %path.display(), "Loaded declarative agent");
                     agents.push(agent);
                 }
                 Err(e) => {
-                    warn!(agent_id = %decl.id, path = %path.display(), error = %e, "Failed to resolve declarative agent");
+                    warn!(path = %path.display(), error = %e, "Failed to load declarative agent");
                 }
             }
         }
@@ -81,27 +68,4 @@ impl<'a> DeclLoader<'a> {
         Ok(agents)
     }
 
-    /// Patch the model config: if the declaration doesn't specify a model,
-    /// inject the host's default provider config.
-    fn patch_model_config(&self, mut decl: AgentDecl) -> AgentDecl {
-        // If the declaration has no api_key explicitly set, fall back to host config
-        if decl.model.api_key.is_none() {
-            if let Some(ref key) = self.config.provider.api_key {
-                decl.model.api_key = Some(key.clone());
-            }
-        }
-        // If no base_url, fall back
-        if decl.model.base_url.is_none() {
-            decl.model.base_url = self.config.provider.base_url.clone();
-        }
-        // If no temperature, fall back
-        if decl.model.temperature.is_none() {
-            decl.model.temperature = self.config.provider.temperature;
-        }
-        // If no max_tokens, fall back
-        if decl.model.max_tokens.is_none() {
-            decl.model.max_tokens = self.config.provider.max_tokens;
-        }
-        decl
-    }
-}
+    /// }

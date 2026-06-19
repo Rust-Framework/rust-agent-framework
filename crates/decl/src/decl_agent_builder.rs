@@ -504,7 +504,7 @@ impl DeclAgentBuilder {
                         Some(Arc::new(provider))
                     }
                     Err(e) => {
-                        tracing::warn!(
+                        tracing::error!(
                             "Failed to scan skills directory '{}' for skill '{}': {}",
                             dir_path.display(),
                             skill_name,
@@ -533,12 +533,10 @@ impl DeclAgentBuilder {
                             .collect::<Vec<_>>()
                     });
 
-                // MCP 需要异步连接，在 build_provider_from_decl（同步方法）中
-                // 无法完成。用户应通过 with_context() 注入预连接的 McpContextProvider。
-                // 此处仅给出引导性日志。
+                // 此处仅给出引导性日志——这是已知的硬限制。
                 let _ = server_command;
                 let _ = server_args;
-                tracing::warn!(
+                tracing::error!(
                     "MCP declarative provider requires async connection and cannot be constructed \
                      in build_provider_from_decl. Use DeclAgentBuilder::with_context() to inject a \
                      pre-connected McpContextProvider. \
@@ -565,12 +563,12 @@ impl DeclAgentBuilder {
                     "approve_outside" | "approve" | "ask" => ScopePolicy::ApproveOutside,
                     "deny_outside" | "deny" | "restrict" => ScopePolicy::DenyOutside,
                     other => {
-                        tracing::warn!(
-                            "Unknown workspace policy '{}' for '{}', falling back to AllowAll. \
+                        tracing::error!(
+                            "Unknown workspace policy '{}' for '{}', falling back to DenyOutside (fail closed). \
                              Valid values: read/allow/allow_all, approve/ask/approve_outside, deny/restrict/deny_outside",
                             other, ws_name
                         );
-                        ScopePolicy::AllowAll
+                        ScopePolicy::DenyOutside
                     }
                 };
 
@@ -593,7 +591,7 @@ impl DeclAgentBuilder {
                     .get("source")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                tracing::warn!(
+                tracing::error!(
                     "Knowledge (RAG) declarative provider is not yet implemented. \
                      Use DeclAgentBuilder::with_context() to inject a custom knowledge provider. \
                      Knowledge base: '{}', source: '{}'",
@@ -610,7 +608,7 @@ impl DeclAgentBuilder {
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
                 let source_display = if source.is_empty() { "(not specified)" } else { source };
-                tracing::warn!(
+                tracing::error!(
                     "Wiki declarative provider is not yet implemented. \
                      Use DeclAgentBuilder::with_context() to inject a custom wiki provider. \
                      Wiki: '{}', source: '{}'",
@@ -680,33 +678,21 @@ impl DeclAgentBuilder {
         }
     }
 
-    #[cfg(feature = "yaml")]
-    #[deprecated(since = "0.2", note = "Use from_file() or from_yaml_str() instead")]
     #[allow(dead_code)]
-    fn load_yaml(&self) -> Result<AgentDocument> {
-        if let Some(Source::File(path)) = &self.source {
-            AgentDocument::from_yaml_file(&path.to_string_lossy()).map_err(|e| {
-                DeclError::Resolution(format!(
-                    "Failed to load YAML file '{}': {}",
-                    path.display(),
-                    e
-                ))
-            })
-        } else if let Some(Source::Str(yaml)) = &self.source {
-            AgentDocument::from_yaml_str(yaml)
-        } else {
-            Err(DeclError::Validation(
-                "DeclAgentBuilder requires a YAML source (.from_yaml_file() or .from_yaml_str())".into(),
-            ))
+    fn parse_workspace_policy(_policy_str: &str) -> ScopePolicy {
+        match _policy_str {
+            "allow_all" | "allow" | "read" => ScopePolicy::AllowAll,
+            "approve_outside" | "approve" | "ask" => ScopePolicy::ApproveOutside,
+            "deny_outside" | "deny" | "restrict" => ScopePolicy::DenyOutside,
+            other => {
+                tracing::error!(
+                    "Unknown workspace policy '{}'. Falling back to DenyOutside (fail closed). \
+                     Valid values: read/allow/allow_all, approve/ask/approve_outside, deny/restrict/deny_outside",
+                    other
+                );
+                ScopePolicy::DenyOutside
+            }
         }
-    }
-
-    #[cfg(not(feature = "yaml"))]
-    #[deprecated(since = "0.2", note = "Use from_file() or from_json_str() instead")]
-    fn load_yaml(&self) -> Result<AgentDocument> {
-        Err(DeclError::Unsupported(
-            "YAML feature is required. Enable 'yaml' in rust-agent-decl".into(),
-        ))
     }
 
     /// 构建 workspace 提供器并将 IScopeTool 工具路由到 workspace.add_tool_arc()，
@@ -736,13 +722,13 @@ impl DeclAgentBuilder {
             "allow_all" | "allow" | "read" => ScopePolicy::AllowAll,
             "approve_outside" | "approve" | "ask" => ScopePolicy::ApproveOutside,
             "deny_outside" | "deny" | "restrict" => ScopePolicy::DenyOutside,
-            other => {
-                tracing::warn!(
-                    "Unknown workspace policy '{}' for '{}', falling back to AllowAll",
-                    other, ws_name
-                );
-                ScopePolicy::AllowAll
-            }
+                    other => {
+                        tracing::error!(
+                            "Unknown workspace policy '{}' for '{}', falling back to DenyOutside",
+                            other, ws_name
+                        );
+                        ScopePolicy::DenyOutside
+                    }
         };
 
         let scope = WorkspaceScope::new(root, ws_name.as_str()).with_policy(policy);

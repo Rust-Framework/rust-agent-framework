@@ -244,9 +244,19 @@
                                 "read_file", "write_file", "edit_file",
                                 "list_files", "inspect_file",
                                 "make_directory", "remove_path", "move_file",
-                                "find_files", "search_file", "run_command",
+                                "find_files", "search_file",
                                 ""
                             ]
+                        },
+                        "description": { "type": "string" }
+                    }
+                },
+                {
+                    "properties": {
+                        "kind": { "const": "shell" },
+                        "name": {
+                            "type": "string",
+                            "enum": ["run_command", ""]
                         },
                         "description": { "type": "string" }
                     }
@@ -324,7 +334,7 @@
                                         "approve", "ask", "approve_outside",
                                         "deny", "restrict", "deny_outside"
                                     ],
-                                    "default": "read"
+                                    "default": "approve"
                                 }
                             }
                         }
