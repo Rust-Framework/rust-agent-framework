@@ -185,6 +185,10 @@ impl<'a> AgentFactory<'a> {
             .with_tool(rust_agent_framework::tools::SearchFile::default())
             .with_tool(rust_agent_framework::tools::FindFiles::default())
             .with_tool(rust_agent_framework::tools::RunCommand::default())
+            .with_tool(rust_agent_framework::tools::MakeDirectory::default())
+            .with_tool(rust_agent_framework::tools::MoveFile::default())
+            .with_tool(rust_agent_framework::tools::RemovePath::default())
+            .with_tool(rust_agent_framework::tools::InspectFile::default())
             .max_tool_rounds(15)
             .build()?;
 

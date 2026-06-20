@@ -9,20 +9,20 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use rust_agent_core::{AgentId, IAgent};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// 已注册 Agent 的信息，通过 `_raf/agent_list` 和 `initialize._meta` 暴露。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentInfo {
     pub id: String,
     pub agent_type: String,
     pub name: String,
     pub description: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub tool_names: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub model_id: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub capability_tags: Vec<String>,
     #[serde(default)]
     pub has_subagents: bool,
@@ -32,13 +32,13 @@ pub struct AgentInfo {
 }
 
 /// 子 Agent 的信息，通过 `_raf/subagent_list` 暴露。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubAgentInfo {
     pub id: String,
     pub name: String,
     pub agent_type: String,
     pub description: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub capability_tags: Vec<String>,
     /// 在 Agent 树中的深度（0 = 查询 Agent 的直接子级）。
     pub depth: usize,
@@ -47,15 +47,15 @@ pub struct SubAgentInfo {
 }
 
 /// `_raf/subagent_tree` 的树节点。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubAgentNode {
     pub id: String,
     pub name: String,
     pub agent_type: String,
     pub description: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub capability_tags: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub children: Vec<SubAgentNode>,
 }
 

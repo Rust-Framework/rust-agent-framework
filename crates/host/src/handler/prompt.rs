@@ -35,7 +35,7 @@ pub async fn route_prompt(
     responder: agent_client_protocol::Responder<PromptResponse>,
     conn: ConnectionTo<Client>,
     registry: &AgentRegistry,
-    bridge: &SessionBridge,
+    bridge: Arc<SessionBridge>,
     graph_registry: Arc<tokio::sync::Mutex<WorkflowGraphRegistry>>,
 ) -> agent_client_protocol::Result<()> {
     // Determine the target agent ID from request meta (or default).
@@ -57,10 +57,10 @@ pub async fn route_prompt(
 
     if is_workflow {
         debug!(agent_id = %target_agent_id, "Routing to workflow prompt handler");
-        handle_workflow_prompt(req, responder, conn, graph_registry, target_agent_id).await
+        handle_workflow_prompt(req, responder, conn, graph_registry, bridge.clone(), target_agent_id).await
     } else {
         debug!(agent_id = %target_agent_id, "Routing to simple agent prompt handler");
-        handle_prompt(req, responder, conn, registry, bridge).await
+        handle_prompt(req, responder, conn, registry, &bridge).await
     }
 }
 
@@ -120,6 +120,9 @@ pub async fn handle_prompt(
         Ok(s) => s,
         Err(e) => {
             warn!(error = %e, "Agent run failed");
+            // 通过 session/update 通知客户端错误信息，而非静默返回 EndTurn
+            let mut msg_id = 0u64;
+            notify_text(&conn, &session_id, &mut msg_id, &format!("[Agent error: {}]", e));
             let _ = responder.respond(PromptResponse::new(StopReason::EndTurn));
             return Ok(());
         }

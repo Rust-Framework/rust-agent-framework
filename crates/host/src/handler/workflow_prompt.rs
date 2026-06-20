@@ -25,8 +25,14 @@ use crate::bridge::workflow_bridge::run_workflow_to_completion;
 /// A registry of workflow graphs keyed by agent ID.
 ///
 /// Stores `WorkflowGraph` instances for HITL-capable agents. When a `session/prompt`
-/// targets an agent in this registry, the graph is retrieved and run via
+/// targets an agent in this registry, the graph is cloned (not consumed) and run via
 /// `WorkflowRuntime` (instead of `IAgent::run()`).
+///
+/// # 复用语义
+///
+/// 与早期版本不同，图不再被 `take()` 消费。每次 `session/prompt` 都会通过
+/// `clone_graph()` 获取一份克隆，原始图保留在注册表中供后续会话复用。
+/// 这使得同一个工作流 Agent（如 `dev-pipeline`）可被多个会话多次调用。
 pub struct WorkflowGraphRegistry {
     graphs: std::collections::HashMap<String, WorkflowGraph>,
 }
@@ -43,16 +49,18 @@ impl WorkflowGraphRegistry {
         self.graphs.insert(agent_id.into(), graph);
     }
 
-    /// Get a workflow graph by agent ID.
+    /// Get a reference to a workflow graph by agent ID.
     pub fn get(&self, agent_id: &str) -> Option<&WorkflowGraph> {
         self.graphs.get(agent_id)
     }
 
-    /// Take (remove) a workflow graph by agent ID.
+    /// Clone the workflow graph for a new execution, keeping the original for reuse.
     ///
-    /// The graph is consumed because `WorkflowRuntime::start` takes ownership.
-    pub fn take(&mut self, agent_id: &str) -> Option<WorkflowGraph> {
-        self.graphs.remove(agent_id)
+    /// `WorkflowGraph` 实现 `Clone`（节点通过 `Arc<dyn IExecutor>` 共享），
+    /// 因此克隆是廉价的——仅复制 HashMap 结构，不复制执行器实例。
+    /// 每次执行使用独立的克隆，`WorkflowRuntime` 在其上维护独立的执行状态。
+    pub fn clone_graph(&self, agent_id: &str) -> Option<WorkflowGraph> {
+        self.graphs.get(agent_id).cloned()
     }
 
     /// Check if an agent ID is registered as a workflow.
@@ -80,34 +88,38 @@ impl Default for WorkflowGraphRegistry {
 /// Handle a `session/prompt` request for a workflow-based agent.
 ///
 /// This function:
-/// 1. Takes the workflow graph from the registry (the graph is consumed).
+/// 1. Clones the workflow graph from the registry (original is kept for reuse).
 /// 2. Converts the ACP prompt blocks to a `ChatMessage`.
-/// 3. Calls `run_workflow_to_completion` which starts the `WorkflowRuntime`,
+/// 3. Registers a cancel token with the `SessionBridge` so `session/cancel`
+///    can interrupt the workflow via `WorkflowRuntime::halt()`.
+/// 4. Calls `run_workflow_to_completion` which starts the `WorkflowRuntime`,
 ///    streams events as ACP notifications, and handles HITL halts.
-/// 4. Responds with a `PromptResponse` when the workflow finishes.
+/// 5. Responds with a `PromptResponse` when the workflow finishes.
 ///
 /// # Arguments
 /// - `req`: The ACP prompt request.
 /// - `responder`: ACP responder for the final response.
 /// - `conn`: ACP client connection (for notifications and permission requests).
 /// - `graph_registry`: Registry of workflow graphs (the graph for the target
-///   agent will be consumed).
+///   agent will be cloned, not consumed).
+/// - `session_bridge`: Session bridge for cancel token registration.
 /// - `target_agent_id`: The agent ID to look up in the registry.
 pub async fn handle_workflow_prompt(
     req: PromptRequest,
     responder: agent_client_protocol::Responder<PromptResponse>,
     conn: ConnectionTo<Client>,
     graph_registry: Arc<tokio::sync::Mutex<WorkflowGraphRegistry>>,
+    session_bridge: Arc<crate::bridge::session::SessionBridge>,
     target_agent_id: String,
 ) -> agent_client_protocol::Result<()> {
     let session_id = req.session_id.clone();
     let sid_str = session_id.0.as_ref().to_string();
     debug!(session_id = %sid_str, agent_id = %target_agent_id, "Handling workflow prompt");
 
-    // Take the graph from the registry (consumed by WorkflowRuntime)
+    // Clone the graph from the registry (original kept for reuse by future sessions)
     let graph = {
-        let mut registry = graph_registry.lock().await;
-        match registry.take(&target_agent_id) {
+        let registry = graph_registry.lock().await;
+        match registry.clone_graph(&target_agent_id) {
             Some(g) => g,
             None => {
                 warn!(agent_id = %target_agent_id, "Workflow graph not found in registry");
@@ -121,9 +133,22 @@ pub async fn handle_workflow_prompt(
     let initial_message = convert_blocks_to_message(&req.prompt);
     debug!(message_len = initial_message.content.len(), "Converted prompt to message");
 
+    // Register a cancel token so session/cancel can interrupt the workflow
+    let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    session_bridge.register_cancel_token(&sid_str, cancelled.clone()).await;
+
     // Spawn the workflow execution in a background task
     tokio::spawn(async move {
-        let result = run_workflow_to_completion(graph, initial_message, session_id, conn).await;
+        let result = run_workflow_to_completion(
+            graph,
+            initial_message,
+            session_id,
+            conn,
+            cancelled,
+        ).await;
+
+        // Clean up the cancel token
+        session_bridge.clear_cancel_token(&sid_str).await;
 
         info!(
             session_id = %sid_str,

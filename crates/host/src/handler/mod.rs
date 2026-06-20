@@ -3,3 +3,4 @@
 pub mod acp_agent;
 pub mod prompt;
 pub mod workflow_prompt;
+pub mod raf_extensions;

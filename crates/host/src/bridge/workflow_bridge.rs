@@ -13,6 +13,7 @@
 //!   status-change signals in `_meta.raf.status`.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use futures_util::StreamExt;
 use tracing::{debug, info, warn};
@@ -31,6 +32,7 @@ use rust_agent_core::ChatMessage;
 use rust_agent_workflow::{ResumeCommand, WorkflowEvent, WorkflowGraph, WorkflowRuntime};
 
 use crate::bridge::types::{build_raf_meta, node_chunk_to_acp_update_json};
+use crate::bridge::tracker::SubAgentStatusTracker;
 
 /// Result of running a workflow to completion (or halt).
 pub struct WorkflowRunResult {
@@ -45,18 +47,23 @@ pub struct WorkflowRunResult {
 ///    `SessionUpdate` notifications (with `_meta.raf.agent_id` tags).
 /// 3. On `WorkflowHalted`, sends `session/request_permission` to the client
 ///    and awaits the response. The user's choice is used to resume the workflow.
-/// 4. Returns when the workflow completes or errors.
+/// 4. Polls the `cancelled` flag between events — when set (by `session/cancel`),
+///    the loop breaks and returns `StopReason::EndTurn`.
+/// 5. Returns when the workflow completes or errors.
 ///
 /// # Arguments
 /// - `graph`: The workflow graph (e.g., from `build_dev_pipeline`).
 /// - `initial_message`: The user's prompt as a `ChatMessage`.
 /// - `session_id`: ACP session ID for notifications.
 /// - `conn`: ACP client connection (for sending notifications and permission requests).
+/// - `cancelled`: Cancel flag shared with `SessionBridge`. When set to `true`,
+///   the workflow loop exits at the next event boundary.
 pub async fn run_workflow_to_completion(
     graph: WorkflowGraph,
     initial_message: ChatMessage,
     session_id: SessionId,
     conn: ConnectionTo<Client>,
+    cancelled: Arc<AtomicBool>,
 ) -> WorkflowRunResult {
     let initial: Arc<dyn std::any::Any + Send + Sync> = Arc::new(initial_message);
 
@@ -84,101 +91,137 @@ pub async fn run_workflow_to_completion(
     let mut msg_id = 0u64;
     let mut stop_reason = StopReason::EndTurn;
 
-    while let Some(event) = events.next().await {
-        match &event {
-            WorkflowEvent::WorkflowStarted { start_node_id, .. } => {
-                debug!(start_node_id, "Workflow started");
-                last_node_id = start_node_id.clone();
+    // 子 Agent 状态追踪器 — 记录每个节点的执行状态和耗时
+    let tracker = SubAgentStatusTracker::new();
+
+    loop {
+        // Check cancellation before waiting for the next event.
+        // This ensures `session/cancel` can interrupt the workflow at event boundaries.
+        if cancelled.load(Ordering::SeqCst) {
+            info!(session_id = %session_id.0, "Workflow cancelled by client");
+            notify_text(&conn, &session_id, "[Workflow cancelled by client]");
+            stop_reason = StopReason::EndTurn;
+            break;
+        }
+
+        // Use a timeout-bounded next() so we periodically re-check the cancel flag
+        // even when the workflow is long-running between events.
+        let next_event = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            events.next(),
+        ).await;
+
+        match next_event {
+            Err(_elapsed) => {
+                // Timeout — loop back to re-check cancel flag
+                continue;
             }
-
-            WorkflowEvent::NodeInvoking { node_id, node_name, .. } => {
-                debug!(node_id, node_name, "Node invoking");
-                last_node_id = node_id.clone();
-                // Send a status signal: this sub-agent is now executing
-                notify_status_signal(&conn, &session_id, node_id, "executing");
-            }
-
-            WorkflowEvent::NodeStreaming { node_id, chunk } => {
-                // Convert the NodeChunk to an ACP SessionUpdate and send it
-                if let Some(update_json) = node_chunk_to_acp_update_json(chunk) {
-                    send_workflow_update(&conn, &session_id, node_id, update_json, &mut msg_id);
-                }
-            }
-
-            WorkflowEvent::NodeCompleted { node_id, .. } => {
-                debug!(node_id, "Node completed");
-                notify_status_signal(&conn, &session_id, node_id, "completed");
-            }
-
-            WorkflowEvent::NodeFailed { node_id, error } => {
-                warn!(node_id, error, "Node failed");
-                notify_text(&conn, &session_id, &format!("[Node {} failed: {}]", node_id, error));
-                notify_status_signal(&conn, &session_id, node_id, "error");
-            }
-
-            WorkflowEvent::Custom { key, data } if key == "halt_payload" => {
-                // The workflow is about to halt for HITL confirmation.
-                // Extract the form data and send it as an agent message so the
-                // user can see what they're confirming.
-                let form_text = format_halt_payload(data);
-                if !form_text.is_empty() {
-                    notify_text_meta(
-                        &conn,
-                        &session_id,
-                        &mut msg_id,
-                        &form_text,
-                        Some(&last_node_id),
-                    );
-                }
-            }
-
-            WorkflowEvent::WorkflowHalted { .. } => {
-                info!(session_id = %session_id.0, "Workflow halted for HITL confirmation");
-
-                // Send session/request_permission to the client
-                let user_input = request_hitl_confirmation(
-                    &conn,
-                    &session_id,
-                    &last_node_id,
-                )
-                .await;
-
-                // Resume the workflow with the user's input
-                let message: Arc<dyn std::any::Any + Send + Sync> = Arc::new(user_input);
-                if let Err(e) = runtime.resume(ResumeCommand::InjectMessage {
-                    target_node_id: last_node_id.clone(),
-                    message,
-                }) {
-                    warn!(error = %e, "Failed to resume workflow");
-                    notify_text(&conn, &session_id, &format!("Failed to resume: {}", e));
-                    break;
-                }
-            }
-
-            WorkflowEvent::WorkflowResumed { .. } => {
-                debug!("Workflow resumed");
-            }
-
-            WorkflowEvent::WorkflowCompleted { .. } => {
-                info!("Workflow completed");
-                stop_reason = StopReason::EndTurn;
+            Ok(None) => {
+                // Stream ended
+                debug!("Workflow event stream ended");
                 break;
             }
+            Ok(Some(event)) => {
+                match &event {
+                    WorkflowEvent::WorkflowStarted { start_node_id, .. } => {
+                        debug!(start_node_id, "Workflow started");
+                        last_node_id = start_node_id.clone();
+                    }
 
-            WorkflowEvent::WorkflowError { error, node_id } => {
-                warn!(error, ?node_id, "Workflow error");
-                notify_text(&conn, &session_id, &format!("[Workflow error: {}]", error));
-                break;
-            }
+                    WorkflowEvent::NodeInvoking { node_id, node_name, .. } => {
+                        debug!(node_id, node_name, "Node invoking");
+                        last_node_id = node_id.clone();
+                        // 更新追踪器状态并发送状态信号
+                        tracker.register(node_id, node_name.as_str());
+                        tracker.ensure_active(node_id);
+                        notify_status_signal_with_tracker(&conn, &session_id, node_id, "executing", &tracker);
+                    }
 
-            WorkflowEvent::WorkflowTimeout { .. } => {
-                warn!("Workflow timeout");
-                notify_text(&conn, &session_id, "[Workflow timed out]");
-                break;
-            }
+                    WorkflowEvent::NodeStreaming { node_id, chunk } => {
+                        // Convert the NodeChunk to an ACP SessionUpdate and send it
+                        if let Some(update_json) = node_chunk_to_acp_update_json(chunk) {
+                            send_workflow_update(&conn, &session_id, node_id, update_json, &mut msg_id);
+                        }
+                    }
 
-            _ => {
-                // Ignore other events (SuperStep, AgentResponse, etc.)
+                    WorkflowEvent::NodeCompleted { node_id, .. } => {
+                        debug!(node_id, "Node completed");
+                        tracker.mark_completed(node_id);
+                        notify_status_signal_with_tracker(&conn, &session_id, node_id, "completed", &tracker);
+                    }
+
+                    WorkflowEvent::NodeFailed { node_id, error } => {
+                        warn!(node_id, error, "Node failed");
+                        tracker.mark_error(node_id);
+                        notify_text(&conn, &session_id, &format!("[Node {} failed: {}]", node_id, error));
+                        notify_status_signal_with_tracker(&conn, &session_id, node_id, "error", &tracker);
+                    }
+
+                    WorkflowEvent::Custom { key, data } if key == "halt_payload" => {
+                        // The workflow is about to halt for HITL confirmation.
+                        // Extract the form data and send it as an agent message so the
+                        // user can see what they're confirming.
+                        let form_text = format_halt_payload(data);
+                        if !form_text.is_empty() {
+                            notify_text_meta(
+                                &conn,
+                                &session_id,
+                                &mut msg_id,
+                                &form_text,
+                                Some(&last_node_id),
+                            );
+                        }
+                    }
+
+                    WorkflowEvent::WorkflowHalted { .. } => {
+                        info!(session_id = %session_id.0, "Workflow halted for HITL confirmation");
+
+                        // Send session/request_permission to the client
+                        let user_input = request_hitl_confirmation(
+                            &conn,
+                            &session_id,
+                            &last_node_id,
+                        )
+                        .await;
+
+                        // Resume the workflow with the user's input
+                        let message: Arc<dyn std::any::Any + Send + Sync> = Arc::new(user_input);
+                        if let Err(e) = runtime.resume(ResumeCommand::InjectMessage {
+                            target_node_id: last_node_id.clone(),
+                            message,
+                        }) {
+                            warn!(error = %e, "Failed to resume workflow");
+                            notify_text(&conn, &session_id, &format!("Failed to resume: {}", e));
+                            break;
+                        }
+                    }
+
+                    WorkflowEvent::WorkflowResumed { .. } => {
+                        debug!("Workflow resumed");
+                    }
+
+                    WorkflowEvent::WorkflowCompleted { .. } => {
+                        info!("Workflow completed");
+                        stop_reason = StopReason::EndTurn;
+                        break;
+                    }
+
+                    WorkflowEvent::WorkflowError { error, node_id } => {
+                        warn!(error, ?node_id, "Workflow error");
+                        notify_text(&conn, &session_id, &format!("[Workflow error: {}]", error));
+                        break;
+                    }
+
+                    WorkflowEvent::WorkflowTimeout { .. } => {
+                        warn!("Workflow timeout");
+                        notify_text(&conn, &session_id, "[Workflow timed out]");
+                        break;
+                    }
+
+                    _ => {
+                        // Ignore other events (SuperStep, AgentResponse, etc.)
+                    }
+                }
             }
         }
     }
@@ -381,10 +424,26 @@ fn notify_text_meta(
     );
 }
 
-/// Send a status-change signal (empty agent_message_chunk with status in _meta).
-fn notify_status_signal(conn: &ConnectionTo<Client>, sid: &SessionId, agent_id: &str, status: &str) {
+/// 发送带子 Agent 追踪器元数据的状态信号。
+///
+/// 与 `notify_status_signal` 类似，但在 `_meta` 中额外包含：
+/// - `raf.sub_agents`: 所有子 Agent 的当前状态和耗时
+fn notify_status_signal_with_tracker(
+    conn: &ConnectionTo<Client>,
+    sid: &SessionId,
+    agent_id: &str,
+    status: &str,
+    tracker: &SubAgentStatusTracker,
+) {
     let chunk = ContentChunk::new(ContentBlock::Text(AcpText::new("")));
-    let meta = build_raf_meta(Some(agent_id), status);
+    let mut meta = build_raf_meta(Some(agent_id), status);
+
+    // 合并 tracker 的状态元数据到 _meta（扁平 key: raf.sub_agents）
+    let tracker_meta = tracker.build_status_meta();
+    if let Some(sub_agents) = tracker_meta.get("sub_agents") {
+        meta.insert("raf.sub_agents".to_string(), sub_agents.clone());
+    }
+
     let _ = conn.send_notification(
         SessionNotification::new(sid.clone(), SessionUpdate::AgentMessageChunk(chunk)).meta(meta),
     );

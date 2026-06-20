@@ -11,12 +11,15 @@ use agent_client_protocol::schema::{
     NewSessionRequest, NewSessionResponse, SessionId,
     PromptRequest,
     CancelNotification,
+    DeleteSessionRequest, DeleteSessionResponse,
+    CloseSessionRequest, CloseSessionResponse,
 };
 
 use crate::registry::agent_registry::AgentRegistry;
 use crate::bridge::session::SessionBridge;
 use crate::handler::prompt::route_prompt;
 use crate::handler::workflow_prompt::WorkflowGraphRegistry;
+use crate::handler::raf_extensions;
 
 pub struct RafAgentHost {
     pub registry: Arc<AgentRegistry>,
@@ -91,7 +94,7 @@ impl RafAgentHost {
                 async move |req: PromptRequest, responder, conn: ConnectionTo<Client>| {
                     // Clone `gr3` inside the closure so the closure is `Fn`
                     // (can be called multiple times) rather than `FnOnce`.
-                    route_prompt(req, responder, conn, &r3, &b3, gr3.clone()).await
+                    route_prompt(req, responder, conn, &r3, b3.clone(), gr3.clone()).await
                 }
             }, agent_client_protocol::on_receive_request!())
             // 4. Cancel notification
@@ -104,6 +107,56 @@ impl RafAgentHost {
                     Ok(())
                 }
             }, agent_client_protocol::on_receive_notification!())
+            // 4b. session/delete — 删除会话并清理资源
+            .on_receive_request({
+                let b_del = bridge.clone();
+                async move |req: DeleteSessionRequest, responder, _conn| {
+                    let sid = req.session_id.0.as_ref().to_string();
+                    info!(session_id = %sid, "Session delete requested");
+                    b_del.remove_session(&sid).await;
+                    responder.respond(DeleteSessionResponse::new())
+                }
+            }, agent_client_protocol::on_receive_request!())
+            // 4c. session/close — 关闭活跃会话
+            .on_receive_request({
+                let b_close = bridge.clone();
+                async move |req: CloseSessionRequest, responder, _conn| {
+                    let sid = req.session_id.0.as_ref().to_string();
+                    info!(session_id = %sid, "Session close requested");
+                    b_close.remove_session(&sid).await;
+                    responder.respond(CloseSessionResponse::new())
+                }
+            }, agent_client_protocol::on_receive_request!())
+            // 5. _raf/agent_list — 列出所有已注册 Agent
+            .on_receive_request({
+                let r5 = registry.clone();
+                async move |req: raf_extensions::AgentListRequest, responder, conn| {
+                    raf_extensions::handle_agent_list(req, responder, conn, &r5).await
+                }
+            }, agent_client_protocol::on_receive_request!())
+            // 6. _raf/agent_info — 查询指定 Agent 详情
+            .on_receive_request({
+                let r6 = registry.clone();
+                let gr6 = graph_registry.clone();
+                async move |req: raf_extensions::AgentInfoRequest, responder, conn| {
+                    let gr = gr6.lock().await;
+                    raf_extensions::handle_agent_info(req, responder, conn, &r6, &gr).await
+                }
+            }, agent_client_protocol::on_receive_request!())
+            // 7. _raf/subagent_list — 列出指定 Agent 的子 Agent
+            .on_receive_request({
+                let r7 = registry.clone();
+                async move |req: raf_extensions::SubAgentListRequest, responder, conn| {
+                    raf_extensions::handle_subagent_list(req, responder, conn, &r7).await
+                }
+            }, agent_client_protocol::on_receive_request!())
+            // 8. _raf/subagent_tree — 查询子 Agent 树
+            .on_receive_request({
+                let r8 = registry.clone();
+                async move |req: raf_extensions::SubAgentTreeRequest, responder, conn| {
+                    raf_extensions::handle_subagent_tree(req, responder, conn, &r8).await
+                }
+            }, agent_client_protocol::on_receive_request!())
             .connect_to(transport)
             .await
     }
