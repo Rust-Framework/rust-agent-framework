@@ -19,12 +19,14 @@ use axum::{
 use crate::registry::agent_registry::AgentRegistry;
 use crate::bridge::session::SessionBridge;
 use crate::handler::acp_agent::RafAgentHost;
+use crate::handler::workflow_prompt::WorkflowGraphRegistry;
 
 /// Run the ACP server in WebSocket mode, listening on the given address.
 pub async fn run_ws_server(
     bind_addr: String,
     registry: Arc<AgentRegistry>,
     session_bridge: Arc<SessionBridge>,
+    graph_registry: Arc<tokio::sync::Mutex<WorkflowGraphRegistry>>,
 ) -> Result<()> {
     info!(addr = %bind_addr, "Starting ACP WebSocket server");
 
@@ -33,6 +35,7 @@ pub async fn run_ws_server(
         .with_state(WsState {
             registry,
             session_bridge,
+            graph_registry,
         });
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
@@ -48,6 +51,7 @@ pub async fn run_ws_server(
 struct WsState {
     registry: Arc<AgentRegistry>,
     session_bridge: Arc<SessionBridge>,
+    graph_registry: Arc<tokio::sync::Mutex<WorkflowGraphRegistry>>,
 }
 
 /// WebSocket upgrade handler.
@@ -79,6 +83,7 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
     let host = RafAgentHost {
         registry: state.registry.clone(),
         session_bridge: state.session_bridge.clone(),
+        graph_registry: state.graph_registry.clone(),
     };
 
     // Spawn the ACP agent

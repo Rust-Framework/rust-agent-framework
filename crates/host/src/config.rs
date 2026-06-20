@@ -18,13 +18,20 @@ pub struct HostConfig {
     /// 要启用的内置 Agent 预设。
     #[serde(default)]
     pub agents: AgentPresetsConfig,
+    /// 6 阶段开发流水线配置（rust-agent-coding）。
+    #[serde(default)]
+    pub dev_pipeline: DevPipelineConfig,
     /// 声明式 Agent 文件（JSON/YAML/TOML）的目录。
     #[serde(default)]
     pub agents_dir: Option<String>,
+    /// 工作区根目录（供 Agent 文件工具使用）。默认为当前目录。
+    #[serde(default = "default_workspace_root")]
+    pub workspace_root: String,
 }
 
 fn default_mode() -> TransportMode { TransportMode::Stdio }
 fn default_ws_bind() -> String { "127.0.0.1:9876".into() }
+fn default_workspace_root() -> String { ".".into() }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
@@ -112,6 +119,33 @@ pub struct AgentPresetsConfig {
 
 fn default_true() -> bool { true }
 
+/// 6 阶段开发流水线配置（rust-agent-coding 集成）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DevPipelineConfig {
+    /// 是否启用开发流水线 Agent（`dev-pipeline`）。
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Agent ID（注册到 Registry 中的标识）。
+    #[serde(default = "default_dev_pipeline_id")]
+    pub agent_id: String,
+    /// 反馈循环最大迭代次数（对应 `LoopConfig`）。
+    #[serde(default = "default_max_iterations")]
+    pub max_iterations: u32,
+}
+
+fn default_dev_pipeline_id() -> String { "dev-pipeline".into() }
+fn default_max_iterations() -> u32 { 3 }
+
+impl Default for DevPipelineConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            agent_id: default_dev_pipeline_id(),
+            max_iterations: default_max_iterations(),
+        }
+    }
+}
+
 /// CLI 参数（clap）。
 #[derive(Debug, Parser, Serialize)]
 #[command(name = "rust-agent-host", about = "ACP server for the Rust Agent Framework")]
@@ -144,6 +178,14 @@ pub struct CliArgs {
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+    /// 工作区根目录（供 Agent 文件工具使用）
+    #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_root: Option<String>,
+    /// 禁用开发流水线 Agent
+    #[arg(long)]
+    #[serde(skip)]
+    pub no_dev_pipeline: bool,
 }
 
 /// 从分层源加载配置：
@@ -173,6 +215,12 @@ pub fn load_config() -> anyhow::Result<HostConfig> {
     // Layer 3: CLI defaults (serialize cli args)
     fig = fig.merge(Serialized::defaults(&cli));
 
-    let config: HostConfig = fig.extract()?;
+    let mut config: HostConfig = fig.extract()?;
+
+    // Handle --no-dev-pipeline flag
+    if cli.no_dev_pipeline {
+        config.dev_pipeline.enabled = false;
+    }
+
     Ok(config)
 }

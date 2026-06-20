@@ -18,6 +18,50 @@ use rust_agent_core::{AgentRunOptions, ChatMessage, Content, FinishReason};
 
 use crate::registry::agent_registry::AgentRegistry;
 use crate::bridge::session::SessionBridge;
+use crate::handler::workflow_prompt::{WorkflowGraphRegistry, handle_workflow_prompt};
+
+/// Route a `session/prompt` request to the appropriate handler based on whether
+/// the target agent is a workflow agent (HITL-capable) or a simple agent.
+///
+/// - If the target agent ID is registered in `WorkflowGraphRegistry`, route to
+///   `handle_workflow_prompt` (which uses `WorkflowRuntime` for HITL support).
+/// - Otherwise, route to `handle_prompt` (which uses `IAgent::run()` for
+///   streaming).
+///
+/// This is the single entry point used by `RafAgentHost` for `session/prompt`.
+pub async fn route_prompt(
+    req: PromptRequest,
+    responder: agent_client_protocol::Responder<PromptResponse>,
+    conn: ConnectionTo<Client>,
+    registry: &AgentRegistry,
+    bridge: &SessionBridge,
+    graph_registry: Arc<tokio::sync::Mutex<WorkflowGraphRegistry>>,
+) -> agent_client_protocol::Result<()> {
+    // Determine the target agent ID from request meta (or default).
+    let target_agent_id = req.meta.as_ref()
+        .and_then(|m| m.get("raf.agent_id"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            // Fall back to the default agent ID from the registry.
+            registry.ids().first().map(|id| id.to_string())
+        })
+        .unwrap_or_else(|| "default".to_string());
+
+    // Check if this is a workflow agent
+    let is_workflow = {
+        let reg = graph_registry.lock().await;
+        reg.contains(&target_agent_id)
+    };
+
+    if is_workflow {
+        debug!(agent_id = %target_agent_id, "Routing to workflow prompt handler");
+        handle_workflow_prompt(req, responder, conn, graph_registry, target_agent_id).await
+    } else {
+        debug!(agent_id = %target_agent_id, "Routing to simple agent prompt handler");
+        handle_prompt(req, responder, conn, registry, bridge).await
+    }
+}
 
 pub async fn handle_prompt(
     req: PromptRequest,

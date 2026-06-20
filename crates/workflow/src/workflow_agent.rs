@@ -54,6 +54,30 @@ impl WorkflowAgent {
         }
     }
 
+    /// 从 WorkflowGraph 创建 Agent，并使用自定义 Agent ID（覆盖默认 ID）。
+    ///
+    /// 用于在注册表中区分多个工作流 Agent（例如 `dev-pipeline`）。
+    pub fn with_id(graph: WorkflowGraph, agent_id: impl Into<String>) -> Self {
+        let sub_agents = Self::extract_agents(&graph);
+        let id_str = agent_id.into();
+        let id = AgentId::new(id_str.clone());
+        let mut metadata = AgentMetadata::new("WorkflowAgent", id_str.clone());
+        metadata.description = format!(
+            "图工作流 [{}]: {} 节点, {} 条边",
+            id_str,
+            graph.nodes().len(),
+            graph.edges().len()
+        );
+
+        Self {
+            id,
+            metadata,
+            graph: Arc::new(graph),
+            sub_agents,
+            checkpoint_manager: None,
+        }
+    }
+
     /// 从 WorkflowGraph + CheckpointManager 创建 Agent（带故障恢复）
     pub fn new_with_checkpoint(
         graph: WorkflowGraph,

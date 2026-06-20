@@ -33,3 +33,4 @@ pub use registry::agent_registry::AgentRegistry;
 pub use bridge::session::SessionBridge;
 pub use bridge::tracker::SubAgentStatusTracker;
 pub use handler::acp_agent::RafAgentHost;
+pub use handler::workflow_prompt::WorkflowGraphRegistry;

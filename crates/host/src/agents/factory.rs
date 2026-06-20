@@ -1,11 +1,13 @@
 //! Agent factory — create built-in agents from configuration presets.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use tracing::warn;
 use rust_agent_core::IAgent;
 use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
 use rust_agent_framework::AgentBuilder;
+use rust_agent_workflow::WorkflowAgent;
 
 use crate::config::HostConfig;
 
@@ -48,6 +50,66 @@ impl<'a> AgentFactory<'a> {
         }
 
         Ok(agents)
+    }
+
+    /// 创建开发流水线 Agent（6 阶段编码工作流，支持 HITL）。
+    ///
+    /// 返回 `(agent, graph)` 元组：
+    /// - `agent`: `WorkflowAgent` 包装，用于注册到 `AgentRegistry`（提供元数据和子代理发现）
+    /// - `graph`: 原始 `WorkflowGraph`，用于注册到 `WorkflowGraphRegistry`（HITL 执行路径）
+    pub fn create_dev_pipeline_agent(&self) -> Result<(Arc<dyn IAgent>, rust_agent_workflow::WorkflowGraph)> {
+        let options = self.build_client_options()?;
+        let workspace_root = PathBuf::from(&self.config.workspace_root);
+
+        let graph = rust_agent_coding::build_dev_pipeline(&options, &workspace_root)?;
+
+        // Build a WorkflowAgent wrapper for metadata + sub-agent discovery.
+        // The actual HITL execution uses the graph directly via WorkflowRuntime.
+        let agent_id = self.config.dev_pipeline.agent_id.clone();
+        let agent = Self::build_workflow_agent_with_id(graph.clone(), &agent_id)?;
+
+        Ok((agent, graph))
+    }
+
+    /// Build a `WorkflowAgent` with a custom agent ID (overriding the default).
+    fn build_workflow_agent_with_id(
+        graph: rust_agent_workflow::WorkflowGraph,
+        agent_id: &str,
+    ) -> Result<Arc<dyn IAgent>> {
+        let agent = WorkflowAgent::with_id(graph, agent_id);
+        Ok(Arc::new(agent))
+    }
+
+    /// Build `ChatClientOptions` from the provider config.
+    fn build_client_options(&self) -> Result<ChatClientOptions> {
+        let provider = &self.config.provider;
+        let api_key = provider
+            .resolve_api_key()
+            .ok_or_else(|| anyhow!(
+                "No API key configured. Set DEEPSEEK_API_KEY or OPENAI_API_KEY environment variable, \
+                 or configure via CLI: --api-key YOUR_KEY"
+            ))?;
+
+        let model = &provider.model;
+
+        let options = match provider.provider.as_str() {
+            "openai" => {
+                let mut opts = ChatClientOptions::openai(model, api_key);
+                if let Some(url) = &provider.base_url {
+                    opts.api_base = url.clone();
+                }
+                opts
+            }
+            "deepseek" | _ => {
+                let mut opts = ChatClientOptions::deepseek(model, api_key);
+                if let Some(url) = &provider.base_url {
+                    opts.api_base = url.clone();
+                }
+                opts
+            }
+        };
+
+        Ok(options)
     }
 
     /// Create a chat client from the provider config.

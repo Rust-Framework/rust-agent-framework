@@ -1,13 +1,14 @@
 //! RAF ↔ ACP session bridge.
 //!
 //! Manages the mapping between ACP `SessionId` and RAF `AgentSession`,
-//! including per-session cancel tokens and target agent tracking.
+//! including per-session cancel tokens, target agent tracking, and
+//! workflow runtime handles for HITL-capable agents.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use rust_agent_core::{AgentSession};
+use rust_agent_core::AgentSession;
 use tokio::sync::RwLock;
 
 /// 每个 ACP 会话存储的上下文。
@@ -19,6 +20,8 @@ pub struct SessionContext {
     pub target_agent_id: String,
     /// 当前提示轮次的取消令牌。
     pub cancel_token: Option<Arc<AtomicBool>>,
+    /// 是否为工作流会话（HITL-capable）。
+    pub is_workflow: bool,
 }
 
 /// ACP 会话与 RAF Agent 会话之间的桥梁。
@@ -34,15 +37,19 @@ impl SessionBridge {
     }
 
     /// 创建新会话，可选地指定目标 Agent。
+    ///
+    /// `is_workflow` 标记此会话是否使用工作流运行时（支持 HITL）。
     pub async fn create_session(
         &self,
         session_id: &str,
         target_agent_id: Option<&str>,
+        is_workflow: bool,
     ) -> anyhow::Result<()> {
         let ctx = SessionContext {
             raf_session: Arc::new(AgentSession::with_id(session_id)),
             target_agent_id: target_agent_id.unwrap_or("default").to_string(),
             cancel_token: None,
+            is_workflow,
         };
         self.sessions.write().await.insert(session_id.to_string(), ctx);
         Ok(())
@@ -59,6 +66,7 @@ impl SessionBridge {
                 raf_session: Arc::new(AgentSession::with_id(session_id)),
                 target_agent_id: "default".to_string(),
                 cancel_token: None,
+                is_workflow: false,
             }
         });
         Ok(ctx.raf_session.clone())
@@ -98,6 +106,16 @@ impl SessionBridge {
             .await
             .get(session_id)
             .map(|ctx| ctx.target_agent_id.clone())
+    }
+
+    /// 检查会话是否为工作流会话。
+    pub async fn is_workflow_session(&self, session_id: &str) -> bool {
+        self.sessions
+            .read()
+            .await
+            .get(session_id)
+            .map(|ctx| ctx.is_workflow)
+            .unwrap_or(false)
     }
 
     /// 移除会话。

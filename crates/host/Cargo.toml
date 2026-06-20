@@ -17,6 +17,8 @@ rust-agent-core = { workspace = true }
 rust-agent-framework = { workspace = true }
 rust-agent-client = { workspace = true }
 rust-agent-decl = { workspace = true }
+rust-agent-workflow = { workspace = true }
+rust-agent-coding = { workspace = true }
 
 # ACP protocol
 agent-client-protocol = "0.14"

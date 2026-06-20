@@ -1,11 +1,10 @@
 //! RAF type → ACP type conversions.
 //!
-//! Converts RAF `Content`/`Event` into ACP `SessionUpdate` variants,
-//! with `_meta` tags carrying sub-agent origin information.
+//! Converts RAF `Content`/`Event` and `WorkflowEvent` into ACP `SessionUpdate`
+//! variants, with `_meta` tags carrying sub-agent origin information.
 
-use rust_agent_core::{
-    Content,
-};
+use rust_agent_core::Content;
+use rust_agent_workflow::{NodeChunk, WorkflowEvent};
 
 /// Convert a RAF `Content` variant into an ACP `SessionUpdate` JSON value.
 ///
@@ -140,13 +139,33 @@ pub fn extract_agent_id(content: &Content) -> Option<String> {
 }
 
 /// Build the `_meta` JSON object for a session/update notification.
-pub fn build_raf_meta(agent_id: Option<&str>, status: &str) -> serde_json::Value {
+///
+/// Returns a `serde_json::Map<String, Value>` directly, as required by ACP's
+/// `SessionNotification::meta()` and `RequestPermissionRequest::meta()` builders.
+pub fn build_raf_meta(agent_id: Option<&str>, status: &str) -> serde_json::Map<String, serde_json::Value> {
     let mut meta = serde_json::Map::new();
     if let Some(id) = agent_id {
         meta.insert("raf.agent_id".into(), serde_json::Value::String(id.to_string()));
     }
     meta.insert("raf.status".into(), serde_json::Value::String(status.to_string()));
-    serde_json::Value::Object(meta)
+    meta
+}
+
+/// Build the `_meta` JSON object with agent_id, agent_type, and status.
+pub fn build_raf_meta_typed(
+    agent_id: Option<&str>,
+    agent_type: Option<&str>,
+    status: &str,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut meta = serde_json::Map::new();
+    if let Some(id) = agent_id {
+        meta.insert("raf.agent_id".into(), serde_json::Value::String(id.to_string()));
+    }
+    if let Some(t) = agent_type {
+        meta.insert("raf.agent_type".into(), serde_json::Value::String(t.to_string()));
+    }
+    meta.insert("raf.status".into(), serde_json::Value::String(status.to_string()));
+    meta
 }
 
 /// Convert ACP PromptRequest content blocks to RAF ChatMessages.
@@ -190,4 +209,68 @@ pub fn convert_prompt_to_chat_messages(
     }
 
     messages
+}
+
+// ── WorkflowEvent → ACP conversion helpers ──────────────────────────────────
+
+/// Convert a `NodeChunk` (workflow streaming delta) into an ACP `SessionUpdate` JSON value.
+///
+/// Returns `None` for chunk types that don't produce a user-visible update.
+pub fn node_chunk_to_acp_update_json(chunk: &NodeChunk) -> Option<serde_json::Value> {
+    match chunk {
+        NodeChunk::TextDelta { delta } => Some(serde_json::json!({
+            "sessionUpdate": "agent_message_chunk",
+            "content": { "type": "text", "text": delta }
+        })),
+        NodeChunk::ReasoningDelta { delta } => Some(serde_json::json!({
+            "sessionUpdate": "agent_message_chunk",
+            "role": "thought",
+            "content": { "type": "text", "text": delta }
+        })),
+        NodeChunk::ToolCallStart { call_id, name } => Some(serde_json::json!({
+            "sessionUpdate": "tool_call",
+            "toolCallId": call_id,
+            "title": name,
+            "kind": "other",
+            "status": "pending"
+        })),
+        NodeChunk::ToolCallArgs { call_id, args_delta } => Some(serde_json::json!({
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": call_id,
+            "status": "in_progress",
+            "argsPreview": args_delta
+        })),
+        NodeChunk::ToolCallEnd { call_id } => Some(serde_json::json!({
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": call_id,
+            "status": "in_progress"
+        })),
+        NodeChunk::ToolResult { call_id, result } => Some(serde_json::json!({
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": call_id,
+            "status": "completed",
+            "content": [{
+                "type": "content",
+                "content": { "type": "text", "text": result }
+            }]
+        })),
+        NodeChunk::UsageUpdate { prompt_tokens, completion_tokens } => {
+            Some(serde_json::json!({
+                "sessionUpdate": "usage_update",
+                "used": prompt_tokens + completion_tokens,
+                "size": 200000
+            }))
+        }
+        NodeChunk::Custom { .. } => None,
+    }
+}
+
+/// Extract the halt payload from a `WorkflowEvent::Custom { key: "halt_payload", .. }` event.
+///
+/// Returns `Some(payload)` if the event is a halt payload, `None` otherwise.
+pub fn extract_halt_payload(event: &WorkflowEvent) -> Option<&serde_json::Value> {
+    match event {
+        WorkflowEvent::Custom { key, data } if key == "halt_payload" => Some(data),
+        _ => None,
+    }
 }

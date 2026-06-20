@@ -18,7 +18,7 @@
 
 use std::sync::Arc;
 use anyhow::Result;
-use tracing::info;
+use tracing::{info, warn};
 
 use rust_agent_host::{
     config::{load_config, TransportMode},
@@ -26,6 +26,7 @@ use rust_agent_host::{
     bridge::session::SessionBridge,
     agents::factory::AgentFactory,
     agents::loader::DeclLoader,
+    handler::workflow_prompt::WorkflowGraphRegistry,
 };
 
 #[tokio::main]
@@ -45,12 +46,36 @@ async fn main() -> Result<()> {
     // Create agent registry
     let mut registry = AgentRegistry::new();
 
+    // Create workflow graph registry (for HITL-capable agents)
+    let mut graph_registry = WorkflowGraphRegistry::new();
+
     // Register built-in agents
     let factory = AgentFactory::new(&config);
     let builtin_agents = factory.create_all().await?;
     for agent in builtin_agents {
         info!(agent_id = %agent.id(), agent_type = %agent.metadata().agent_type, "Registered built-in agent");
         registry.register(agent);
+    }
+
+    // Register the 6-stage dev pipeline agent (rust-agent-coding integration)
+    if config.dev_pipeline.enabled {
+        match factory.create_dev_pipeline_agent() {
+            Ok((agent, graph)) => {
+                let agent_id = config.dev_pipeline.agent_id.clone();
+                info!(
+                    agent_id = %agent_id,
+                    "Registered dev-pipeline workflow agent (HITL-capable)"
+                );
+                registry.register(agent);
+                graph_registry.register(agent_id, graph);
+            }
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "Failed to create dev-pipeline agent, skipping (set --no-dev-pipeline to silence)"
+                );
+            }
+        }
     }
 
     // Load declarative agents from agents_dir
@@ -63,10 +88,15 @@ async fn main() -> Result<()> {
         }
     }
 
-    info!(agent_count = registry.len(), "All agents registered");
+    info!(
+        agent_count = registry.len(),
+        workflow_count = graph_registry.len(),
+        "All agents registered"
+    );
 
     // Create session bridge
     let session_bridge = Arc::new(SessionBridge::new());
+    let graph_registry = Arc::new(tokio::sync::Mutex::new(graph_registry));
 
     info!("Starting ACP server in {:?} mode", config.mode);
 
@@ -75,6 +105,7 @@ async fn main() -> Result<()> {
             rust_agent_host::transport::stdio::run_stdio(
                 Arc::new(registry),
                 session_bridge,
+                graph_registry,
             ).await?;
         }
         TransportMode::Ws => {
@@ -82,6 +113,7 @@ async fn main() -> Result<()> {
                 config.ws_bind.clone(),
                 Arc::new(registry),
                 session_bridge,
+                graph_registry,
             ).await?;
         }
     }
