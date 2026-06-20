@@ -28,10 +28,6 @@ contexts:
 
 tools:
   - kind: web
-  - kind: function
-    name: echo
-    description: 将输入文本原样返回
-  - kind: function
-    name: add
-    description: 将两个数字相加
-max_tool_rounds: 8
+  - kind: file
+  - kind: shell
+max_tool_rounds: 200

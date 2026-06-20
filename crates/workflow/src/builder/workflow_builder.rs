@@ -72,6 +72,14 @@ impl WorkflowBuilder {
         self
     }
 
+    /// 为指定节点设置循环配置
+    pub fn with_loop_on(mut self, node_id: &str, config: LoopConfig) -> Self {
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.loop_config = Some(config);
+        }
+        self
+    }
+
     /// 为最后一次 add_node 添加的节点设置循环配置
     pub fn with_loop(mut self, config: LoopConfig) -> Self {
         if let Some((_, node)) = self.nodes.iter_mut().last() {

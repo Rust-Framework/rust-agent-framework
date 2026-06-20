@@ -51,6 +51,8 @@ pub mod workflow_decl;
 
 pub mod compiler;
 pub mod decl_agent_builder;
+pub mod orchestration_builder;
+pub mod orchestration_decl;
 pub mod ext;
 pub mod resolver;
 
@@ -88,6 +90,11 @@ pub use actions::{
 pub use resolver::{
     AgentResolver, McpRequestExecutor, ToolResolver, WorkflowResolver,
     quick_agent, quick_workflow, ToolFactoryFn,
+};
+
+// ── Orchestration ──
+pub use orchestration_decl::{
+    parse_orchestration, OrchestrationDecl, OrchestrationMode, PipelinePhaseDecl,
 };
 
 // ── DeclAgentBuilder ──

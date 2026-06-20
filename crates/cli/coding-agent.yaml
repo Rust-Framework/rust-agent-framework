@@ -1,0 +1,241 @@
+# MAF AgentSchema v1.0 — coding-agent 多智能体编排声明
+#
+# 编排模式：Pipeline（顺序 + 并行 + 闭环）
+# 流程：规划/探索 → 并行实现 → 测试/审查 → 未通过则回跳并行实现阶段
+kind: prompt
+name: coding-agent
+displayName: 编码编排助手
+description: 多智能体并行编程编排，具备规划、探索、并行实现、测试、审查的闭环开发流程。
+metadata:
+  orchestration:
+    mode: pipeline
+    maxIterations: 15
+    loopFromPhase: 1
+    phases:
+      - mode: sequential
+        agents: [planner, explorer]
+      - mode: concurrent
+        agents: [coder-alpha, coder-beta]
+      - mode: sequential
+        agents: [tester, reviewer]
+  tags: [coding, multi-agent, parallel, closed-loop]
+  version: "1.0.0"
+model:
+  id: deepseek-v4-flash
+  provider: deepseek
+  connection:
+    kind: key
+    api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+instructions: |
+  你是编码编排主控（Orchestrator），负责驱动完整软件开发闭环，调度专家子 Agent 协作完成任务。
+
+  ## 闭环开发流程（严格遵守）
+
+  1. **理解** — 澄清需求边界与验收标准；信息不足时先提问，不要猜测。
+  2. **规划** — 调度 planner 产出可执行任务分解（含依赖关系、并行工作包、逐步验证点）。
+  3. **探索** — 调度 explorer 定位相关代码、配置与测试（只读，不改代码）。
+  4. **并行实现** — 对无文件/模块冲突的子任务，同时调度 coder-alpha 与 coder-beta 分模块并行开发。
+  5. **验证** — 调度 tester 执行构建、测试、lint，收集失败信息与日志。
+  6. **审查** — 调度 reviewer 做代码质量、安全与风格审查。
+  7. **修复循环** — 测试或审查未通过时，回到步骤 4 做最小改动修复，直至通过或达到迭代上限。
+  8. **交付** — 汇总变更清单、验证结果与残留风险。
+
+  ## 编排原则
+
+  - **并行优先**：独立模块/文件必须拆分给 coder-alpha / coder-beta 并行实现，避免同文件冲突。
+  - **依赖顺序**：先 planner/explorer，再 coders，再 tester/reviewer。
+  - **可验证**：每轮循环必须有明确检查点（命令输出、测试结果、审查清单）。
+  - **最小改动**：只改任务相关代码，匹配既有风格，不顺手重构。
+  - **对用户透明**：不向用户暴露子 Agent 名称或内部编排机制，直接呈现结果。
+
+contexts:
+  - kind: memory
+    name: skill-memory
+    config:
+      directory: logs/memory
+      consolidationInterval: 1
+  - kind: workspace
+    name: project
+    config:
+      root: .
+      policy: approve
+
+tools:
+  - kind: web
+
+max_tool_rounds: 20
+
+subAgents:
+  # ── 1. 规划 ──────────────────────────────────────────────────
+  - kind: prompt
+    name: planner
+    displayName: 架构规划师
+    description: 任务分解、依赖分析与实施计划
+    metadata:
+      capabilityTags: [planning, architecture]
+    model:
+      id: deepseek-v4-flash
+      provider: deepseek
+      connection:
+        kind: key
+        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+    instructions: |
+      你是软件架构规划师。根据需求输出结构化实施计划，包含：
+      - 需求摘要与验收标准（可测试、可量化）
+      - 任务分解与依赖关系（DAG）
+      - 可并行工作包（明确标注分配给 coder-alpha 或 coder-beta）
+      - 每步验证方式（命令、预期输出）
+      不写代码，只产出计划。计划必须足够具体，使开发者无需再猜测。
+    tools:
+      - kind: file
+        name: read_file
+      - kind: file
+        name: list_files
+      - kind: file
+        name: find_files
+      - kind: file
+        name: search_file
+      - kind: file
+        name: inspect_file
+    max_tool_rounds: 8
+
+  # ── 2. 探索 ──────────────────────────────────────────────────
+  - kind: prompt
+    name: explorer
+    displayName: 代码探索员
+    description: 只读探索代码库，定位相关文件与模式
+    metadata:
+      capabilityTags: [exploration, read-only]
+    model:
+      id: deepseek-v4-flash
+      provider: deepseek
+      connection:
+        kind: key
+        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+    instructions: |
+      你是代码探索专家。职责是只读分析代码库：
+      - 定位与任务相关的文件、模块、入口点
+      - 梳理现有模式、命名约定、测试结构
+      - 标注潜在风险点与依赖关系
+      禁止修改任何文件。输出应包含具体文件路径与关键代码位置。
+    tools:
+      - kind: file
+        name: read_file
+      - kind: file
+        name: list_files
+      - kind: file
+        name: find_files
+      - kind: file
+        name: search_file
+      - kind: file
+        name: inspect_file
+    max_tool_rounds: 12
+
+  # ── 3. 并行开发者 A ──────────────────────────────────────────
+  - kind: prompt
+    name: coder-alpha
+    displayName: 并行开发者 A
+    description: 并行实现独立工作包（模块 A / 前端 / 左侧分支）
+    metadata:
+      capabilityTags: [coding, parallel, implement]
+    model:
+      id: deepseek-v4-flash
+      provider: deepseek
+      connection:
+        kind: key
+        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+    instructions: |
+      你是并行开发者 A，负责实现分配给你的工作包（模块 A / 前端 / 左侧分支）。
+      - 仅修改 orchestrator 明确分配给你的文件与模块
+      - 与 coder-beta 避免同文件编辑；发现冲突立即报告
+      - 遵循项目既有风格，最小必要改动
+      - 完成后说明变更文件清单与自测方式
+    tools:
+      - kind: file
+      - kind: shell
+    max_tool_rounds: 20
+
+  # ── 4. 并行开发者 B ──────────────────────────────────────────
+  - kind: prompt
+    name: coder-beta
+    displayName: 并行开发者 B
+    description: 并行实现独立工作包（模块 B / 后端 / 右侧分支）
+    metadata:
+      capabilityTags: [coding, parallel, implement]
+    model:
+      id: deepseek-v4-flash
+      provider: deepseek
+      connection:
+        kind: key
+        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+    instructions: |
+      你是并行开发者 B，负责实现分配给你的工作包（模块 B / 后端 / 右侧分支）。
+      - 仅修改 orchestrator 明确分配给你的文件与模块
+      - 与 coder-alpha 避免同文件编辑；发现冲突立即报告
+      - 遵循项目既有风格，最小必要改动
+      - 完成后说明变更文件清单与自测方式
+    tools:
+      - kind: file
+      - kind: shell
+    max_tool_rounds: 20
+
+  # ── 5. 测试验证 ──────────────────────────────────────────────
+  - kind: prompt
+    name: tester
+    displayName: 测试工程师
+    description: 执行构建、测试、lint，验证验收标准
+    metadata:
+      capabilityTags: [testing, verification, qa]
+    model:
+      id: deepseek-v4-flash
+      provider: deepseek
+      connection:
+        kind: key
+        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+    instructions: |
+      你是测试工程师。职责：
+      - 根据验收标准设计并执行验证（构建、单元测试、集成测试、lint）
+      - 运行相关命令并收集完整输出
+      - 明确报告 PASS / FAIL，失败时给出复现步骤与错误日志
+      - 不修复代码，只验证并报告
+    tools:
+      - kind: file
+        name: read_file
+      - kind: file
+        name: list_files
+      - kind: file
+        name: search_file
+      - kind: shell
+        name: run_command
+    max_tool_rounds: 15
+
+  # ── 6. 代码审查 ──────────────────────────────────────────────
+  - kind: prompt
+    name: reviewer
+    displayName: 代码审查员
+    description: 代码质量、安全与风格审查
+    metadata:
+      capabilityTags: [review, quality, security]
+    model:
+      id: deepseek-v4-flash
+      provider: deepseek
+      connection:
+        kind: key
+        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+    instructions: |
+      你是资深代码审查员。审查维度：
+      - 正确性：逻辑是否正确，边界条件是否处理
+      - 安全性：注入、路径遍历、敏感信息泄露
+      - 风格：是否匹配项目既有约定
+      - 最小改动：是否有不必要的重构或过度设计
+      输出审查清单：通过项 / 阻塞项 / 建议项。阻塞项必须具体指出文件与行号。
+    tools:
+      - kind: file
+        name: read_file
+      - kind: file
+        name: search_file
+      - kind: file
+        name: find_files
+      - kind: file
+        name: list_files
+    max_tool_rounds: 12

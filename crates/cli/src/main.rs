@@ -7,9 +7,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use rust_agent_core::ToolResult;
 use rust_agent_decl::DeclAgentBuilder;
-use rust_agent_framework::tool;
 
 mod runner;
 use runner::ReplRunner;
@@ -18,24 +16,11 @@ fn cli_agent_yaml_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("cli-agent.yaml")
 }
 
-// ── Tool definitions ───────────────────────────────────────────
-#[tool(description = "将输入文本原样返回")]
-async fn echo(#[param(desc = "要回显的文本")] text: String) -> ToolResult {
-    ToolResult::success(serde_json::json!({"echo": text}))
-}
-
-#[tool(description = "将两个数字相加")]
-async fn add(#[param(desc = "第一个数字")] a: i64, #[param(desc = "第二个数字")] b: i64) -> ToolResult {
-    ToolResult::success(serde_json::json!({"result": a + b}))
-}
-
 // ── Agent 构建 ─────────────────────────────────────────────────
 
 async fn build_agent() -> anyhow::Result<Arc<dyn rust_agent_core::IAgent>> {
     DeclAgentBuilder::new()
         .from_yaml_file(cli_agent_yaml_path())
-        .with_tool("echo", |_| Ok(Arc::new(Echo)))
-        .with_tool("add", |_| Ok(Arc::new(Add)))
         .build()
         .await
         .map_err(Into::into)
@@ -63,8 +48,6 @@ async fn main() -> anyhow::Result<()> {
                 let a = DeclAgentBuilder::new()
                     .from_yaml_file(cli_agent_yaml_path())
                     .with_model(&model)
-                    .with_tool("echo", |_| Ok(Arc::new(Echo)))
-                    .with_tool("add", |_| Ok(Arc::new(Add)))
                     .build()
                     .await?;
                 Ok(a)
@@ -74,8 +57,6 @@ async fn main() -> anyhow::Result<()> {
             Box::pin(async move {
                 let a = DeclAgentBuilder::new()
                     .from_yaml_file(cli_agent_yaml_path())
-                    .with_tool("echo", |_| Ok(Arc::new(Echo)))
-                    .with_tool("add", |_| Ok(Arc::new(Add)))
                     .build()
                     .await?;
                 Ok(a)

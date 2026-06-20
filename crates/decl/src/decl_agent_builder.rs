@@ -250,27 +250,55 @@ impl DeclAgentBuilder {
             tool_resolver.register_factory(name, move |args| factory(args));
         }
 
-        for tool_decl in &prompt_data.tools {
-            let kind = tool_decl.kind_str();
-            match tool_resolver.resolve(tool_decl).await {
-                Ok(tool) => {
+        match tool_resolver.resolve_all(&prompt_data.tools).await {
+            Ok(tools) => {
+                for tool in tools {
                     report.resolved_tools.push(format!(
-                        "{} (kind={}, description from code)",
-                        tool.name(),
-                        kind
+                        "{} (description from code)",
+                        tool.name()
                     ));
                 }
-                Err(e) => {
-                    // Levenshtein 模糊匹配
-                    let name = tool_decl.name().unwrap_or("(anonymous)");
-                    let suggestion = levenshtein_suggest(name, &KNOWN_TOOL_NAMES);
-                    let mut msg = format!("Tool '{}' (kind={}) failed to resolve: {}", name, kind, e);
-                    if let Some(s) = suggestion {
-                        msg.push_str(&format!(". Did you mean '{}'?", s));
+            }
+            Err(e) => {
+                report.errors.push(format!("Failed to resolve tools: {}", e));
+            }
+        }
+
+        for sub_def in &prompt_data.sub_agents {
+            let sub_prompt = match &sub_def.kind_data {
+                AgentKindData::Prompt(data) => data,
+                _ => {
+                    report.errors.push(format!(
+                        "Sub-agent '{}' must be kind: prompt",
+                        sub_def.name
+                    ));
+                    continue;
+                }
+            };
+            match tool_resolver.resolve_all(&sub_prompt.tools).await {
+                Ok(tools) => {
+                    for tool in tools {
+                        report.resolved_tools.push(format!(
+                            "{} (sub-agent={}, description from code)",
+                            tool.name(),
+                            sub_def.name
+                        ));
                     }
-                    report.errors.push(msg);
+                }
+                Err(e) => {
+                    report.errors.push(format!(
+                        "Sub-agent '{}' tool resolution failed: {}",
+                        sub_def.name, e
+                    ));
                 }
             }
+        }
+
+        if !prompt_data.sub_agents.is_empty() {
+            report.resolved_providers.push(format!(
+                "orchestration(magentic, {} sub-agents)",
+                prompt_data.sub_agents.len()
+            ));
         }
 
         // 验证 context providers
@@ -317,7 +345,26 @@ impl DeclAgentBuilder {
 
     /// 加载声明并构建 Agent。
     pub async fn build(self) -> Result<Arc<dyn IAgent>> {
-        // 0. 路径选择：direct_definition > source file/str
+        let def = self.load_and_apply_overrides()?;
+
+        match &def.kind_data {
+            AgentKindData::Workflow(data) => self.build_workflow_agent(&def, data).await,
+            AgentKindData::Prompt(data) => {
+                if !data.sub_agents.is_empty() {
+                    return self
+                        .build_orchestrated(&def, data.sub_agents.clone())
+                        .await;
+                }
+                self.build_single_prompt(&def).await
+            }
+            _ => Err(DeclError::Unsupported(
+                "DeclAgentBuilder supports kind: prompt and kind: workflow".into(),
+            )),
+        }
+    }
+
+    /// 加载声明文件并应用运行时覆盖（model / api_key）。
+    fn load_and_apply_overrides(&self) -> Result<crate::definition::AgentDefinition> {
         let mut def = if let Some(ref direct_def) = self.direct_definition {
             direct_def.clone()
         } else {
@@ -329,17 +376,17 @@ impl DeclAgentBuilder {
             })?
         };
 
-        // 2. 运行时覆盖模型和 API Key
-        {
-            let prompt_data = match &mut def.kind_data {
-                AgentKindData::Prompt(data) => data,
-                _ => {
-                    return Err(DeclError::Unsupported(
-                        "DeclAgentBuilder only supports 'kind: prompt' agents".into(),
-                    ));
-                }
-            };
+        let prompt_data = match &mut def.kind_data {
+            AgentKindData::Prompt(data) => Some(data),
+            AgentKindData::Workflow(_) => None,
+            _ => {
+                return Err(DeclError::Unsupported(
+                    "DeclAgentBuilder supports kind: prompt and kind: workflow".into(),
+                ));
+            }
+        };
 
+        if let Some(prompt_data) = prompt_data {
             if let Some(ref mid) = self.model_id {
                 prompt_data.model.id = mid.clone();
             }
@@ -357,17 +404,131 @@ impl DeclAgentBuilder {
             }
         }
 
+        Ok(def)
+    }
+
+    /// 将运行时 model / api_key 覆盖应用到 Agent 定义。
+    fn apply_runtime_overrides(&self, def: &mut crate::definition::AgentDefinition) {
+        let prompt_data = match &mut def.kind_data {
+            AgentKindData::Prompt(data) => data,
+            _ => return,
+        };
+
+        if let Some(ref mid) = self.model_id {
+            prompt_data.model.id = mid.clone();
+        }
+
+        if let Some(ref key) = self.api_key {
+            prompt_data.model.connection = Some(crate::connection::Connection {
+                kind: ConnectionKind::ApiKey,
+                authentication_mode: crate::connection::AuthenticationMode::System,
+                usage_description: None,
+                details: ConnectionDetails {
+                    api_key: Some(key.clone()),
+                    ..Default::default()
+                },
+            });
+        }
+    }
+
+    /// 构建 `kind: workflow` — MAF ActionDecl 图编译为 WorkflowAgent。
+    async fn build_workflow_agent(
+        &self,
+        def: &crate::definition::AgentDefinition,
+        data: &crate::workflow_decl::WorkflowAgentData,
+    ) -> Result<Arc<dyn IAgent>> {
+        use rust_agent_workflow::WorkflowAgent;
+
+        #[allow(deprecated)]
+        use crate::compiler::compile_workflow;
+        #[allow(deprecated)]
+        use crate::resolver::agent_resolver::AgentResolver;
+
+        let mut resolver = AgentResolver::new();
+        for (name, factory) in &self.tool_factories {
+            let factory = std::sync::Arc::clone(factory);
+            resolver.register_tool_factory(name, move |args| factory(args));
+        }
+
+        let graph = compile_workflow(data, &mut resolver)?;
+        let inner = Arc::new(WorkflowAgent::new(graph));
+        Ok(crate::orchestration_builder::wrap_named_agent(def, inner, vec![]))
+    }
+
+    /// 构建带 subAgents 的多智能体编排（全部内置模式 + pipeline 闭环）。
+    async fn build_orchestrated(
+        &self,
+        def: &crate::definition::AgentDefinition,
+        sub_agent_decls: Vec<crate::definition::AgentDefinition>,
+    ) -> Result<Arc<dyn IAgent>> {
+        use std::collections::HashMap;
+
+        use crate::orchestration_builder::build_orchestration_agent;
+        use crate::orchestration_decl::{parse_orchestration, OrchestrationMode};
+
+        for sub_def in &sub_agent_decls {
+            if let AgentKindData::Prompt(data) = &sub_def.kind_data {
+                if !data.sub_agents.is_empty() {
+                    return Err(DeclError::Validation(format!(
+                        "Nested subAgents are not supported in '{}'",
+                        sub_def.name
+                    )));
+                }
+            } else {
+                return Err(DeclError::Validation(format!(
+                    "Sub-agent '{}' must be kind: prompt",
+                    sub_def.name
+                )));
+            }
+        }
+
+        let orch = parse_orchestration(&def.metadata, true)?;
+
+        let uses_root_orchestrator = match orch.mode {
+            OrchestrationMode::Magentic | OrchestrationMode::Pipeline => true,
+            OrchestrationMode::GroupChat if orch.coordinator.is_none() => true,
+            OrchestrationMode::Handoff if orch.triage.is_none() => true,
+            _ => false,
+        };
+
+        let mut orchestrator = None;
+        if uses_root_orchestrator {
+            let mut orchestrator_def = def.clone();
+            if let AgentKindData::Prompt(data) = &mut orchestrator_def.kind_data {
+                data.sub_agents.clear();
+            }
+            orchestrator = Some(self.build_single_prompt(&orchestrator_def).await?);
+        }
+
+        let mut sub_agents: HashMap<String, Arc<dyn IAgent>> = HashMap::new();
+        for sub_def in sub_agent_decls {
+            let mut sub_def = sub_def;
+            self.apply_runtime_overrides(&mut sub_def);
+            let sub_agent = self.build_single_prompt(&sub_def).await?;
+            sub_agents.insert(sub_def.name.clone(), sub_agent);
+        }
+
+        build_orchestration_agent(def, &orch, orchestrator, sub_agents)
+    }
+
+    /// 构建单个 prompt Agent（无 subAgents 编排）。
+    async fn build_single_prompt(
+        &self,
+        def: &crate::definition::AgentDefinition,
+    ) -> Result<Arc<dyn IAgent>> {
         let prompt_data = match &def.kind_data {
             AgentKindData::Prompt(data) => data,
             _ => return Err(DeclError::Unsupported("Expected prompt agent".into())),
         };
 
-        // 3. 解析 chat_client
+        let max_tool_rounds = self
+            .max_tool_rounds
+            .unwrap_or(prompt_data.max_tool_rounds);
+
         let chat_client = connection_resolver::resolve_chat_client(&prompt_data.model)?;
         let instructions = prompt_data.instructions.clone();
         let tools_list = prompt_data.tools.clone();
 
-        // 4. 解析工具（提前，使 workspace 可路由 IScopeTool）
         let mut tool_resolver = crate::resolver::tool_resolver::ToolResolver::new();
         for (name, factory) in &self.tool_factories {
             let factory = Arc::clone(factory);
@@ -375,19 +536,19 @@ impl DeclAgentBuilder {
         }
         let resolved_tools = tool_resolver.resolve_all(&tools_list).await?;
 
-        // 5. 构建上下文提供器
+        // 构建上下文提供器
         let mut all_context_providers: Vec<Arc<dyn IContextProvider>> = Vec::new();
         let remaining_tools: Vec<Arc<dyn ITool>>;
         let has_workspace = prompt_data.contexts.iter().any(|d| {
             matches!(d, crate::context_provider_config::ContextProviderDecl::Workspace { .. })
         });
 
-        // 5a. 分类工具：IScopeTool → workspace 管理，其余 → AgentBuilder 直注
+        // 分类工具：IScopeTool → workspace 管理，其余 → AgentBuilder 直注
         if has_workspace {
             let (scope_tools, other_tools) = partition_scope_tools(resolved_tools);
             remaining_tools = other_tools;
 
-            // 5b. 构建 providers，workspace 特殊处理以接收 IScopeTool
+            // 构建 providers，workspace 特殊处理以接收 IScopeTool
             for decl in &prompt_data.contexts {
                 if matches!(decl, crate::context_provider_config::ContextProviderDecl::Workspace { .. }) {
                     if let Some(ws_provider) = self.build_workspace_provider(decl, &scope_tools) {
@@ -408,10 +569,10 @@ impl DeclAgentBuilder {
             }
         }
 
-        // 5c. 合并代码注入的 provider（with_context()）
+        // 合并代码注入的 provider（with_context()）
         all_context_providers.extend(self.external_contexts.iter().map(Arc::clone));
 
-        // 5d. 自动注入 InMemoryHistoryProvider（与 AgentBuilder::new() 保持一致）
+        // 自动注入 InMemoryHistoryProvider（与 AgentBuilder::new() 保持一致）
         //     确保所有 Agent 都有默认的会话历史管理。
         let has_history = all_context_providers
             .iter()
@@ -422,7 +583,7 @@ impl DeclAgentBuilder {
                 .push(Arc::new(InMemoryHistoryProvider::new()));
         }
 
-        // 6. 通过 AgentBuilder 统一构建
+        // 通过 AgentBuilder 统一构建
         let mut builder = AgentBuilder::new(&def.name)
             .chat_client(ChatClientWrapper(chat_client))
             .instructions(&instructions);
@@ -435,14 +596,12 @@ impl DeclAgentBuilder {
             builder = builder.add_context_provider_shared(Arc::clone(cp));
         }
 
-        // 7. 注册非 IScopeTool 工具（或无 workspace 场景的全部工具）
+        // 注册非 IScopeTool 工具（或无 workspace 场景的全部工具）
         for tool in remaining_tools {
             builder = builder.with_tool(ToolWrapper(tool));
         }
 
-        if let Some(rounds) = self.max_tool_rounds {
-            builder = builder.max_tool_rounds(rounds);
-        }
+        builder = builder.max_tool_rounds(max_tool_rounds);
 
         Ok(builder.build()?)
     }
