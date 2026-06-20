@@ -1,8 +1,8 @@
 # 第 14 章：宿主服务
 
-本章详细介绍 RAF 的宿主服务层——基于 ACP（Agent Client Protocol）协议的多 Agent 托管服务器，支持 Stdio 和 WebSocket 双传输模式，提供 Agent 注册发现、多层编排和标签化流式输出能力。
+本章详细介绍 RAF 的宿主服务层——基于 ACP（Agent Client Protocol）协议的多 Agent 托管服务器，支持 Stdio 和 WebSocket 双传输模式，提供 Agent 注册发现、多层编排、标签化流式输出、每轮模型配置和 HITL 人工确认能力。
 
-本章面向需要将 RAF Agent 部署为可远程访问服务的运维和平台工程师。
+本章面向需要将 RAF Agent 部署为可远程访问服务的运维和平台工程师，以及需要集成 ACP 客户端的 IDE 开发者。
 
 ## 章节目录
 
@@ -14,6 +14,8 @@
 | [14.4](agent-registry.md) | Agent 注册与发现 | AgentRegistry、内置 Agent 工厂、声明式加载 |
 | [14.5](multi-agent-orchestration.md) | 三层多智能体编排模型 | SessionBridge、ACP↔RAF 会话映射 |
 | [14.6](tagged-streaming.md) | 标签化流式输出 | SubAgentStatusTracker、source 标签、前端渲染 |
+| [14.7](ide-integration.md) | IDE 集成与每轮模型配置 | 每轮模型配置传递、上下文压缩、多模态规划 |
+| [14.8](client-integration.md) | 客户端集成指南 | 传输层集成、ACP 协议交互、完整客户端示例 |
 
 ## 快速导航
 
@@ -23,6 +25,8 @@
 - **想注册多个 Agent？** → [14.4 Agent 注册](agent-registry.md)
 - **想理解编排模型？** → [14.5 三层编排模型](multi-agent-orchestration.md)
 - **想实现多 Agent 流式渲染？** → [14.6 标签化流式输出](tagged-streaming.md)
+- **想集成 IDE 客户端？** → [14.7 IDE 集成与每轮模型配置](ide-integration.md)
+- **想要客户端集成代码示例？** → [14.8 客户端集成指南](client-integration.md)
 
 ---
 

@@ -18,6 +18,7 @@ use rust_agent_core::{AgentRunOptions, ChatMessage, Content, FinishReason};
 
 use crate::registry::agent_registry::AgentRegistry;
 use crate::bridge::session::SessionBridge;
+use crate::bridge::model_config::PerTurnModelConfig;
 use crate::handler::workflow_prompt::{WorkflowGraphRegistry, handle_workflow_prompt};
 
 /// Route a `session/prompt` request to the appropriate handler based on whether
@@ -78,6 +79,12 @@ pub async fn handle_prompt(
         .and_then(|m| m.get("raf.agent_id"))
         .and_then(|v| v.as_str());
 
+    // 解析每轮模型配置（从 _meta.raf.model_config）
+    let model_config = PerTurnModelConfig::from_meta(req.meta.as_ref());
+    if !model_config.is_empty() {
+        debug!(session_id = %sid_str, ?model_config, "Per-turn model config applied");
+    }
+
     let agent = match registry.resolve_agent(target_agent_id) {
         Some(a) => a,
         None => {
@@ -94,9 +101,20 @@ pub async fn handle_prompt(
     let cancelled = Arc::new(AtomicBool::new(false));
     bridge.register_cancel_token(&sid_str, cancelled.clone()).await;
 
-    let run_opts = AgentRunOptions::new()
-        .with_cancelled(cancelled)
-        .with_thinking(true);
+    // 构建运行选项：取消令牌 + 每轮模型配置覆盖
+    // 默认启用思考模式；客户端可通过 model_config.thinking: false 关闭
+    let run_opts = {
+        let opts = AgentRunOptions::new()
+            .with_cancelled(cancelled);
+        // 应用每轮模型配置（temperature, max_tokens, thinking, thinking_level）
+        // 如果 model_config.thinking 为 None，默认启用思考
+        let opts = if model_config.thinking.is_none() {
+            opts.with_thinking(true)
+        } else {
+            opts
+        };
+        model_config.apply_to_run_options(opts)
+    };
 
     let mut raf_stream = match agent.run(messages, Some(raf_session), Some(run_opts)).await {
         Ok(s) => s,

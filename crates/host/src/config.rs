@@ -69,13 +69,23 @@ pub struct ProviderConfig {
     /// 默认 temperature。
     #[serde(default)]
     pub temperature: Option<f32>,
-    /// 默认 max_tokens。
+    /// 默认 max_tokens（输出上限）。
     #[serde(default)]
     pub max_tokens: Option<u32>,
+    /// 模型上下文窗口大小（token 数）。用于自动上下文压缩。
+    /// 例如 DeepSeek-V3 为 128000，GPT-4o 为 128000。
+    #[serde(default = "default_context_window")]
+    pub context_window_tokens: usize,
+    /// 模型最大输出 token 数。用于计算输入预算。
+    /// 例如 DeepSeek-V3 为 8192，GPT-4o 为 16384。
+    #[serde(default = "default_max_output_tokens")]
+    pub max_output_tokens: usize,
 }
 
 fn default_provider_name() -> String { "deepseek".into() }
 fn default_model() -> String { "deepseek-v4-flash".into() }
+fn default_context_window() -> usize { 128_000 }
+fn default_max_output_tokens() -> usize { 8_192 }
 
 impl Default for ProviderConfig {
     fn default() -> Self {
@@ -86,6 +96,8 @@ impl Default for ProviderConfig {
             base_url: None,
             temperature: None,
             max_tokens: None,
+            context_window_tokens: default_context_window(),
+            max_output_tokens: default_max_output_tokens(),
         }
     }
 }

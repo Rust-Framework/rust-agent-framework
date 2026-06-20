@@ -8,8 +8,11 @@
 - [快速开始](#快速开始)
 - [配置指南](#配置指南)
 - [内置智能体](#内置智能体)
+- [每轮模型配置](#每轮模型配置)
+- [上下文自动压缩](#上下文自动压缩)
 - [ACP 协议交互流程](#acp-协议交互流程)
 - [多智能体编排](#多智能体编排)
+- [Dev Pipeline 工作流与 HITL](#dev-pipeline-工作流与-hitl)
 - [扩展方法](#扩展方法--_raf)
 - [带标签流式输出](#带标签流式输出)
 - [客户端集成指南](#客户端集成指南)
@@ -169,13 +172,23 @@ base_url = "https://your-api-endpoint.com/v1"
 
 ## 内置智能体
 
-服务启动时自动注册以下三个预设智能体：
+服务启动时自动注册以下智能体：
+
+### 简单 Agent
 
 | 智能体 | ID | 专长 | 注册工具 | 说明 |
 |--------|----|------|---------|------|
-| **CodingAgent** | `coding` | 代码生成、审查、调试、重构 | ReadFile, WriteFile, EditFile, ListFiles, SearchFile, FindFiles, RunCommand, WebSearch, WebFetch | 15 轮工具调用上限 |
-| **GeneralAgent** | `general` | 通用问答、写作、分析、创意 | WebSearch, WebFetch | 5 轮工具调用上限 |
-| **AnalysisAgent** | `analysis` | 深度研究、多源对比、趋势分析 | WebSearch, WebFetch, ReadFile | 10 轮工具调用上限 |
+| **CodingAgent** | `coding` | 代码生成、审查、调试、重构 | ReadFile, WriteFile, EditFile, ListFiles, SearchFile, FindFiles, RunCommand | 15 轮工具调用上限 |
+| **GeneralAgent** | `general` | 通用问答、写作、分析、创意 | 无 | 5 轮工具调用上限 |
+| **AnalysisAgent** | `analysis` | 深度研究、多源对比、趋势分析 | ReadFile | 10 轮工具调用上限 |
+
+### 工作流 Agent
+
+| 智能体 | ID | 类型 | 说明 |
+|--------|----|------|------|
+| **DevPipeline** | `dev-pipeline` | WorkflowAgent | 6 阶段编码流水线，支持 HITL 人工确认 |
+
+Dev Pipeline 工作流包含 7 个子 Agent：requirements-analyst、test-designer、architect、task-planner、coder-alpha、coder-beta、regression-tester、reviewer。详见 [Dev Pipeline 工作流与 HITL](#dev-pipeline-工作流与-hitl) 章节。
 
 ### 智能体选择
 
@@ -195,6 +208,113 @@ base_url = "https://your-api-endpoint.com/v1"
 ```
 
 不指定 `raf.agent_id` 时，自动使用默认智能体（第一个注册的）。
+
+## 每轮模型配置
+
+IDE 场景下，用户需要在不同任务间灵活切换模型参数。Host 支持在每轮 `session/prompt` 请求中通过 `_meta.raf.model_config` 传递配置覆盖项。
+
+### 支持的配置字段
+
+| 字段 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `model_id` | string | 模型 ID（仅元数据记录） | 全局配置 |
+| `temperature` | float | 温度参数（0.0 - 2.0） | 全局配置 |
+| `max_tokens` | uint | 最大输出 token 数 | 全局配置 |
+| `thinking` | bool | 是否启用思考（推理）模式 | `true` |
+| `thinking_level` | string | 思考等级：`"high"` 或 `"max"` | 无 |
+| `context_window_tokens` | uint | 上下文窗口大小（影响压缩预算） | 全局配置 |
+| `max_output_tokens` | uint | 最大输出 token 数（影响压缩预算） | 全局配置 |
+
+### 请求示例
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "session/prompt",
+  "params": {
+    "session_id": "...",
+    "prompt": [{ "type": "text", "text": "请重构这个函数" }],
+    "_meta": {
+      "raf": {
+        "agent_id": "coding",
+        "model_config": {
+          "temperature": 0.3,
+          "max_tokens": 8192,
+          "thinking": true,
+          "thinking_level": "high"
+        }
+      }
+    }
+  }
+}
+```
+
+### 配置优先级
+
+1. **每轮配置**（`_meta.raf.model_config`）—— 最高优先级
+2. **全局配置**（`host.toml` / 环境变量 / CLI 参数）
+3. **LLM 提供商默认值** —— 最低优先级
+
+### 场景示例
+
+**快速问答**（低延迟）：
+```json
+{ "raf": { "model_config": { "temperature": 0.1, "max_tokens": 1024, "thinking": false } } }
+```
+
+**深度重构**：
+```json
+{ "raf": { "model_config": { "temperature": 0.3, "max_tokens": 8192, "thinking": true, "thinking_level": "high" } } }
+```
+
+**最大推理深度**（复杂架构设计）：
+```json
+{ "raf": { "model_config": { "temperature": 0.5, "max_tokens": 16384, "thinking": true, "thinking_level": "max" } } }
+```
+
+> **注意**：工作流 Agent（如 `dev-pipeline`）当前不解析每轮模型配置，因为 `WorkflowRuntime` 直接执行图。如需对工作流 Agent 使用不同模型配置，请在 `host.toml` 中配置全局参数。
+
+## 上下文自动压缩
+
+Host 内置 `TokenBudgetStrategy` 上下文压缩管线，自动管理长会话的上下文窗口，防止超出模型上下文限制。
+
+### 工作原理
+
+1. **Token 计数**：使用 `EstimateCounter`（约 4 字符/token）估算消息总 token 数
+2. **预算计算**：`输入预算 = context_window_tokens - max_output_tokens`
+3. **压缩触发**：当消息总 token 数超过预算时自动触发
+4. **压缩策略**：
+   - **Phase 1**：将旧的工具调用结果组折叠为摘要
+   - **Phase 2**：从最早的非系统消息开始截断
+   - 系统消息始终保留
+
+### 配置上下文窗口
+
+在 `host.toml` 中配置：
+
+```toml
+[provider]
+provider = "deepseek"
+model = "deepseek-v4-flash"
+context_window_tokens = 128000
+max_output_tokens = 8192
+```
+
+或通过 CLI：
+
+```bash
+cargo run -p rust-agent-host -- --context-window-tokens 128000 --max-output-tokens 8192
+```
+
+### CLI 参数（新增）
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--context-window-tokens` | 模型上下文窗口大小 | `128000` |
+| `--max-output-tokens` | 模型最大输出 token 数 | `8192` |
+| `--workspace-root` | Dev Pipeline 工作区根路径 | 当前目录 |
+| `--no-dev-pipeline` | 禁用 Dev Pipeline 工作流 Agent | 未指定 |
 
 ## ACP 协议交互流程
 
@@ -470,6 +590,141 @@ RAF 的核心多智能体能力通过 `get_subagent(agent_id)` 暴露子代理�
   │◄── session/update(parent) ────│  (_meta: agent_id="sub-A",    │                  │
   │                                │         status="completed")  │                  │
   │◄── prompt response(parent) ───│                              │                  │
+```
+
+## Dev Pipeline 工作流与 HITL
+
+`dev-pipeline` 是基于 `rust-agent-coding` 的 6 阶段编码工作流，集成了人工确认（Human-in-the-Loop, HITL）机制。
+
+### 工作流阶段
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Dev Pipeline 工作流                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. 需求分析 (requirements-analyst)                          │
+│     ↓ [HITL: 确认需求]                                      │
+│                                                             │
+│  2. 测试设计 (test-designer)                                 │
+│     ↓ [HITL: 确认测试用例]                                   │
+│                                                             │
+│  3. 架构设计 (architect)                                     │
+│     ↓ [HITL: 确认架构]                                      │
+│                                                             │
+│  4. 任务规划 (task-planner)                                  │
+│     ↓ [HITL: 确认任务分解]                                   │
+│                                                             │
+│  5. 编码实现                                                 │
+│     ├─ coder-alpha (主路径)                                  │
+│     └─ coder-beta  (备选路径)                                │
+│     ↓                                                        │
+│  6. 回归测试 + 审查                                          │
+│     ├─ regression-tester                                    │
+│     └─ reviewer                                             │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### HITL 确认流程
+
+当工作流暂停等待用户确认时，Host 通过 ACP 的 `session/request_permission` 发送确认请求：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "method": "session/request_permission",
+  "params": {
+    "session_id": "...",
+    "tool_call": {
+      "id": "hitl_p1_confirm",
+      "title": "人工确认 — 节点 p1_confirm",
+      "status": "pending"
+    },
+    "options": [
+      { "id": "confirm", "title": "确认", "kind": "allow_once" },
+      { "id": "revise", "title": "提供修改建议", "kind": "reject_once" }
+    ],
+    "_meta": {
+      "raf.agent_id": "p1_confirm",
+      "raf.halt_type": "human_confirmation"
+    }
+  }
+}
+```
+
+### 客户端响应
+
+**确认**（继续执行）：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "result": {
+    "outcome": { "type": "selected", "option_id": "confirm" }
+  }
+}
+```
+
+**提供修改建议**（返回修改）：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "result": {
+    "outcome": { "type": "selected", "option_id": "revise" },
+    "_meta": {
+      "raf": { "feedback": "请增加对边界条件的处理" }
+    }
+  }
+}
+```
+
+### 配置 Dev Pipeline
+
+在 `host.toml` 中配置：
+
+```toml
+[dev_pipeline]
+enabled = true
+agent_id = "dev-pipeline"
+max_iterations = 3
+
+# 工作区根路径（用于代码文件操作）
+workspace_root = "/path/to/project"
+```
+
+或通过 CLI：
+
+```bash
+cargo run -p rust-agent-host -- --workspace-root /path/to/project
+```
+
+禁用 Dev Pipeline：
+
+```bash
+cargo run -p rust-agent-host -- --no-dev-pipeline
+```
+
+### 标签化流式输出
+
+工作流的每个子 Agent 输出都带有 `_meta.raf.agent_id` 标签，客户端可据此渲染多 Agent 视图：
+
+```json
+{
+  "method": "session/update",
+  "params": {
+    "session_id": "...",
+    "update": { "type": "agent_message_chunk", "content": { "text": "需求分析完成" } },
+    "_meta": {
+      "raf.agent_id": "requirements-analyst",
+      "raf.status": "executing"
+    }
+  }
+}
 ```
 
 ## 扩展方法 (`_raf/*`)
@@ -763,7 +1018,8 @@ crates/host/
     ├── handler/
     │   ├── mod.rs
     │   ├── acp_agent.rs                # ACP Agent 处理器组装
-    │   └── prompt.rs                   # session/prompt 核心桥接
+    │   ├── prompt.rs                   # session/prompt 路由 + 简单 Agent 桥接
+    │   └── workflow_prompt.rs          # 工作流 Agent prompt 处理（HITL）
     ├── registry/
     │   ├── mod.rs
     │   └── agent_registry.rs           # 多智能体注册中心
@@ -771,10 +1027,12 @@ crates/host/
     │   ├── mod.rs
     │   ├── types.rs                    # RAF → ACP 类型转换
     │   ├── session.rs                  # ACP ↔ RAF 会话桥接
-    │   └── tracker.rs                  # 子代理状态追踪器
+    │   ├── tracker.rs                  # 子代理状态追踪器
+    │   ├── model_config.rs             # 每轮模型配置解析（_meta.raf.model_config）
+    │   └── workflow_bridge.rs          # 工作流事件 → ACP 通知桥接（HITL）
     ├── agents/
     │   ├── mod.rs
-    │   ├── factory.rs                  # 内置智能体工厂
+    │   ├── factory.rs                  # 内置智能体工厂 + Dev Pipeline 创建
     │   └── loader.rs                   # 声明式加载器
     └── transport/
         ├── mod.rs

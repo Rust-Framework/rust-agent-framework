@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use tracing::warn;
-use rust_agent_core::IAgent;
+use rust_agent_core::{IAgent, ModelMetadata};
 use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
-use rust_agent_framework::AgentBuilder;
+use rust_agent_framework::{AgentBuilder, TokenBudgetStrategy, EstimateCounter};
 use rust_agent_workflow::WorkflowAgent;
 
 use crate::config::HostConfig;
@@ -81,6 +81,9 @@ impl<'a> AgentFactory<'a> {
     }
 
     /// Build `ChatClientOptions` from the provider config.
+    ///
+    /// 装配所有配置字段：model、api_base、temperature、max_tokens、model_metadata。
+    /// `model_metadata` 用于启用自动上下文压缩（TokenBudgetStrategy）。
     fn build_client_options(&self) -> Result<ChatClientOptions> {
         let provider = &self.config.provider;
         let api_key = provider
@@ -90,24 +93,26 @@ impl<'a> AgentFactory<'a> {
                  or configure via CLI: --api-key YOUR_KEY"
             ))?;
 
-        let model = &provider.model;
+        let model = provider.model.clone();
 
-        let options = match provider.provider.as_str() {
-            "openai" => {
-                let mut opts = ChatClientOptions::openai(model, api_key);
-                if let Some(url) = &provider.base_url {
-                    opts.api_base = url.clone();
-                }
-                opts
-            }
-            "deepseek" | _ => {
-                let mut opts = ChatClientOptions::deepseek(model, api_key);
-                if let Some(url) = &provider.base_url {
-                    opts.api_base = url.clone();
-                }
-                opts
-            }
+        let mut options = match provider.provider.as_str() {
+            "openai" => ChatClientOptions::openai(&model, api_key),
+            "deepseek" | _ => ChatClientOptions::deepseek(&model, api_key),
         };
+
+        if let Some(url) = &provider.base_url {
+            options.api_base = url.clone();
+        }
+        // 装配默认 temperature / max_tokens（可被每轮 AgentRunOptions 覆盖）
+        options.temperature = provider.temperature;
+        options.max_tokens = provider.max_tokens;
+
+        // 装配 model_metadata — 启用自动上下文压缩的前提条件
+        options.model_metadata = Some(ModelMetadata::new(
+            model,
+            provider.context_window_tokens,
+            provider.max_output_tokens,
+        ));
 
         Ok(options)
     }
@@ -122,33 +127,46 @@ impl<'a> AgentFactory<'a> {
                  or configure via CLI: --api-key YOUR_KEY"
             ))?;
 
-        let model = model_override.unwrap_or(&provider.model);
+        let model = model_override.unwrap_or(&provider.model).to_string();
 
-        let options = match provider.provider.as_str() {
-            "openai" => {
-                let mut opts = ChatClientOptions::openai(model, api_key);
-                if let Some(url) = &provider.base_url {
-                    opts.api_base = url.clone();
-                }
-                opts
-            }
-            "deepseek" | _ => {
-                let mut opts = ChatClientOptions::deepseek(model, api_key);
-                if let Some(url) = &provider.base_url {
-                    opts.api_base = url.clone();
-                }
-                opts
-            }
+        let mut options = match provider.provider.as_str() {
+            "openai" => ChatClientOptions::openai(&model, api_key),
+            "deepseek" | _ => ChatClientOptions::deepseek(&model, api_key),
         };
 
+        if let Some(url) = &provider.base_url {
+            options.api_base = url.clone();
+        }
+        options.temperature = provider.temperature;
+        options.max_tokens = provider.max_tokens;
+        options.model_metadata = Some(ModelMetadata::new(
+            model,
+            provider.context_window_tokens,
+            provider.max_output_tokens,
+        ));
+
         Ok(DeepSeekChatClient::new(options)?)
+    }
+
+    /// 为 AgentBuilder 装配上下文压缩管线。
+    ///
+    /// 启用条件：provider 配置了 `context_window_tokens` 和 `max_output_tokens`。
+    /// 使用 `TokenBudgetStrategy` + `EstimateCounter` 组合：
+    /// - 超过输入预算时自动截断最早的非系统消息
+    /// - 工具调用结果组被折叠为摘要
+    fn apply_compression<C: rust_agent_core::IChatClient + 'static>(
+        builder: AgentBuilder<C>,
+    ) -> AgentBuilder<C> {
+        builder
+            .with_compression_strategy(Arc::new(TokenBudgetStrategy::new()))
+            .with_token_counter(Arc::new(EstimateCounter::new()))
     }
 
     /// Create the coding agent.
     fn create_coding_agent(&self) -> Result<Arc<dyn IAgent>> {
         let client = self.create_client(None)?;
 
-        let agent = AgentBuilder::new("coding")
+        let agent = Self::apply_compression(AgentBuilder::new("coding"))
             .chat_client(client)
             .instructions(
                 "你是资深软件工程师，专注于代码生成、代码审查、Bug 定位和代码重构。\n\n\
@@ -177,7 +195,7 @@ impl<'a> AgentFactory<'a> {
     fn create_general_agent(&self) -> Result<Arc<dyn IAgent>> {
         let client = self.create_client(None)?;
 
-        let agent = AgentBuilder::new("general")
+        let agent = Self::apply_compression(AgentBuilder::new("general"))
             .chat_client(client)
             .instructions(
                 "你是通用 AI 助手，擅长回答问题、写作、分析和创意工作。\n\n\
@@ -197,7 +215,7 @@ impl<'a> AgentFactory<'a> {
     fn create_analysis_agent(&self) -> Result<Arc<dyn IAgent>> {
         let client = self.create_client(None)?;
 
-        let agent = AgentBuilder::new("analysis")
+        let agent = Self::apply_compression(AgentBuilder::new("analysis"))
             .chat_client(client)
             .instructions(
                 "你是数据分析师，专注于深度研究、多源对比和趋势分析。\n\n\

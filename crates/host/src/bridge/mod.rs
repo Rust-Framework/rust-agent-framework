@@ -4,3 +4,4 @@ pub mod session;
 pub mod tracker;
 pub mod types;
 pub mod workflow_bridge;
+pub mod model_config;
