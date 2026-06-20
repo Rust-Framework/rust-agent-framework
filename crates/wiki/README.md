@@ -24,6 +24,108 @@
 - **密文过滤** — 内置常用 API Key / Token / 凭证的正则过滤规则
 - **文件监控** — 基于 `notify` 的文件变更监听，自动触发索引热重载
 
+## v2 仿生记忆特性
+
+基于 Karpathy LLM Wiki v2 规范，引擎实现了 8 项仿生记忆能力，使知识库具备生命周期管理：
+
+| 特性 | 模块 | 说明 |
+|------|------|------|
+| **置信度评分** | `confidence` | 动态权重：`base × source_reliability × evidence_factor × freshness` |
+| **分层记忆** | `memory` | 四层架构：working（工作）/ episodic（情节）/ semantic（语义）/ procedural（程序） |
+| **知识图谱** | `graph` | 带类型实体 + 带类型关系 + 图遍历（已存在于 v1，v2 复用） |
+| **混合检索** | `hybrid` | BM25 + 向量 + 图遍历，RRF 融合（`score = Σ 1/(60 + rank_i)`） |
+| **遗忘曲线** | `forgetting` | Ebbinghaus 衰减：`retention = exp(-age/halflife)`，按类型配置半衰期 |
+| **自动治理** | `governance` | 自动摄取、自动压缩、周期性清理冗余页面 |
+| **冲突解决** | `conflict` | 检测矛盾声明，按权威性 + 时效性提议解决方案 |
+| **写入门控** | `gate` | 选择性记忆：未过滤存储会使准确率从 100% 降至 13% |
+
+### 启用 v2 特性
+
+```rust
+use rust_agent_wiki::WikiEngine;
+
+let engine = WikiEngine::from_repo("my-wiki", "/path/to/repo")?;
+
+// 启用向量检索（混合搜索前置条件）
+engine.enable_vector_search("my-wiki")?;
+engine.build_vector_index("my-wiki").await?; // 返回索引的 chunk 数
+
+// 启用分层记忆
+engine.enable_memory("my-wiki")?;
+```
+
+### 混合检索
+
+```rust
+use rust_agent_wiki::ops::{search, SearchParams};
+
+let result = search(
+    &engine.state.read().unwrap(),
+    "my-wiki",
+    &SearchParams {
+        query: "所有权机制",
+        top_k: Some(10),
+        hybrid: true,              // 启用 BM25 + 向量 + 图遍历 RRF 融合
+        vector_weight: Some(1.0),  // 可选：向量权重
+        graph_weight: Some(0.5),   // 可选：图遍历权重
+        graph_hops: Some(1),       // 可选：图遍历跳数
+        ..Default::default()
+    },
+)?;
+```
+
+### 写入门控
+
+```rust
+use rust_agent_wiki::ops::content::content_write_gated;
+
+// 评估门控规则后再写入：拒绝低置信度、空内容、重复 slug
+let result = content_write_gated(
+    &state,
+    "concepts/rust-ownership",
+    None,
+    "---\ntitle: Rust 所有权\ntype: concept\nconfidence: 0.9\n---\n\n...",
+)?;
+match result.decision {
+    crate::gate::GateDecision::Accept => println!("已写入"),
+    crate::gate::GateDecision::Reject(reason) => println!("拒绝: {reason}"),
+    crate::gate::GateDecision::NeedsReview(reason) => println!("需审查: {reason}"),
+}
+```
+
+### v2 配置
+
+在 `wiki.toml` 或全局 `config.toml` 中配置 v2 段：
+
+```toml
+[decay]
+default_halflife_days = 90
+forget_threshold = 0.2
+archive_threshold = 0.05
+[decay.halflife_by_type]
+concept = 365
+spec = 365
+bug = 30
+
+[gate]
+min_confidence = 0.2
+reject_confidence = 0.05
+min_body_length = 10
+duplicate_threshold = 0.9
+
+[governance]
+interval_secs = 3600
+redundancy_confidence_threshold = 0.1
+redundancy_age_days = 180
+
+[memory]
+working_capacity = 100
+compress_threshold = 20
+promote_confidence = 0.7
+```
+
+`stale` lint 规则已集成遗忘曲线：`Archivable` 状态页面报 `error`，`Forgettable` 状态报 `warning`，并在消息中显示保留率与衰减后置信度。
+
 ## 快速开始
 
 在 `Cargo.toml` 中添加依赖：
@@ -428,10 +530,10 @@ concepts:
 | 模块 | 核心函数 |
 |------|---------|
 | `ops::spaces` | `spaces_create`、`spaces_register`、`spaces_list`、`spaces_remove`、`spaces_set_default` |
-| `ops::content` | `content_read`、`content_write`、`content_new`、`backlinks_for` |
-| `ops::search` | `search`、`list` — BM25 搜索和分面统计 |
+| `ops::content` | `content_read`、`content_write`、`content_new`、`content_write_gated`（v2 门控写入）、`backlinks_for` |
+| `ops::search` | `search`（支持 `hybrid=true` 混合检索）、`list` — BM25/混合搜索和分面统计 |
 | `ops::graph` | `graph_build` — Mermaid / DOT / LLM 文本三种渲染格式 |
-| `ops::lint` | `run_lint` — 6 条规则（orphan、broken-link、broken-cross-wiki-link、missing-fields、stale、unknown-type） |
+| `ops::lint` | `run_lint` — 6 条规则（`stale` 已集成 v2 遗忘曲线） |
 | `ops::suggest` | `suggest` — 4 策略关联页面推荐 |
 | `ops::stats` | `stats` — 页面统计、图谱指标、社区统计 |
 | `ops::ingest` | `ingest`、`ingest_with_redact` — 文件验证，可选密文过滤 |
@@ -440,6 +542,19 @@ concepts:
 | `ops::index` | `index_rebuild`、`index_status` |
 | `ops::config` | `config_get`、`config_set`、`config_list_global`、`config_list_resolved` |
 | `ops::redact` | `redact_body` — 基于正则的敏感信息过滤 |
+
+### v2 模块
+
+| 模块 | 核心类型/函数 |
+|------|--------------|
+| `confidence` | `compute`、`ConfidenceInput`、`ConfidenceBreakdown`、`default_source_reliability` |
+| `forgetting` | `decay`、`decay_from_frontmatter`、`reinforce`、`DecayConfig`、`DecayStatus` |
+| `memory` | `MemoryStore`、`MemoryTier`、`MemoryConfig`（`observe`/`compress`/`promote`/`sediment_procedural`） |
+| `hybrid` | `hybrid_search`、`HybridParams`、`render_hybrid_llms`（RRF 融合） |
+| `gate` | `evaluate`、`GateConfig`、`GateDecision`（Accept/Reject/NeedsReview） |
+| `conflict` | `detect`、`propose_resolution`、`authority_score`、`Conflict`、`Resolution` |
+| `governance` | `GovernanceScheduler`、`GovernanceConfig`、`GovernanceTask` |
+| `vector` | `VectorIndex`（`index_page`/`search`/`remove_page`/`index_page_file`） |
 
 ## 与上游 llm-wiki 的差异
 
@@ -461,6 +576,8 @@ concepts:
 |-------|------|
 | `tantivy 0.22` | BM25 全文搜索 |
 | `petgraph 0.6` | 概念有向图 + Louvain 社区检测 |
+| `rust-agent-rag` | v2 向量检索（`IVectorStore`、`IEmbeddingModel`、`SimilarityRetriever`） |
+| `parking_lot` | v2 `SpaceContext` 字段内部可变性 |
 | `jsonschema 0.26` | JSON Schema frontmatter 校验 |
 | `serde_yaml` | YAML frontmatter 解析 |
 | `walkdir` | 索引遍历 |

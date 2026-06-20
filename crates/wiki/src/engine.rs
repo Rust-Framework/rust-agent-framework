@@ -3,14 +3,17 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
+use parking_lot::RwLock as PLRwLock;
 
 use crate::cache::{GenerationCache, WikiGraphCache};
 use crate::config::{self, GlobalConfig, ResolvedConfig, WikiConfig, WikiEntry};
 use crate::graph::{CommunityData, WikiGraph};
 use crate::index_manager::{IndexReport, SpaceIndexManager, StalenessKind};
 use crate::index_schema::IndexSchema;
+use crate::memory::MemoryStore;
 use crate::space_builder;
 use crate::type_registry::SpaceTypeRegistry;
+use crate::vector::VectorIndex;
 
 // ── SpaceContext ──────────────────────────────────────────────────────────────
 
@@ -32,6 +35,10 @@ pub struct SpaceContext {
     pub graph_cache: WikiGraphCache,
     /// Generation-keyed community cache. Shares the same generation key as graph_cache.
     pub community_cache: GenerationCache<CommunityData>,
+    /// v2: 向量索引（混合检索的语义召回层）。None 表示未启用。运行时可变。
+    pub vector_index: PLRwLock<Option<Arc<VectorIndex>>>,
+    /// v2: 分层记忆系统。None 表示未启用。运行时可变。
+    pub memory_store: PLRwLock<Option<Arc<MemoryStore>>>,
 }
 
 impl SpaceContext {
@@ -235,6 +242,117 @@ impl WikiEngine {
         tracing::info!(wiki = %name, "reload: default updated");
         Ok(())
     }
+
+    /// v2: 为指定 wiki 启用向量检索（混合检索的前置条件）。
+    ///
+    /// 使用 `rust-agent-rag` 的 `Simple` 嵌入模型（哈希词频）初始化向量索引，
+    /// 并异步索引所有已有页面。生产环境应通过 `enable_vector_search_with_model`
+    /// 注入真实语义嵌入模型。
+    pub fn enable_vector_search(&self, wiki_name: &str) -> Result<()> {
+        self.enable_vector_search_with_model(wiki_name, None)
+    }
+
+    /// v2: 为指定 wiki 启用向量检索，使用自定义嵌入模型。
+    ///
+    /// `embed_model` 为 None 时使用默认的 Simple 模型（384 维）。
+    pub fn enable_vector_search_with_model(
+        &self,
+        wiki_name: &str,
+        embed_model: Option<Arc<dyn rust_agent_rag::embedding::IEmbeddingModel>>,
+    ) -> Result<()> {
+        let model: Arc<dyn rust_agent_rag::embedding::IEmbeddingModel> = embed_model
+            .unwrap_or_else(|| Arc::new(rust_agent_rag::embedding::simple_embedding_model(384)));
+        let vi = Arc::new(VectorIndex::with_default_dimensions(model));
+
+        let engine = self
+            .state
+            .read()
+            .map_err(|_| anyhow::anyhow!("lock poisoned"))?;
+        let space = engine.space(wiki_name)?;
+        *space.vector_index.write() = Some(vi);
+        tracing::info!(wiki = %wiki_name, "v2 vector search enabled");
+        Ok(())
+    }
+
+    /// v2: 为指定 wiki 启用分层记忆系统。
+    pub fn enable_memory(&self, wiki_name: &str) -> Result<()> {
+        self.enable_memory_with_config(wiki_name, crate::memory::MemoryConfig::default())
+    }
+
+    /// v2: 为指定 wiki 启用分层记忆系统，使用自定义配置。
+    pub fn enable_memory_with_config(
+        &self,
+        wiki_name: &str,
+        config: crate::memory::MemoryConfig,
+    ) -> Result<()> {
+        let ms = Arc::new(MemoryStore::new(config));
+        let engine = self
+            .state
+            .read()
+            .map_err(|_| anyhow::anyhow!("lock poisoned"))?;
+        let space = engine.space(wiki_name)?;
+        *space.memory_store.write() = Some(ms);
+        tracing::info!(wiki = %wiki_name, "v2 layered memory enabled");
+        Ok(())
+    }
+
+    /// v2: 异步索引所有已有页面到向量存储（启用向量检索后调用）。
+    pub async fn build_vector_index(&self, wiki_name: &str) -> Result<usize> {
+        let (vi, wiki_root, slugs) = {
+            let engine = self
+                .state
+                .read()
+                .map_err(|_| anyhow::anyhow!("lock poisoned"))?;
+            let space = engine.space(wiki_name)?;
+            let vi = space
+                .vector_index
+                .read()
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("vector search not enabled for \"{wiki_name}\""))?;
+            let wiki_root = space.wiki_root.clone();
+
+            // 收集所有 .md 页面 slug
+            let mut slugs = Vec::new();
+            collect_md_slugs(&wiki_root, &wiki_root, &mut slugs)?;
+            (vi, wiki_root, slugs)
+        };
+
+        let mut count = 0usize;
+        for slug in &slugs {
+            if let Ok(content) = std::fs::read_to_string(wiki_root.join(format!("{slug}.md"))) {
+                if vi.index_page(slug, &content).await.is_ok() {
+                    count += 1;
+                }
+            }
+        }
+        tracing::info!(wiki = %wiki_name, pages = count, "v2 vector index built");
+        Ok(count)
+    }
+}
+
+/// 递归收集 wiki_root 下所有 .md 文件的 slug（相对路径，无扩展名）。
+fn collect_md_slugs(base: &Path, dir: &Path, slugs: &mut Vec<String>) -> Result<()> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_md_slugs(base, &path, slugs)?;
+        } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
+            if let Ok(rel) = path.strip_prefix(base) {
+                let slug = rel
+                    .with_extension("")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if slug != "index" {
+                    slugs.push(slug);
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 // ── mount_wiki ────────────────────────────────────────────────────────────────
@@ -356,6 +474,8 @@ fn mount_space(entry: &WikiEntry, state_dir: &Path, config: &GlobalConfig) -> Re
         index_manager,
         graph_cache,
         community_cache: GenerationCache::new(),
+        vector_index: PLRwLock::new(None),
+        memory_store: PLRwLock::new(None),
     })
 }
 

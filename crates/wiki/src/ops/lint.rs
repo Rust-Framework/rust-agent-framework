@@ -122,6 +122,7 @@ pub fn run_lint(
             wiki_root,
             lint_cfg.stale_days,
             lint_cfg.stale_confidence_threshold,
+            &resolved.decay,
         )?);
     }
     if active_rules.contains("unknown-type") {
@@ -402,8 +403,10 @@ fn rule_stale(
     wiki_root: &Path,
     stale_days: u32,
     stale_confidence_threshold: f32,
+    decay_cfg: &crate::forgetting::DecayConfig,
 ) -> Result<Vec<LintFinding>> {
     let f_slug = is.field("slug");
+    let f_type = is.field("type");
     let f_last_updated = match is.try_field("last_updated") {
         Some(f) => f,
         None => return Ok(vec![]),
@@ -445,28 +448,54 @@ fn rule_stale(
         }
 
         // Check confidence if the field is indexed
-        let is_low_confidence = if let Some(f_conf) = f_confidence {
+        let raw_confidence: f32 = if let Some(f_conf) = f_confidence {
             match doc.get_first(f_conf).and_then(|v| v.as_f64()) {
-                Some(v) => (v as f32) < stale_confidence_threshold,
-                None => true, // No confidence value — treat as low
+                Some(v) => v as f32,
+                None => 0.0, // No confidence value — treat as low
             }
         } else {
-            // Field not indexed — fall back to date-only
-            true
+            0.0 // Field not indexed — fall back to date-only
         };
+        let is_low_confidence = raw_confidence < stale_confidence_threshold;
 
         if is_old && is_low_confidence {
+            // v2: enrich with forgetting-curve decay status.
+            let page_type = doc
+                .get_first(f_type)
+                .and_then(|v| v.as_str())
+                .unwrap_or("page");
+            let decay = crate::forgetting::decay(raw_confidence, page_type, date_str, decay_cfg);
             let age_note = if date_str.is_empty() {
                 "no last_updated date".to_string()
             } else {
                 format!("last updated {date_str}")
             };
+            // Archivable pages are more urgent (Error); Forgettable stays Warning.
+            let (severity, decay_note) = match decay.status {
+                crate::forgetting::DecayStatus::Archivable => (
+                    Severity::Error,
+                    format!(
+                        " | archivable: retention {:.0}%, decayed confidence {:.2}",
+                        decay.retention * 100.0,
+                        decay.decayed_confidence
+                    ),
+                ),
+                crate::forgetting::DecayStatus::Forgettable => (
+                    Severity::Warning,
+                    format!(
+                        " | forgettable: retention {:.0}%, decayed confidence {:.2}",
+                        decay.retention * 100.0,
+                        decay.decayed_confidence
+                    ),
+                ),
+                _ => (Severity::Warning, String::new()),
+            };
             findings.push(LintFinding {
                 path: slug_path(&slug, wiki_root),
                 slug,
                 rule: "stale",
-                severity: Severity::Warning,
-                message: format!("stale page: {age_note}"),
+                severity,
+                message: format!("stale page: {age_note}{decay_note}"),
             });
         }
     }

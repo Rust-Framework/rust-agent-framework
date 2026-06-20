@@ -1,4 +1,6 @@
 //! Wiki 知识库上下文提供器 — BM25 全文检索注入 Agent 对话。
+//!
+//! v2: 可选启用混合检索（BM25 + 向量 + 图遍历，RRF 融合）。
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -19,6 +21,8 @@ pub struct WikiContextProvider {
     wiki_name: String,
     source: PathBuf,
     top_k: usize,
+    /// v2: 是否启用混合检索（BM25 + 向量 + 图遍历）。
+    hybrid: bool,
     engine: OnceCell<Arc<WikiEngine>>,
 }
 
@@ -30,6 +34,7 @@ impl WikiContextProvider {
             name,
             source: PathBuf::from(source.into()),
             top_k: DEFAULT_TOP_K,
+            hybrid: false,
             engine: OnceCell::new(),
         }
     }
@@ -39,20 +44,44 @@ impl WikiContextProvider {
         self
     }
 
+    /// v2: 启用混合检索（BM25 + 向量 + 图遍历，RRF 融合）。
+    ///
+    /// 启用后会在首次挂载时构建向量索引。向量索引使用默认的 Simple 嵌入模型（384 维）。
+    pub fn with_hybrid(mut self) -> Self {
+        self.hybrid = true;
+        self
+    }
+
     async fn engine(&self) -> Result<Arc<WikiEngine>> {
         self.engine
             .get_or_try_init(|| async {
                 let wiki_name = self.wiki_name.clone();
                 let source = self.source.clone();
-                tokio::task::spawn_blocking(move || {
-                    WikiEngine::from_repo(&wiki_name, &source)
-                        .map(Arc::new)
-                        .map_err(|e| {
-                            rust_agent_core::AgentError::ConfigError(format!("wiki mount: {e}"))
-                        })
+                let hybrid = self.hybrid;
+                let engine = tokio::task::spawn_blocking(move || {
+                    WikiEngine::from_repo(&wiki_name, &source).map(Arc::new)
                 })
                 .await
-                .map_err(|e| rust_agent_core::AgentError::ConfigError(format!("wiki task: {e}")))?
+                .map_err(|e| {
+                    rust_agent_core::AgentError::ConfigError(format!("wiki task: {e}"))
+                })?
+                .map_err(|e| {
+                    rust_agent_core::AgentError::ConfigError(format!("wiki mount: {e}"))
+                })?;
+                // v2: 启用混合检索时构建向量索引。
+                if hybrid {
+                    engine.enable_vector_search(&self.wiki_name).map_err(|e| {
+                        rust_agent_core::AgentError::ConfigError(format!(
+                            "wiki enable vector: {e}"
+                        ))
+                    })?;
+                    engine.build_vector_index(&self.wiki_name).await.map_err(|e| {
+                        rust_agent_core::AgentError::ConfigError(format!(
+                            "wiki build vector: {e}"
+                        ))
+                    })?;
+                }
+                Ok::<_, rust_agent_core::AgentError>(engine)
             })
             .await
             .map(Arc::clone)
@@ -97,6 +126,7 @@ impl IContextProvider for WikiContextProvider {
         let engine = self.engine().await?;
         let wiki_name = self.wiki_name.clone();
         let top_k = self.top_k;
+        let hybrid = self.hybrid;
 
         let hits = tokio::task::spawn_blocking(move || {
             let state = engine
@@ -113,6 +143,10 @@ impl IContextProvider for WikiContextProvider {
                     top_k: Some(top_k),
                     include_sections: false,
                     cross_wiki: false,
+                    hybrid,
+                    vector_weight: None,
+                    graph_weight: None,
+                    graph_hops: None,
                 },
             )
             .map_err(|e| rust_agent_core::AgentError::ConfigError(format!("wiki search: {e}")))

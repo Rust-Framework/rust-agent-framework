@@ -121,6 +121,7 @@ pub fn content_read(
 }
 
 /// Result of a content write operation.
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct WriteResult {
     /// Number of bytes written to disk.
     pub bytes_written: usize,
@@ -142,6 +143,106 @@ pub fn content_write(
         bytes_written: content.len(),
         path,
     })
+}
+
+/// v2: 写入门控结果。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GatedWriteResult {
+    /// 门控决策。
+    pub decision: crate::gate::GateDecision,
+    /// 写入结果（仅当 Accept 或 NeedsReview 时存在）。
+    pub write: Option<WriteResult>,
+}
+
+impl GatedWriteResult {
+    /// 是否实际写入了文件。
+    pub fn written(&self) -> bool {
+        self.write.is_some()
+    }
+}
+
+/// v2: 带门控的写入 —— 在写入前评估内容质量、检测冲突、过滤低价值信息。
+///
+/// - `Accept`：直接写入。
+/// - `NeedsReview`：写入但返回审查标记（调用方可将页面 status 设为 stub）。
+/// - `Reject`：不写入，返回原因。
+///
+/// `gate_config` 为 None 时使用默认配置。
+pub fn content_write_gated(
+    engine: &EngineState,
+    uri: &str,
+    wiki_flag: Option<&str>,
+    content: &str,
+    gate_config: Option<&crate::gate::GateConfig>,
+) -> Result<GatedWriteResult> {
+    let (entry, slug) = WikiUri::resolve(uri, wiki_flag, &engine.config)?;
+    let space = engine.space(&entry.name)?;
+    let wiki_root = space.wiki_root.clone();
+
+    // 收集已有 slug 列表用于重复检测
+    let existing_slugs: Vec<String> = collect_existing_slugs(&wiki_root)?;
+
+    let config = gate_config.cloned().unwrap_or_default();
+    let gate_ctx = crate::gate::GateContext {
+        content,
+        slug: slug.as_str(),
+        existing_slugs: &existing_slugs,
+        config: &config,
+    };
+
+    let decision = crate::gate::evaluate(&gate_ctx);
+
+    match &decision {
+        crate::gate::GateDecision::Accept | crate::gate::GateDecision::NeedsReview(_) => {
+            let path = markdown::write_page(slug.as_str(), content, &wiki_root)?;
+            Ok(GatedWriteResult {
+                decision,
+                write: Some(WriteResult {
+                    bytes_written: content.len(),
+                    path,
+                }),
+            })
+        }
+        crate::gate::GateDecision::Reject(_) => Ok(GatedWriteResult {
+            decision,
+            write: None,
+        }),
+    }
+}
+
+/// 递归收集 wiki_root 下所有 .md 文件的 slug。
+fn collect_existing_slugs(wiki_root: &std::path::Path) -> Result<Vec<String>> {
+    let mut slugs = Vec::new();
+    collect_slugs_inner(wiki_root, wiki_root, &mut slugs)?;
+    Ok(slugs)
+}
+
+fn collect_slugs_inner(
+    base: &std::path::Path,
+    dir: &std::path::Path,
+    slugs: &mut Vec<String>,
+) -> Result<()> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_slugs_inner(base, &path, slugs)?;
+        } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
+            if let Ok(rel) = path.strip_prefix(base) {
+                let slug = rel
+                    .with_extension("")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if slug != "index" {
+                    slugs.push(slug);
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Result of creating a new wiki page or section.

@@ -48,5 +48,11 @@ hex = "0.4"
 # File system monitoring
 notify = "8"
 
+# Vector search & embedding (v2 hybrid retrieval)
+rust-agent-rag = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+
 [dev-dependencies]
 tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt"] }

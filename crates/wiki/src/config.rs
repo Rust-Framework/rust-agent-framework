@@ -303,6 +303,15 @@ pub struct RedactConfig {
     pub patterns: Vec<CustomPattern>,
 }
 
+/// `[decay]` section — v2 forgetting-curve configuration.
+pub type DecayConfig = crate::forgetting::DecayConfig;
+/// `[gate]` section — v2 write-gating configuration.
+pub type GateConfig = crate::gate::GateConfig;
+/// `[governance]` section — v2 automated-governance configuration.
+pub type GovernanceConfig = crate::governance::GovernanceConfig;
+/// `[memory]` section — v2 layered-memory configuration.
+pub type MemoryConfig = crate::memory::MemoryConfig;
+
 // ── Composite configs ─────────────────────────────────────────────────────────
 
 /// Root structure for `~/.llm-wiki/config.toml` — the global configuration file.
@@ -344,6 +353,18 @@ pub struct GlobalConfig {
     /// `[redact]` section.
     #[serde(default)]
     pub redact: RedactConfig,
+    /// `[decay]` section — v2 forgetting curve.
+    #[serde(default)]
+    pub decay: DecayConfig,
+    /// `[gate]` section — v2 write gating.
+    #[serde(default)]
+    pub gate: GateConfig,
+    /// `[governance]` section — v2 automated governance.
+    #[serde(default)]
+    pub governance: GovernanceConfig,
+    /// `[memory]` section — v2 layered memory.
+    #[serde(default)]
+    pub memory: MemoryConfig,
 }
 
 /// A type entry in `[types.<name>]` of `wiki.toml`.
@@ -393,6 +414,18 @@ pub struct WikiConfig {
     /// Per-wiki override for `[redact]`.
     #[serde(default)]
     pub redact: Option<RedactConfig>,
+    /// Per-wiki override for `[decay]` (v2 forgetting curve).
+    #[serde(default)]
+    pub decay: Option<DecayConfig>,
+    /// Per-wiki override for `[gate]` (v2 write gating).
+    #[serde(default)]
+    pub gate: Option<GateConfig>,
+    /// Per-wiki override for `[governance]` (v2 automated governance).
+    #[serde(default)]
+    pub governance: Option<GovernanceConfig>,
+    /// Per-wiki override for `[memory]` (v2 layered memory).
+    #[serde(default)]
+    pub memory: Option<MemoryConfig>,
     /// Content directory relative to repo root. Default: `"wiki"`.
     #[serde(default = "default_wiki_root")]
     pub wiki_root: String,
@@ -419,6 +452,14 @@ pub struct ResolvedConfig {
     pub lint: LintConfig,
     /// Resolved redact section.
     pub redact: RedactConfig,
+    /// Resolved decay section (v2 forgetting curve).
+    pub decay: DecayConfig,
+    /// Resolved gate section (v2 write gating).
+    pub gate: GateConfig,
+    /// Resolved governance section (v2 automated governance).
+    pub governance: GovernanceConfig,
+    /// Resolved memory section (v2 layered memory).
+    pub memory: MemoryConfig,
 }
 
 // ── Default value helpers ─────────────────────────────────────────────────────
@@ -511,6 +552,19 @@ pub fn resolve(global: &GlobalConfig, per_wiki: &WikiConfig) -> ResolvedConfig {
             .redact
             .clone()
             .unwrap_or_else(|| global.redact.clone()),
+        decay: per_wiki
+            .decay
+            .clone()
+            .unwrap_or_else(|| global.decay.clone()),
+        gate: per_wiki.gate.clone().unwrap_or_else(|| global.gate.clone()),
+        governance: per_wiki
+            .governance
+            .clone()
+            .unwrap_or_else(|| global.governance.clone()),
+        memory: per_wiki
+            .memory
+            .clone()
+            .unwrap_or_else(|| global.memory.clone()),
     }
 }
 
