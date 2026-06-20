@@ -38,20 +38,21 @@ async fn main() {
     println!("查询: {}", query);
     println!("数量: {}\n", count);
 
-    let raw = WebSearch.call(query.to_string(), Some(count)).await;
+    let result = WebSearch.call(query.to_string(), Some(count)).await;
     let json: serde_json::Value =
-        serde_json::from_str(&raw).expect("解析 web_search 返回的 JSON 失败");
+        serde_json::to_value(&result).expect("序列化 web_search 返回的 ToolResult 失败");
 
-    if json["ok"] == false {
+    if !result.ok {
         eprintln!("搜索失败!");
         eprintln!("错误: {}", json["error"].as_str().unwrap_or("未知错误"));
-        if let Some(suggestion) = json["suggestion"].as_str() {
+        if let Some(suggestion) = json["data"]["suggestion"].as_str() {
             eprintln!("建议: {}", suggestion);
         }
         std::process::exit(1);
     }
 
-    let results = &json["data"]["results"];
+    let data = result.data.as_ref().expect("web_search 成功但 data 为空");
+    let results = &data["results"];
     let total = results.as_array().map(|a| a.len()).unwrap_or(0);
     println!("共找到 {} 条结果:\n", total);
 
@@ -84,34 +85,34 @@ async fn main() {
     println!("抓取第 {} 条结果: {}", idx + 1, url);
     println!();
 
-    let raw_fetch = WebFetch.call(url, None, None, None).await;
+    let fetch_result = WebFetch.call(url, None, None, None).await;
     let fetch_json: serde_json::Value =
-        serde_json::from_str(&raw_fetch).expect("解析 web_fetch 返回的 JSON 失败");
+        serde_json::to_value(&fetch_result).expect("序列化 web_fetch 返回的 ToolResult 失败");
 
-    if fetch_json["ok"] == false {
+    if !fetch_result.ok {
         eprintln!("抓取失败!");
         eprintln!("错误: {}", fetch_json["error"].as_str().unwrap_or("未知错误"));
-        if let Some(suggestion) = fetch_json["suggestion"].as_str() {
+        if let Some(suggestion) = fetch_json["data"]["suggestion"].as_str() {
             eprintln!("建议: {}", suggestion);
         }
         std::process::exit(1);
     }
 
-    let data = &fetch_json["data"];
-    println!("标题: {}", data["title"].as_str().unwrap_or("N/A"));
-    println!("URL: {}", data["url"].as_str().unwrap_or("N/A"));
-    if let Some(final_url) = data["final_url"].as_str() {
-        if !final_url.is_empty() && final_url != data["url"].as_str().unwrap_or("") {
+    let fetch_data = fetch_result.data.as_ref().expect("web_fetch 成功但 data 为空");
+    println!("标题: {}", fetch_data["title"].as_str().unwrap_or("N/A"));
+    println!("URL: {}", fetch_data["url"].as_str().unwrap_or("N/A"));
+    if let Some(final_url) = fetch_data["final_url"].as_str() {
+        if !final_url.is_empty() && final_url != fetch_data["url"].as_str().unwrap_or("") {
             println!("最终 URL: {}", final_url);
         }
     }
     println!(
         "内容长度: {} 字节",
-        data["content_length"].as_u64().unwrap_or(0)
+        fetch_data["content_length"].as_u64().unwrap_or(0)
     );
     println!(
         "已截断: {}",
-        if data["truncated"].as_bool().unwrap_or(false) {
+        if fetch_data["truncated"].as_bool().unwrap_or(false) {
             "是"
         } else {
             "否"
@@ -120,5 +121,5 @@ async fn main() {
     println!();
 
     println!("--- 页面内容 ---");
-    println!("{}", data["content"].as_str().unwrap_or("(空)"));
+    println!("{}", fetch_data["content"].as_str().unwrap_or("(空)"));
 }

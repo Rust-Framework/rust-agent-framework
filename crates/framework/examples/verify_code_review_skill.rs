@@ -9,7 +9,6 @@
 //! 注：技能脚本执行现在通过 RunCommand + WorkspaceScope 实现，
 //! 不再有独立的 run_skill_script 工具。
 
-use std::sync::Arc;
 use rust_agent_framework::{AgentSkill, AgentSkillsProvider};
 
 fn main() {

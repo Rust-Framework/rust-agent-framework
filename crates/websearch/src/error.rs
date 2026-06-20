@@ -69,6 +69,7 @@ impl From<url::ParseError> for SearchError {
     }
 }
 
+#[cfg(feature = "servo-fetch")]
 impl From<servo_fetch::Error> for SearchError {
     fn from(e: servo_fetch::Error) -> Self {
         match &e {

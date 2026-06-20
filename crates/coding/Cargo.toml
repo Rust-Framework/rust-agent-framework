@@ -3,6 +3,9 @@ name = "rust-agent-coding"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Coding agent pipeline — feedback loop, HITL confirmation, and parallel coding orchestration for rust-agent-framework"
 
 [dependencies]
 rust-agent-core = { workspace = true }
