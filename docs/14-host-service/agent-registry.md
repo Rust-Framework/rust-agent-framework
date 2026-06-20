@@ -169,39 +169,21 @@ fn create_analysis_agent(&self) -> Result<Arc<dyn IAgent>> {
 从 JSON/YAML/TOML 文件加载 Agent：
 
 ```rust
-use rust_agent_decl::{AgentDocument, AgentResolver};
+use rust_agent_decl::DeclAgentBuilder;
 
 async fn load_declarative_agents(
     agents_dir: &str,
 ) -> anyhow::Result<Vec<Arc<dyn IAgent>>> {
     let mut agents = Vec::new();
-    let mut resolver = AgentResolver::new();
 
     for entry in walkdir::WalkDir::new(agents_dir) {
         let entry = entry?;
         if entry.file_type().is_file() {
             let path = entry.path();
-            let ext = path.extension().and_then(|e| e.to_str());
-
-            let doc = match ext {
-                Some("json") => AgentDocument::from_json_file(path.to_str().unwrap())?,
-                Some("yaml") | Some("yml") => {
-                    #[cfg(feature = "yaml")]
-                    { AgentDocument::from_yaml_file(path.to_str().unwrap())? }
-                }
-                Some("toml") => {
-                    #[cfg(feature = "toml")]
-                    { AgentDocument::from_toml_file(path.to_str().unwrap())? }
-                }
-                _ => continue,
-            };
-
-            let def = doc.inner_definition();
-            let agent = resolver.resolve(def).await?;
+            let agent = DeclAgentBuilder::from_file(path).build().await?;
             agents.push(agent);
         }
     }
-
     Ok(agents)
 }
 ```

@@ -30,7 +30,7 @@
 | 第 10 章 | [宏与声明式配置](10-macros-declarative/) | #[tool] 宏、JSON/YAML/TOML 配置、字段参考手册、实战教程 |
 | 第 11 章 | [多智能体编排技术](11-multi-agent/) | 六种编排模式、图驱动引擎、检查点、IAgent 门面 |
 | 第 12 章 | [业务流程编排引擎](12-process-engine/) | 流程定义 DSL、标准活动节点、SAGA 补偿、Agent 池化 |
-| 第 13 章 | [扩展能力](13-extensions/) | 网络搜索、RAG、Wiki、技能系统、Rhai 脚本、MCP 集成 |
+| 第 13 章 | [扩展能力](13-extensions/) | 网络搜索、RAG、Wiki、代码沙箱、OpenAPI 工具、Rhai 脚本、MCP |
 | 第 14 章 | [宿主服务](14-host-service/) | ACP 协议、Stdio/WebSocket 传输、Agent 注册 |
 | 第 15 章 | [附录](15-appendix/) | Crate 地图、API 速查、术语表、常见问题 |
 

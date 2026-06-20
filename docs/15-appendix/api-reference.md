@@ -221,22 +221,17 @@ pub struct AgentBuilder<C: IChatClient> {
 
 | 函数 | 说明 |
 |------|------|
-| `quick_agent(path)` | 从文件快速构建 Agent |
-| `quick_workflow(path)` | 从文件快速构建 Workflow |
+| `DeclAgentBuilder::quick(path)` | **推荐**：从文件快速构建 Agent |
+| `quick_agent(path)` | 已 deprecated，请用 `DeclAgentBuilder::quick` |
+| `quick_workflow(path)` | 从文件编译 Workflow 图 |
 
 ### 解析器
 
 | 类型 | 方法 |
 |------|------|
-| `AgentResolver` | `resolve()`, `get_agent()`, `register_tool_factory()` |
-| `ToolResolver` | `resolve()`, `resolve_all()`, `register_factory()` |
-| `WorkflowResolver` | `resolve_workflow()` |
-
-### 声明式构建器
-
-| 类型 | 方法 |
-|------|------|
-| `DeclAgentBuilder` | `new()`, `from_yaml_file()`, `from_yaml_str()`, `with_model()`, `with_api_key()`, `with_tool()`, `with_context()`, `max_tool_rounds()`, `build()` |
+| `DeclAgentBuilder` | `from_yaml_file()`, `from_yaml_str()`, `with_api_key()`, `with_connection()`, `with_tool()`, `with_context()`, `build()`, `validate()` |
+| `ToolResolver` | `resolve()`, `resolve_all()`, `register_factory()`, `set_sandbox_defaults()` |
+| `AgentResolver` | 已 deprecated，请用 `DeclAgentBuilder` |
 
 ## rust-agent-cli
 
@@ -289,6 +284,29 @@ Rhai 脚本引擎。
 | `RhaiRuntime` | `new()`, `with_script()`, `with_variable()`, `with_json_variable()`, `run()`, `eval()`, `eval_expression()` |
 | `RhaiExecutor` | `new()`, `with_runtime()` (impl IExecutor) |
 | `RhaiTool` | `new()`, `with_runtime()`, `from_script_file()` (impl ITool) |
+
+## rust-agent-sandbox
+
+代码沙箱扩展。
+
+| 类型 | 说明 |
+|------|------|
+| `ProcessSandbox` | 子进程沙箱（默认） |
+| `ContainerSandbox` | 增强进程包装 |
+| `DockerSandbox` | Docker/Podman 容器（feature `docker`） |
+| `WasmSandbox` | wasmtime 沙箱（feature `wasm`） |
+| `CodeInterpreterTool` | `ITool` 封装，对接 `ICodeSandbox` |
+
+## rust-agent-openapi
+
+OpenAPI HTTP 工具。
+
+| 类型 | 说明 |
+|------|------|
+| `OpenApiToolResolver` | `resolve()`, `resolve_from_str()` |
+| `OpenApiToolConfig` | `spec_url`, `operation_id`, `tool_name`, `base_url` |
+| `OpenApiHttpTool` | 实现 `ITool` |
+| `validate_response_body()` | 响应 Schema 校验（feature `validate`） |
 
 ## rust-agent-host
 

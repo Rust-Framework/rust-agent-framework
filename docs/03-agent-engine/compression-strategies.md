@@ -338,6 +338,31 @@ let agent = AgentBuilder::new("agent")
     .build()?;
 ```
 
+## 声明式配置（YAML / JSON）
+
+`PromptAgentData` 支持直接在 Agent 声明中配置压缩，由 `DeclAgentBuilder` 接入 `AgentBuilder`：
+
+```yaml
+kind: prompt
+name: long-context-agent
+compression:
+  kind: sliding_window
+  windowSize: 30
+tokenCounter:
+  kind: estimate
+```
+
+支持的 `compression.kind`：
+
+| kind | 对应 Rust 类型 | 主要参数 |
+|------|---------------|---------|
+| `sliding_window` | `SlidingWindowStrategy` | `windowSize` |
+| `token_budget` | `TokenBudgetStrategy` | `toolResultEvictionThreshold`（可选） |
+
+`tokenCounter.kind` 目前仅 `estimate`（`EstimateCounter`）。未配置 `tokenCounter` 但配置了 `compression` 时，自动使用 estimate。
+
+---
+
 ## 最佳实践
 
 1. **始终同时配置策略和计数器**：没有计数器的压缩策略会被跳过。

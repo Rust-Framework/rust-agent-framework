@@ -32,40 +32,40 @@ impl ISessionStore for PostgresSessionStore {
 
 ## 上下文压缩策略
 
-### 压缩触发时机
+压缩在 `ChatClientAgent` 的 Phase 1.5 执行，需**同时**配置 `compression_strategy` 和 `token_counter` 才会生效。
 
-在 `AgentBuilder` 中配置压缩：
+### 代码配置
+
+```rust
+use rust_agent_framework::{SlidingWindowStrategy, TokenBudgetStrategy, EstimateCounter};
+use std::sync::Arc;
+
+let agent = AgentBuilder::new("agent")
+    .chat_client(client)
+    .with_compression_strategy(Arc::new(SlidingWindowStrategy::new(20)))
+    .with_token_counter(Arc::new(EstimateCounter::new()))
+    .build()?;
+```
+
+或使用 Token 预算策略：
 
 ```rust
 let agent = AgentBuilder::new("agent")
     .chat_client(client)
-    .with_compression(
-        CompressionConfig::new()
-            .with_strategy(CompressionStrategy::Summarize) // 摘要压缩
-            .with_threshold(8000)                          // 超过 8000 tokens 触发
-            .with_target_tokens(4000)                      // 压缩到 4000 tokens
-    )
+    .with_compression_strategy(Arc::new(TokenBudgetStrategy::new()))
+    .with_token_counter(Arc::new(EstimateCounter::new()))
     .build()?;
 ```
 
-### 压缩策略对比
+### 声明式配置
 
-| 策略 | 精度损失 | 速度 | 适用场景 |
-|------|---------|------|---------|
-| `Truncate` | 高 | 极快 | 简单场景，不关心历史 |
-| `Summarize` | 中 | 中等 | 需要保留上下文语义 |
-| `SelectiveReduce` | 低 | 慢 | 需要高精度上下文保留 |
+见 [10.5 配置字段参考](../10-macros-declarative/config-reference.md#compression--压缩策略框架扩展) 中的 `compression` / `tokenCounter` 字段。
 
-### Token 预算管理
+### 压缩触发条件
 
-```rust
-// 设置 token 预算
-let options = AgentRunOptions {
-    max_tokens: Some(4096),          // 响应 token 上限
-    compression_threshold: Some(7000), // 压缩触发阈值
-    ..Default::default()
-};
-```
+1. Agent 已配置 `compression_strategy` 和 `token_counter`
+2. 模型元数据提供上下文 token 预算
+3. 当前消息 token 数超过预算
 
 ## 并行工具执行
 

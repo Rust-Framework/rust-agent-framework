@@ -1,6 +1,6 @@
 # 第 13 章：扩展能力
 
-RAF 提供了丰富的扩展能力生态，包括网络搜索、RAG（检索增强生成）、Wiki 知识引擎、Agent 技能系统、Rhai 脚本引擎和持久记忆系统。本章详细介绍每一个扩展能力的架构和使用方式。
+RAF 提供了丰富的扩展能力生态，包括网络搜索、RAG、Wiki、代码沙箱、OpenAPI 工具、技能系统、Rhai 脚本和 MCP 集成。
 
 ## 扩展生态概览
 
@@ -18,6 +18,8 @@ graph TB
         WK[Wiki 引擎]
         SK[技能系统]
         RH[Rhai 脚本]
+        SB[代码沙箱]
+        OA[OpenAPI 工具]
         MM[SkillMemory]
     end
 
@@ -46,6 +48,8 @@ graph TB
 | [13.6](rhai-scripts.md) | Rhai 脚本引擎 | RhaiRuntime、RhaiExecutor、RhaiTool |
 | [13.7](memory.md) | SkillMemory 记忆系统 | 后台记忆整合、MemoryAgent、ConsolidationWorker |
 | [13.8](mcp.md) | MCP 协议集成 | McpClient、McpTool、McpContextProvider、工具/资源/提示词操作 |
+| [13.9](sandbox.md) | 代码沙箱 | ICodeSandbox、ProcessSandbox、DockerSandbox、CodeInterpreterTool |
+| [13.10](openapi.md) | OpenAPI 工具 | OpenApiHttpTool、Schema 校验、声明式 kind: openapi |
 
 ## 快速导航
 
@@ -55,6 +59,8 @@ graph TB
 - **想为 Agent 添加可复用技能？** → [13.5 技能系统](skills.md)
 - **想用脚本扩展 Agent？** → [13.6 Rhai 脚本](rhai-scripts.md)
 - **想让 Agent 拥有持久记忆？** → [13.7 记忆系统](memory.md)
+- **想让 Agent 执行代码？** → [13.9 代码沙箱](sandbox.md)
+- **想从 OpenAPI 规范生成工具？** → [13.10 OpenAPI 工具](openapi.md)
 - **想让 Agent 集成 MCP 工具？** → [13.8 MCP 协议集成](mcp.md)
 
 ---

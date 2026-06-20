@@ -175,6 +175,8 @@ graph TB
 | `rust-agent-macros` | `#[tool]` 过程宏，简化工具定义 |
 | `rust-agent-websearch` | Web 搜索集成 |
 | `rust-agent-rag` | 检索增强生成 |
+| `rust-agent-openapi` | OpenAPI 3.x HTTP 工具 |
+| `rust-agent-sandbox` | 代码沙箱 / code_interpreter |
 | `rust-agent-rhai` | Rhai 脚本引擎集成 |
 | `rust-agent-workflow` | 工作流编排引擎 |
 | `rust-agent-decl` | 声明式 Agent DSL |

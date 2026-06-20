@@ -86,10 +86,12 @@ pub struct ContextResult {
 |------|-------|-----------------|-------|------|
 | **WebSearch** | ✅ | ✅ (auto-search) | rust-agent-websearch | reqwest, servo-fetch, scraper |
 | **WebFetch** | ✅ | ❌ | rust-agent-websearch | servo-fetch |
-| **RAG** | ❌ | ❌ (提供 traits) | rust-agent-rag | 无原生依赖 |
-| **Wiki** | ❌ | ❌ (独立引擎) | rust-agent-wiki | tantivy, petgraph |
+| **RAG** | ❌ | ✅ (`RagContextProvider`) | rust-agent-rag | rag feature |
+| **Wiki** | ❌ | ✅ (`WikiContextProvider`) | rust-agent-wiki | wiki feature |
 | **Skills** | ✅ (工具) | ✅ | rust-agent-framework | 无额外依赖 |
 | **Rhai** | ✅ (RhaiTool) | ❌ | rust-agent-rhai | rhai |
+| **Code Sandbox** | ✅ (`CodeInterpreterTool`) | ❌ | rust-agent-sandbox | sandbox feature |
+| **OpenAPI** | ✅ (`OpenApiHttpTool`) | ❌ | rust-agent-openapi | openapi feature |
 | **SkillMemory** | ❌ | ✅ | rust-agent-framework | 依赖主 Agent 的 ChatClient |
 | **MCP** | ✅ (McpTool) | ✅ (McpContextProvider) | rust-agent-mcp | tokio, reqwest |
 

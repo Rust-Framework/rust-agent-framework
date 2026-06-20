@@ -140,6 +140,8 @@
 | [13.6](13-extensions/rhai-scripts.md) | Rhai 脚本引擎 |
 | [13.7](13-extensions/memory.md) | SkillMemory 记忆系统 |
 | [13.8](13-extensions/mcp.md) | MCP 协议集成 |
+| [13.9](13-extensions/sandbox.md) | 代码沙箱（ICodeSandbox / code_interpreter） |
+| [13.10](13-extensions/openapi.md) | OpenAPI HTTP 工具 |
 
 ## 第 14 章：宿主服务
 

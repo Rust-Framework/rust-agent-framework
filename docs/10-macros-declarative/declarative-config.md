@@ -50,6 +50,10 @@ classDiagram
         +String additional_instructions
         +usize max_tool_rounds
         +Vec~AgentDefinition~ sub_agents
+        +Vec~ContextProviderDecl~ contexts
+        +CompressionDecl compression
+        +TokenCounterDecl token_counter
+        +HashMap sandbox
     }
 
     AgentDocument *-- AgentManifest
@@ -94,6 +98,9 @@ pub enum AgentDocument {
 - **template**：提示词模板配置（Template 结构体）
 - **instructions**：系统指令文本
 - **max_tool_rounds**：最大工具调用轮数（默认 10）
+- **contexts**：声明式上下文提供器（memory/skills/workspace/knowledge/wiki 等）
+- **compression** / **tokenCounter**：消息压缩策略（框架扩展，见 [3.5 压缩策略](../03-agent-engine/compression-strategies.md)）
+- **sandbox**：Agent 级代码沙箱默认（`kind: code` 工具继承）
 
 ## 多格式支持
 
@@ -114,6 +121,7 @@ rust-agent-decl = { version = "0.1", features = ["json", "yaml", "toml"] }
 | `rag` | RAG 知识库上下文 | rust-agent-rag |
 | `wiki` | Wiki 知识库上下文 | rust-agent-wiki |
 | `openapi` | OpenAPI HTTP 工具 | rust-agent-openapi |
+| `openapi-validate` | OpenAPI 响应 JSON Schema 校验 | rust-agent-openapi/validate |
 | `sandbox` | 内置 code_interpreter 沙箱 | rust-agent-sandbox |
 | `sandbox-docker` | Docker/Podman 沙箱后端 | rust-agent-sandbox/docker |
 | `sandbox-wasm` | WASM 沙箱后端 | rust-agent-sandbox/wasm |
@@ -191,17 +199,16 @@ let doc = AgentDocument::from_toml_file("agents/agent.toml")?;
 
 `ToolResolver` 负责将声明式工具定义解析为运行时的 `Arc<dyn ITool>` 实例。
 
-### 支持的 7 种 MAF 工具类型
+### 支持的 MAF 工具类型（ToolResolver）
 
 | 工具类型 | 状态 | 说明 |
 |---------|------|------|
-| `function` | ✅ 已实现 | 内置框架工具（read_file, write_file, run_command 等） |
-| `web_search` | ✅ 已实现 | WebSearch/WebFetch |
-| `custom` | ✅ 需注册工厂 | 通过 `register_factory()` 注册的自定义工具 |
-| `code_interpreter` | ❌ 未实现 | 需要沙箱执行环境 |
-| `mcp` | ✅ 已实现 | 通过 `rust-agent-mcp` crate 支持 MCP 服务器工具集成 |
-| `openapi` | ❌ 未实现 | 需要 OpenAPI 规范解析 + HTTP 客户端 |
-| `file_search` | ❌ 未实现 | 需要向量存储集成 |
+| `function` / `file` / `shell` / `web` | ✅ 已实现 | 内置框架工具 |
+| `code` | ✅ 已实现 | `code_interpreter`（需 `sandbox` feature，见 [13.9 代码沙箱](../13-extensions/sandbox.md)） |
+| `custom` | ✅ 需注册工厂 | `with_tool()` / `register_factory()` |
+| `mcp` | ✅ 已实现 | `rust-agent-mcp`，需预先 `register_mcp_server()` |
+| `openapi` | ✅ 已实现 | OpenAPI 3.x → HTTP 工具（需 `openapi` feature，见 [13.10](../13-extensions/openapi.md)） |
+| `file_search` | ❌ 未实现 | 需向量存储集成 |
 
 ### 使用示例
 
@@ -325,47 +332,28 @@ let agent = DeclAgentBuilder::new()
 
 ## 便捷函数
 
-### `quick_agent()` — 一行加载 Agent
+### `DeclAgentBuilder` — 推荐入口
 
-从配置文件快速构建一个可运行的 Agent：
-
-```rust
-use rust_agent_decl::quick_agent;
-
-let agent: Arc<dyn IAgent> = quick_agent("agents/my-agent.json").await?;
-// agent 现在可以运行
-let stream = agent.run(messages, session, options).await?;
-```
-
-### `quick_workflow()` — 一行加载 Workflow
-
-从配置文件快速构建 Workflow 图：
+从 YAML/JSON/TOML 加载并构建 Agent，支持运行时覆盖、命名连接注册和沙箱默认：
 
 ```rust
-use rust_agent_decl::quick_workflow;
+use rust_agent_decl::DeclAgentBuilder;
 
-let graph = quick_workflow("workflows/pipeline.json").await?;
-// graph 现在可以被 WorkflowEngine 执行
+let agent = DeclAgentBuilder::new()
+    .from_yaml_file("agents/my-agent.yaml")
+    .with_api_key(&std::env::var("OPENAI_API_KEY")?)
+    .with_connection("shared-openai", /* Connection */)
+    .build()
+    .await?;
 ```
 
-### AgentResolver — 高级解析
-
-需要更多控制时使用 `AgentResolver`：
+等价的一行快捷方式：
 
 ```rust
-let mut resolver = AgentResolver::new();
-
-// 注册自定义工具
-resolver.register_tool_factory("custom_processor", |config| {
-    // ...
-});
-
-// 解析 Agent 定义
-let agent = resolver.resolve(&agent_def).await?;
-
-// 跨定义引用（通过名称查找之前解析的 Agent）
-let sub_agent = resolver.get_agent("helper_agent");
+let agent = DeclAgentBuilder::quick("agents/my-agent.yaml").await?;
 ```
+
+> **`AgentResolver` / `quick_agent()`** 仍可用但已标记 `deprecated`，新代码请使用 `DeclAgentBuilder`。
 
 ## 完整的声明式配置示例
 
@@ -427,16 +415,16 @@ let sub_agent = resolver.get_agent("helper_agent");
 }
 ```
 
-### 通过 AgentDocument 加载
+### 通过 DeclAgentBuilder 加载
 
 ```rust
-use rust_agent_decl::{AgentDocument, AgentResolver};
+use rust_agent_decl::{AgentDocument, DeclAgentBuilder};
 
 async fn bootstrap() -> anyhow::Result<Arc<dyn IAgent>> {
-    let doc = AgentDocument::from_json_file("config/agent.json")?;
-    let def = doc.inner_definition();
-    let mut resolver = AgentResolver::new();
-    resolver.resolve(def).await.map_err(Into::into)
+    DeclAgentBuilder::from_file("config/agent.json")
+        .build()
+        .await
+        .map_err(Into::into)
 }
 ```
 
@@ -446,8 +434,8 @@ async fn bootstrap() -> anyhow::Result<Arc<dyn IAgent>> {
 flowchart LR
     A[JSON/YAML/TOML 文件] --> B[AgentDocument]
     B --> C[AgentDefinition]
-    C --> D[AgentResolver]
-    C --> E[WorkflowResolver]
+    C --> D[DeclAgentBuilder]
+    C --> E[compile_workflow]
     C --> F[ToolResolver]
     D --> G[Arc&lt;dyn IAgent&gt;]
     E --> H[WorkflowGraph]

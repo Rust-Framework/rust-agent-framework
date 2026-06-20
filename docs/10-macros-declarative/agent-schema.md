@@ -27,7 +27,7 @@ graph TD
 | 需要 LLM 模型 | ✅ 必需 | ❌ 可选 | ❌ 不适用 |
 | 工具支持 | ✅ 完整 | ✅ 通过节点 | ❌ |
 | 子 Agent | ✅ 支持 | 通过图定义 | ❌ |
-| 实现状态 | ✅ 已实现 | ✅ 已实现 | ❌ 未实现 |
+| 实现状态 | ✅ 已实现 | ✅ 已实现 | ⚠️ 仅解析（需外部托管部署） |
 
 ## Prompt Agent 规范
 
@@ -42,7 +42,10 @@ pub struct PromptAgentData {
     pub additional_instructions: Option<String>, // 可选：附加指令
     pub max_tool_rounds: usize,                // 最大工具调用轮数（默认 10）
     pub sub_agents: Vec<AgentDefinition>,      // 可选：子 Agent 声明
-    pub contexts: Vec<ContextProviderDecl>,    // 可选：声明式上下文提供器（memory/skills/mcp/workspace/knowledge/wiki）
+    pub contexts: Vec<ContextProviderDecl>,    // 可选：声明式上下文提供器
+    pub compression: Option<CompressionDecl>,  // 可选：压缩策略（框架扩展）
+    pub token_counter: Option<TokenCounterDecl>, // 可选：Token 计数器
+    pub sandbox: HashMap<String, Value>,       // 可选：代码沙箱默认配置
 }
 ```
 
@@ -56,8 +59,8 @@ pub struct PromptAgentData {
 | `skills` | `AgentSkillsProvider` | ✅ 已实现（通过 `scan()` 扫描目录） |
 | `workspace` | `WorkspaceContextProvider` | ✅ 已实现（`root` + `policy` 配置） |
 | `mcp` | `McpContextProvider` | ⚠️ 需代码注入（需异步连接，通过 `with_context()` 注入） |
-| `knowledge` | RAG Knowledge Provider | ❌ 待实现（通过 `with_context()` 注入自定义实现） |
-| `wiki` | Wiki Knowledge Provider | ❌ 待实现（通过 `with_context()` 注入自定义实现） |
+| `knowledge` | `RagContextProvider` | ✅ 已实现（需 `rag` feature） |
+| `wiki` | `WikiContextProvider` | ✅ 已实现（需 `wiki` feature） |
 
 `history`（对话历史管理）由 `AgentBuilder` 内置自动注入 `InMemoryHistoryProvider`，无需在 `contexts` 中声明。
 

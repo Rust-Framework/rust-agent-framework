@@ -215,25 +215,33 @@ tools:
     tool_name: search_repositories
 ```
 
-通过 `ToolResolver` 解析：
+通过 `DeclAgentBuilder` 解析（推荐）：
 
 ```rust
-use rust_agent_decl::{AgentDocument, AgentResolver};
+use rust_agent_decl::DeclAgentBuilder;
 use rust_agent_mcp::{McpServerClient, McpConnectionOptions};
 
-let doc = AgentDocument::from_yaml_file("agent.yaml")?;
-let mut resolver = AgentResolver::new();
+// MCP 服务器需在 ToolResolver 中注册 — 当前通过 with_tool 或扩展 ToolResolver 预注册
+let agent = DeclAgentBuilder::from_file("agent.yaml")
+    .build()
+    .await?;
+```
 
-// 注册 MCP 服务器（声明中的 server_url 将匹配此 URL）
+若需手动注册 MCP 服务器，仍可使用 `ToolResolver`：
+
+```rust
+use rust_agent_decl::resolver::tool_resolver::ToolResolver;
+use rust_agent_mcp::{McpServerClient, McpConnectionOptions};
+
+let mut resolver = ToolResolver::new();
 resolver.register_mcp_server(
     "stdio://filesystem-server",
     McpServerClient::connect(McpConnectionOptions::stdio("mcp-server", vec![])).await?,
 );
-
-let agent = resolver.resolve(doc.inner_definition()).await?;
+let tools = resolver.resolve_all(&agent_def.tools).await?;
 ```
 
-工作流中的 MCP 调用：
+### 工作流中的 MCP 调用
 
 ```yaml
 kind: workflow

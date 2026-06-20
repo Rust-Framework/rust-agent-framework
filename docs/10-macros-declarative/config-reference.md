@@ -24,6 +24,9 @@
 | `tools` | — | ToolDecl[] | 否 | `[]` | 工具声明列表 |
 | `contexts` | — | ContextProviderDecl[] | 否 | `[]` | 上下文提供器声明列表 |
 | `maxToolRounds` | `max_tool_rounds` | number | 否 | `10` | 最大工具调用轮数 |
+| `compression` | — | CompressionDecl | 否 | `null` | 消息压缩策略（需 `tokenCounter` 或自动 estimate） |
+| `tokenCounter` | `token_counter` | TokenCounterDecl | 否 | `null` | Token 计数器 |
+| `sandbox` | — | object | 否 | `{}` | 代码沙箱默认（`kind: code` 继承） |
 | `subAgents` | `sub_agents` | AgentDefinition[] | 否 | `[]` | 子 Agent 定义（递归） |
 
 > **JSON/TOML 列注**：当 YAML 使用 `camelCase` 时，TOML 中使用 `snake_case`；JSON 保持 `camelCase`（与 MAF 兼容）。
@@ -36,10 +39,10 @@
 |------|------|:---:|--------|------|
 | `model.id` | string | **是** | — | 模型 ID，如 `"deepseek-v4-flash"`、`"gpt-4o"` |
 | `model.provider` | string | 否 | — | Provider 标识：`"openai"` / `"deepseek"` / `"custom"` |
-| `model.connection.kind` | string | 否 | — | 连接类型：`"key"` (API Key) / `"entra"` / `"remote"` |
-| `model.connection.api_key` | string | 否 | — | API 密钥。支持 `$ENV_VAR` 语法读取环境变量 |
-| `model.connection.auth_mode` | string | 否 | `"key"` | 认证模式：`"key"` / `"entra_id"` |
-| `model.connection.base_url` | string | 否 | Provider 默认 | 自定义 API 端点 URL |
+| `model.connection.kind` | string | 否 | — | 连接类型：`key` / `remote` / `reference` / `oauth` / `anonymous` |
+| `model.connection.api_key` | string | 否 | — | API 密钥。支持 `$ENV_VAR` / `=Env.VAR` |
+| `model.connection.name` | string | 否 | — | `reference` 连接的目标名称 |
+| `model.connection.endpoint` | string | 否 | — | 远程/OAuth 端点 URL |
 | `model.options` | object | 否 | `null` | 模型推理参数 |
 
 ### Model Options 子字段
@@ -123,9 +126,9 @@ top_p = 0.95
 | `custom` | **必须在 YAML 中提供** | 自定义（通过 `register_factory()` 注册） | 工厂注册的自定义工具 |
 | `web` | 无需提供（宏内置） | `web_search`, `web_fetch` | Web 搜索/抓取 |
 | `file` | 无需提供（宏内置） | 见下方 file 工具表 | 文件系统操作 |
-| `code` | 无需提供（宏内置） | `code_interpreter` | 代码执行 |
+| `code` | 无需提供（宏内置） | `code_interpreter` | 代码沙箱执行（需 `sandbox` feature） |
 | `mcp` | 无需提供（MCP 服务器提供） | 自定义 | MCP 远程工具 |
-| `openapi` | — | 自定义 | OpenAPI 规范工具 |
+| `openapi` | 无需提供（规范内嵌） | 自定义 | OpenAPI 3.x HTTP 工具 |
 
 > **重要规则**：`web` / `file` / `code` 等内置工具的 `description` 由 `#[tool]` 宏在编译期硬编码，YAML 中无需写 `description`。`function` 和 `custom` 类别必须手写 `description`。
 
@@ -212,6 +215,46 @@ tools:
   - kind: file
 ```
 
+### kind: code
+
+需启用 `rust-agent-decl` 的 `sandbox` feature。无需 `with_tool()` 工厂即可自动解析：
+
+```yaml
+tools:
+  - kind: code
+    name: code_interpreter
+    config:
+      backend: process       # process | container | docker | podman | wasm
+      timeout_secs: 60
+      default_language: python
+      cpus: "1.0"
+      pids_limit: 128
+```
+
+Agent 级默认（工具 `config` 可覆盖）：
+
+```yaml
+sandbox:
+  backend: process
+  timeout_secs: 30
+```
+
+详见 [13.9 代码沙箱](../13-extensions/sandbox.md)。
+
+### kind: openapi
+
+需启用 `openapi` feature；响应 Schema 校验需 `openapi-validate`：
+
+```yaml
+tools:
+  - kind: openapi
+    name: get_pet
+    specUrl: file://./petstore.yaml
+    operationId: getPetById
+```
+
+详见 [13.10 OpenAPI 工具](../13-extensions/openapi.md)。
+
 ### kind: mcp
 
 ```yaml
@@ -243,8 +286,8 @@ tools:
 | `skills` | `directory` | ✅ 已实现 | 按需加载的技能文件 |
 | `workspace` | `root`, `policy` | ✅ 已实现 | 工作区边界定义 |
 | `mcp` | `serverUrl`, `command`, `args` | ⚠️ 需代码注入 | MCP 工具服务器 |
-| `knowledge` | `source` | ❌ 待实现 | RAG 知识库 |
-| `wiki` | `source` | ❌ 待实现 | Wiki 知识库 |
+| `knowledge` | `source` | ✅ 已实现 | RAG 知识库（需 `rag` feature） |
+| `wiki` | `source` | ✅ 已实现 | Wiki 知识库（需 `wiki` feature） |
 
 > `mcp` 需要异步连接，无法在配置文件解析阶段完成。请通过 `DeclAgentBuilder::with_context()` 注入预连接的 `McpContextProvider`。
 >
@@ -339,16 +382,73 @@ let agent = DeclAgentBuilder::new()
     .await?;
 ```
 
-### kind: knowledge / wiki（待实现）
+### kind: knowledge / wiki
 
-`knowledge` 和 `wiki` 提供器目前尚未实现生产级代码。如需使用 RAG 或 Wiki 知识检索，请通过 `with_context()` 注入自定义实现：
+启用 `rag` / `wiki` feature 后，声明式路径可自动构建上下文提供器：
 
-```rust
-DeclAgentBuilder::new()
-    .from_yaml_file("agent.yaml")
-    .with_context(Arc::new(my_knowledge_provider))
-    .build()
-    .await?;
+```yaml
+contexts:
+  - kind: knowledge
+    name: docs-rag
+    config:
+      source: ./docs
+  - kind: wiki
+    name: project-wiki
+    config:
+      source: ./wiki-repo
+```
+
+未启用对应 feature 时，仍可通过 `DeclAgentBuilder::with_context()` 注入自定义实现。
+
+---
+
+## Compression — 压缩策略（框架扩展）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `compression.kind` | string | `sliding_window` / `token_budget` |
+| `compression.windowSize` | number | 滑动窗口保留条数（`sliding_window`） |
+| `compression.toolResultEvictionThreshold` | number | 工具结果淘汰阈值 0–1（`token_budget`，可选） |
+| `tokenCounter.kind` | string | 目前支持 `estimate` |
+
+```yaml
+compression:
+  kind: sliding_window
+  windowSize: 20
+tokenCounter:
+  kind: estimate
+```
+
+> 配置 `compression` 但未写 `tokenCounter` 时，自动使用 `EstimateCounter`。
+
+---
+
+## Workflow — ExecuteCode 动作
+
+`kind: workflow` Agent 的 `trigger.actions` 支持 `ExecuteCode`（需 `sandbox` feature）：
+
+| 字段 | 说明 |
+|------|------|
+| `code` | 源码字符串 |
+| `language` | 如 `python` |
+| `sandbox` | 动作级沙箱配置（继承顶层 `sandbox:`） |
+| `output.result` | 结果写入的工作流状态键 |
+
+```yaml
+kind: workflow
+name: runner
+sandbox:
+  backend: process
+trigger:
+  kind: OnConversationStart
+  id: start
+  actions:
+    - kind: ExecuteCode
+      id: run
+      code: print("ok")
+      language: python
+      output:
+        result: Local.stdout
 ```
 
 ---

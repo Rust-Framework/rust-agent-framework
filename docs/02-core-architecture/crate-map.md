@@ -1,6 +1,6 @@
 # Crate 地图
 
-RAF workspace 包含 16 个 crate，按职责分为三层：核心层（必选）、运行时层（常用）和扩展层（可选）。本章提供完整的依赖关系图和各 crate 的详细说明。
+RAF workspace 包含 18+ 个 crate，按职责分为三层：核心层（必选）、运行时层（常用）和扩展层（可选）。本章提供完整的依赖关系图和各 crate 的详细说明。
 
 ## 全部 16 个 Crate
 
@@ -14,6 +14,8 @@ RAF workspace 包含 16 个 crate，按职责分为三层：核心层（必选�
 | `rust-agent-websearch` | `crates/websearch-ai` | Web 搜索 AI Agent | 扩展层 |
 | `rust-websearch` | `crates/websearch` | Web 搜索底层库 | 扩展层 |
 | `rust-agent-rag` | `crates/rag` | RAG（检索增强生成） | 扩展层 |
+| `rust-agent-openapi` | `crates/openapi` | OpenAPI 3.x HTTP 工具 | 扩展层 |
+| `rust-agent-sandbox` | `crates/sandbox` | 代码沙箱 / code_interpreter | 扩展层 |
 | `rust-agent-rhai` | `crates/rhai` | Rhai 脚本引擎工具 | 扩展层 |
 | `rust-agent-decl` | `crates/decl` | 声明式 Agent DSL | 扩展层 |
 | `rust-agent-wiki` | `crates/wiki` | Wiki 知识检索 | 扩展层 |
@@ -32,6 +34,8 @@ graph TB
         WebSearch[rust-agent-websearch]
         WebSearchLib[rust-websearch]
         RAG[rust-agent-rag]
+        OpenAPI[rust-agent-openapi]
+        Sandbox[rust-agent-sandbox]
         Rhai[rust-agent-rhai]
         Workflow[rust-agent-workflow]
         Decl[rust-agent-decl]
@@ -61,6 +65,8 @@ graph TB
 
     Framework --> |运行时| WebSearch
     Framework --> |运行时| RAG
+    Framework --> |运行时| OpenAPI
+    Framework --> |运行时| Sandbox
     Framework --> |运行时| Rhai
     Framework --> |运行时| Workflow
     Framework --> |运行时| Decl
@@ -99,6 +105,7 @@ rust-agent-core = { git = "...", package = "rust-agent-core" }
 ```rust
 pub use agent::IAgent;
 pub use chat_client::{IChatClient, ChatClientBuilder, DelegatingChatClient, ChatClientRunOptions};
+pub use sandbox::{ICodeSandbox, SandboxRequest, SandboxResult, SandboxLanguage};
 pub use compression::ICompressionStrategy;
 pub use context_provider::{ContextResult, IContextProvider};
 pub use error::{AgentError, Result};
@@ -204,6 +211,22 @@ rust-agent-websearch = { git = "...", package = "rust-agent-websearch" }
 
 依赖 `rust-websearch`（底层 Web 搜索库）。
 
+### rust-agent-sandbox
+
+代码沙箱实现，提供 `ProcessSandbox`、`DockerSandbox`（feature `docker`）、`WasmSandbox`（feature `wasm`）和 `CodeInterpreterTool`。
+
+```toml
+rust-agent-sandbox = { git = "...", package = "rust-agent-sandbox", features = ["docker"] }
+```
+
+### rust-agent-openapi
+
+OpenAPI 3.x 规范驱动的 HTTP 工具。可选 `validate` feature 启用响应 JSON Schema 校验。
+
+```toml
+rust-agent-openapi = { git = "...", package = "rust-agent-openapi", features = ["validate"] }
+```
+
 ### rust-agent-rag
 
 检索增强生成（RAG），支持向量检索和文档注入。
@@ -224,10 +247,10 @@ rust-agent-rhai = { git = "...", package = "rust-agent-rhai" }
 
 ### rust-agent-decl
 
-声明式 Agent DSL，支持用 YAML/TOML 定义 Agent 行为。
+声明式 Agent DSL，支持用 YAML/TOML 定义 Agent 行为。可选 feature：`yaml`、`rhai`、`web`、`rag`、`wiki`、`openapi`、`openapi-validate`、`sandbox`、`sandbox-docker`、`sandbox-wasm`。
 
 ```toml
-rust-agent-decl = { git = "...", package = "rust-agent-decl" }
+rust-agent-decl = { git = "...", package = "rust-agent-decl", features = ["yaml", "sandbox", "openapi"] }
 ```
 
 ### rust-agent-wiki

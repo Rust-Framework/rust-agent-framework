@@ -29,6 +29,8 @@ graph TD
         WEBSEARCH[rust-agent-websearch]
         RAG[rust-agent-rag]
         WIKI[rust-agent-wiki]
+        OPENAPI[rust-agent-openapi]
+        SANDBOX[rust-agent-sandbox]
         RHAI[rust-agent-rhai]
     end
 
@@ -48,6 +50,8 @@ graph TD
     WEBSEARCH --> CORE
     RAG --> CORE
     WIKI --> CORE
+    OPENAPI --> CORE
+    SANDBOX --> CORE
     RHAI --> CORE
     RHAI --> WORKFLOW
     DECL --> CORE
@@ -56,6 +60,8 @@ graph TD
     DECL --> WORKFLOW
     DECL --> RHAI
     DECL --> WEBSEARCH
+    DECL --> OPENAPI
+    DECL --> SANDBOX
     HOST --> CORE
     HOST --> FRAMEWORK
     HOST --> CLIENT
@@ -76,7 +82,11 @@ graph TD
 | `rust-agent-framework` | `crates/framework/` | `rust-agent-core`, `rust-agent-macros` |
 | `rust-agent-workflow` | `crates/workflow/` | `rust-agent-core` |
 | `rust-agent-rhai` | `crates/rhai/` | `rust-agent-core`, `rust-agent-workflow` |
-| `rust-agent-decl` | `crates/decl/` | `rust-agent-core`, `rust-agent-client`, `rust-agent-framework`, `rust-agent-workflow`, `rust-agent-rhai`, `rust-agent-websearch` |
+| `rust-agent-decl` | `crates/decl/` | `rust-agent-core`, `rust-agent-client`, `rust-agent-framework`, `rust-agent-workflow`, `rust-agent-rhai`, `rust-agent-websearch`, `rust-agent-openapi`*, `rust-agent-sandbox`* |
+| `rust-agent-openapi` | `crates/openapi/` | `rust-agent-core` |
+| `rust-agent-sandbox` | `crates/sandbox/` | `rust-agent-core` |
+
+\* 通过 Cargo optional dependency + feature 引入
 | `rust-agent-websearch` | `crates/websearch/` | `rust-agent-core` |
 | `rust-agent-rag` | `crates/rag/` | `rust-agent-core` |
 | `rust-agent-wiki` | `crates/wiki/` | `rust-agent-core` |
@@ -92,7 +102,9 @@ graph TD
 | **rust-agent-framework** | Agent 运行时：AgentBuilder、ChatClientAgent、内置工具、上下文提供器、技能系统、记忆系统 |
 | **rust-agent-workflow** | 工作流引擎：图驱动编排、顺序/并发/交接模式、检查点、WorkflowBuilder |
 | **rust-agent-rhai** | Rhai 集成：RhaiRuntime、RhaiExecutor（工作流节点）、RhaiTool（Agent 工具） |
-| **rust-agent-decl** | 声明式配置：JSON/YAML/TOML 解析、AgentSchema v1.0、ToolResolver、AgentResolver |
+| **rust-agent-decl** | 声明式配置：JSON/YAML/TOML、`DeclAgentBuilder`、`ToolResolver`、工作流编译 |
+| **rust-agent-openapi** | OpenAPI HTTP 工具：规范解析、Bearer 认证、可选响应 Schema 校验 |
+| **rust-agent-sandbox** | 代码沙箱：`ICodeSandbox` 实现、`CodeInterpreterTool`、ExecuteCode 后端 |
 | **rust-agent-websearch** | 网络搜索：WebSearch/WebFetch 工具、多后端、反检测 |
 | **rust-agent-rag** | RAG 管道：DocumentLoader、Chunker、IEmbeddingModel、IVectorStore、IRetriever traits |
 | **rust-agent-wiki** | Wiki 引擎：空间管理、Tantivy 全文搜索、Petgraph 概念图 |
@@ -109,6 +121,8 @@ graph TD
 | `reqwest` | HTTP 客户端（rust-agent-client, rust-agent-websearch） |
 | `tantivy` | 全文搜索（rust-agent-wiki） |
 | `petgraph` | 图算法（rust-agent-wiki） |
+| `jsonschema` | OpenAPI 响应校验（rust-agent-openapi/validate） |
+| `wasmtime` | WASM 沙箱（rust-agent-sandbox/wasm） |
 | `rhai` | 嵌入式脚本（rust-agent-rhai） |
 | `axum` | WebSocket 服务器（rust-agent-host） |
 | `agent-client-protocol` | ACP SDK（rust-agent-host） |
