@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use rust_agent_client::{ChatClientOptions, DeepSeekChatClient, OpenAiChatClient};
@@ -13,7 +14,17 @@ use crate::model::Model;
 /// - `ApiKey` — 直接 API 密钥认证
 /// - `Anonymous` — 无需认证
 /// - `Remote` — 使用端点，基于环境的凭据
+/// - `Reference` — 按名称解析 `connections` 注册表中的连接
+/// - `OAuth` — 从环境变量读取 Bearer token（`tokenEnvVar`，默认 `OAUTH_ACCESS_TOKEN`）
 pub fn resolve_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>> {
+    resolve_chat_client_with_registry(model, None)
+}
+
+/// 带命名连接注册表的解析（用于 `kind: reference`）。
+pub fn resolve_chat_client_with_registry(
+    model: &Model,
+    connections: Option<&HashMap<String, Connection>>,
+) -> crate::Result<Arc<dyn IChatClient>> {
     let connection = model.connection.as_ref();
     let provider = model
         .provider
@@ -22,7 +33,7 @@ pub fn resolve_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>>
         .to_lowercase();
 
     let (api_key, base_url) = match connection {
-        Some(conn) => extract_credentials(conn)?,
+        Some(conn) => extract_credentials(conn, connections, 0)?,
         None => {
             return Err(DeclError::Missing(
                 "connection is required in model config".into(),
@@ -61,8 +72,6 @@ pub fn resolve_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>>
         if let Some(mt) = opts.max_output_tokens {
             options.max_tokens = Some(mt as u32);
         }
-        // Note: seed is not directly supported by ChatClientOptions.
-        // Use `extra` for provider-specific options not in the public API.
         let _ = opts.seed;
     }
 
@@ -86,8 +95,20 @@ pub fn resolve_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>>
     }
 }
 
+const MAX_REFERENCE_DEPTH: usize = 8;
+
 /// 从 Connection 提取 API 密钥和可选的 base URL。
-fn extract_credentials(conn: &Connection) -> crate::Result<(Option<String>, Option<String>)> {
+fn extract_credentials(
+    conn: &Connection,
+    connections: Option<&HashMap<String, Connection>>,
+    depth: usize,
+) -> crate::Result<(Option<String>, Option<String>)> {
+    if depth > MAX_REFERENCE_DEPTH {
+        return Err(DeclError::Resolution(
+            "Connection reference chain too deep (max 8)".into(),
+        ));
+    }
+
     match conn.kind {
         ConnectionKind::ApiKey | ConnectionKind::Foundry => {
             let api_key = conn
@@ -107,7 +128,7 @@ fn extract_credentials(conn: &Connection) -> crate::Result<(Option<String>, Opti
                     })?
                 }
                 Some(key) if key.starts_with("=Env.") => {
-                    let var_name = &key[5..]; // strip "=Env."
+                    let var_name = &key[5..];
                     std::env::var(var_name).map_err(|_| {
                         DeclError::Resolution(format!(
                             "Environment variable '{}' not set (=Env.{} in connection)",
@@ -130,7 +151,6 @@ fn extract_credentials(conn: &Connection) -> crate::Result<(Option<String>, Opti
                 .endpoint
                 .clone()
                 .ok_or_else(|| DeclError::Missing("endpoint required for remote connection".into()))?;
-            // For remote connections, the API key must come from environment
             let key_var = conn
                 .details
                 .extra
@@ -145,19 +165,84 @@ fn extract_credentials(conn: &Connection) -> crate::Result<(Option<String>, Opti
             })?;
             Ok((Some(api_key), Some(endpoint)))
         }
-        ConnectionKind::Anonymous => {
-            // No auth required — use empty key
-            Ok((Some(String::new()), None))
-        }
+        ConnectionKind::Anonymous => Ok((Some(String::new()), None)),
         ConnectionKind::Reference => {
-            Err(DeclError::Unsupported(
-                "Reference connections not yet supported in Rust resolver".into(),
-            ))
+            let ref_name = conn
+                .details
+                .name
+                .as_deref()
+                .or(conn.details.target.as_deref())
+                .ok_or_else(|| {
+                    DeclError::Missing(
+                        "Reference connection requires `name` or `target` field".into(),
+                    )
+                })?;
+            let target = connections
+                .and_then(|m| m.get(ref_name))
+                .ok_or_else(|| {
+                    DeclError::Resolution(format!(
+                        "Reference connection '{ref_name}' not found. \
+                         Register via DeclAgentBuilder::with_connection()."
+                    ))
+                })?;
+            extract_credentials(target, connections, depth + 1)
         }
         ConnectionKind::OAuth => {
-            Err(DeclError::Unsupported(
-                "OAuth connections not yet supported in Rust resolver".into(),
-            ))
+            let token_var = conn
+                .details
+                .extra
+                .get("tokenEnvVar")
+                .and_then(|v| v.as_str())
+                .unwrap_or("OAUTH_ACCESS_TOKEN");
+            let token = std::env::var(token_var).map_err(|_| {
+                DeclError::Resolution(format!(
+                    "Environment variable '{token_var}' not set for OAuth connection"
+                ))
+            })?;
+            Ok((Some(token), conn.details.endpoint.clone()))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connection::{AuthenticationMode, ConnectionDetails};
+
+    #[test]
+    fn reference_connection_resolves_via_registry() {
+        let mut connections = HashMap::new();
+        connections.insert(
+            "my-openai".into(),
+            Connection {
+                kind: ConnectionKind::ApiKey,
+                authentication_mode: AuthenticationMode::System,
+                usage_description: None,
+                details: ConnectionDetails {
+                    api_key: Some("sk-test-key".into()),
+                    ..Default::default()
+                },
+            },
+        );
+
+        let model = Model {
+            id: "gpt-4o".into(),
+            provider: Some("openai".into()),
+            connection: Some(Connection {
+                kind: ConnectionKind::Reference,
+                authentication_mode: AuthenticationMode::System,
+                usage_description: None,
+                details: ConnectionDetails {
+                    name: Some("my-openai".into()),
+                    ..Default::default()
+                },
+            }),
+            options: None,
+            api_type: None,
+        };
+
+        let client = resolve_chat_client_with_registry(&model, Some(&connections))
+            .expect("reference resolves");
+        assert_eq!(client.model_id(), "gpt-4o");
     }
 }

@@ -15,6 +15,9 @@ members = [
     "crates/host",
     "crates/mcp",
     "crates/workflow-pro",
+    "crates/coding",
+    "crates/sandbox",
+    "crates/openapi",
 ]
 default-members = [
     "crates/core",
@@ -29,6 +32,8 @@ default-members = [
     "crates/decl",
     "crates/rag",
     "crates/wiki",
+    "crates/coding",
+    "crates/sandbox",
 ]
 resolver = "2"
 
@@ -51,9 +56,13 @@ rust-agent-decl = { path = "crates/decl", version = "0.1.0" }
 rust-websearch = { path = "crates/websearch", version = "0.1.0" }
 rust-agent-websearch = { path = "crates/websearch-ai", version = "0.1.0" }
 rust-agent-rag = { path = "crates/rag", version = "0.1.0" }
+rust-agent-wiki = { path = "crates/wiki", version = "0.1.0" }
 rust-agent-host = { path = "crates/host", version = "0.1.0" }
 rust-agent-mcp = { path = "crates/mcp", version = "0.1.0" }
 rust-agent-workflow-pro = { path = "crates/workflow-pro", version = "0.1.0" }
+rust-agent-coding = { path = "crates/coding", version = "0.1.0" }
+rust-agent-sandbox = { path = "crates/sandbox", version = "0.1.0" }
+rust-agent-openapi = { path = "crates/openapi", version = "0.1.0" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

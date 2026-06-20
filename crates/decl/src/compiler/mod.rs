@@ -11,25 +11,26 @@
 //! - `ir.rs` ??`CompileNode` ???? + `ExecutorKind` ??????
 //! - `context.rs` ??`CompileContext` ????????/??/??ID????
 
-// TODO: 迁移编译器以使用 DeclAgentBuilder 替代已废弃的 AgentResolver
-#![allow(deprecated)]
-
+pub mod condition;
 pub mod context;
 pub mod ir;
+pub mod registry;
 
 use std::sync::Arc;
 
+use rust_agent_core::ChatMessage;
 use rust_agent_workflow::builder::WorkflowBuilder;
 use rust_agent_workflow::executor::{
-    AgentExecutor, ContextFunctionExecutor, FunctionExecutor, HandlerResult, HumanTaskExecutor,
-    IExecutor,
+    ContextFunctionExecutor, FunctionExecutor, HandlerResult, HumanTaskExecutor, IExecutor,
 };
 use rust_agent_workflow::graph::{ComparisonOp, LoopConfig, VariableEdgeCondition};
 use rust_agent_workflow::WorkflowGraph;
 
 use crate::actions::ActionDecl;
+use crate::compiler::condition::evaluate_workflow_condition;
+use crate::compiler::registry::CompileRegistry;
 use crate::error::{DeclError, Result};
-use crate::resolver::agent_resolver::AgentResolver;
+use futures_util::StreamExt;
 
 use context::CompileContext;
 use ir::{CompileNode, ExecutorKind};
@@ -37,12 +38,15 @@ use ir::{CompileNode, ExecutorKind};
 /// ???????? WorkflowGraph??
 pub fn compile_workflow(
     data: &crate::workflow_decl::WorkflowAgentData,
-    agent_resolver: &mut AgentResolver,
+    registry: &mut CompileRegistry,
 ) -> Result<WorkflowGraph> {
+    if !data.sandbox.is_empty() {
+        registry.set_sandbox_defaults(data.sandbox.clone());
+    }
     let mut ctx = CompileContext::new(data.trigger.kind.clone());
 
     let ir = compile_actions(&data.trigger.actions, &mut ctx)?;
-    emit_ir(ir, &mut ctx, agent_resolver)
+    emit_ir(ir, &mut ctx, registry)
 }
 
 // ????????????????????????????????????????????????????
@@ -118,10 +122,53 @@ fn compile_one_action(action: &ActionDecl, ctx: &mut CompileContext) -> Result<C
         }
 
         // ?? AI ??????
-        ActionDecl::InvokeAgent { id, agent, .. } => {
+        ActionDecl::InvokeAgent {
+            id,
+            agent,
+            conversation_id,
+            input,
+            output,
+            ..
+        } => {
             let node_id = id.clone().unwrap_or_else(|| ctx.next_node_id(&format!("agent_{}", agent.name)));
             ctx.label_targets.insert(agent.name.clone(), node_id.clone());
-            Ok(CompileNode::Atomic { node_id, executor_kind: ExecutorKind::Agent(agent.name.clone()), is_output: true })
+
+            let (input_state_key, input_messages, external_loop_when) = match input {
+                Some(inp) => {
+                    let state_key = inp.messages.as_ref().and_then(|m| {
+                        if let serde_json::Value::String(s) = m {
+                            Some(s.trim_start_matches('=').to_string())
+                        } else {
+                            None
+                        }
+                    });
+                    let static_msgs = inp.messages.as_ref().and_then(|m| {
+                        if m.is_array() { Some(m.clone()) } else { None }
+                    });
+                    let loop_when = inp
+                        .external_loop
+                        .as_ref()
+                        .map(|l| l.when.clone());
+                    (state_key, static_msgs, loop_when)
+                }
+                None => (None, None, None),
+            };
+
+            Ok(CompileNode::Atomic {
+                node_id,
+                executor_kind: ExecutorKind::AgentInvoke {
+                    name: agent.name.clone(),
+                    conversation_id: conversation_id.clone(),
+                    input_state_key,
+                    input_messages,
+                    output_response_key: output.as_ref().and_then(|o| o.response_object.clone()),
+                    output_messages_key: output.as_ref().and_then(|o| o.messages.clone()),
+                    external_loop_when: external_loop_when,
+                    auto_send: output.as_ref().and_then(|o| o.auto_send).unwrap_or(false),
+                    max_external_loop_iterations: 50,
+                },
+                is_output: true,
+            })
         }
 
         ActionDecl::SendActivity { id, activity, .. } => {
@@ -134,6 +181,27 @@ fn compile_one_action(action: &ActionDecl, ctx: &mut CompileContext) -> Result<C
             Ok(CompileNode::Atomic {
                 node_id,
                 executor_kind: ExecutorKind::ToolCall { function_name: function_name.clone(), arguments: arguments.clone().unwrap_or_default(), output_variable: output.as_ref().and_then(|o| o.result.clone()) },
+                is_output: true,
+            })
+        }
+
+        ActionDecl::ExecuteCode {
+            id,
+            code,
+            language,
+            sandbox,
+            output,
+            ..
+        } => {
+            let node_id = id.clone().unwrap_or_else(|| ctx.next_node_id("execute_code"));
+            Ok(CompileNode::Atomic {
+                node_id,
+                executor_kind: ExecutorKind::ExecuteCode {
+                    code: crate::resolver::code_sandbox_executor::resolve_code_literal(code),
+                    language: language.clone().unwrap_or_else(|| "python".to_string()),
+                    sandbox_config: sandbox.clone(),
+                    output_variable: output.as_ref().and_then(|o| o.result.clone()),
+                },
                 is_output: true,
             })
         }
@@ -245,10 +313,10 @@ fn compile_one_action(action: &ActionDecl, ctx: &mut CompileContext) -> Result<C
 pub fn emit_ir(
     root: CompileNode,
     ctx: &mut CompileContext,
-    agent_resolver: &mut AgentResolver,
+    registry: &mut CompileRegistry,
 ) -> Result<WorkflowGraph> {
     let mut builder = WorkflowBuilder::new();
-    let (first_id, _last_id) = emit_node(&root, &mut builder, ctx, agent_resolver, None)?;
+    let (first_id, _last_id) = emit_node(&root, &mut builder, ctx, registry, None)?;
 
     if let Some(ref first) = first_id {
         builder = builder.set_start(first.clone());
@@ -271,7 +339,7 @@ fn emit_node(
     node: &CompileNode,
     builder: &mut WorkflowBuilder,
     ctx: &mut CompileContext,
-    agent_resolver: &mut AgentResolver,
+    registry: &mut CompileRegistry,
     loopback_target: Option<String>,
 ) -> Result<(Option<String>, Option<String>)> {
     match node {
@@ -286,7 +354,7 @@ fn emit_node(
         }
 
         CompileNode::Atomic { node_id, executor_kind, is_output } => {
-            let executor = build_executor(node_id, executor_kind, agent_resolver);
+            let executor = build_executor(node_id, executor_kind, registry);
             *builder = builder.clone().add_node(node_id.clone(), executor);
             if *is_output {
                 *builder = builder.clone().with_output_from(node_id.clone());
@@ -298,7 +366,7 @@ fn emit_node(
             let mut first: Option<String> = None;
             let mut prev: Option<String> = None;
             for child in children {
-                let (cf, cl) = emit_node(child, builder, ctx, agent_resolver, loopback_target.clone())?;
+                let (cf, cl) = emit_node(child, builder, ctx, registry, loopback_target.clone())?;
                 if first.is_none() { first = cf.clone(); }
                 if let (Some(p), Some(c)) = (&prev, &cl) {
                     *builder = builder.clone().add_edge(p.clone(), c.clone());
@@ -312,8 +380,8 @@ fn emit_node(
             let cond_exec = build_condition_executor(condition_node_id, condition);
             *builder = builder.clone().add_node(condition_node_id.clone(), cond_exec);
 
-            let (true_first, true_last) = emit_node(true_branch, builder, ctx, agent_resolver, loopback_target.clone())?;
-            let false_result = false_branch.as_ref().map(|f| emit_node(f, builder, ctx, agent_resolver, loopback_target.clone())).transpose()?;
+            let (true_first, true_last) = emit_node(true_branch, builder, ctx, registry, loopback_target.clone())?;
+            let false_result = false_branch.as_ref().map(|f| emit_node(f, builder, ctx, registry, loopback_target.clone())).transpose()?;
 
             if let Some(tf) = true_first {
                 let true_cond = Arc::new(VariableEdgeCondition::new(
@@ -342,7 +410,7 @@ fn emit_node(
             let mut fallback: Option<String> = None;
 
             for (i, (_, sub_node)) in branches.iter().enumerate() {
-                let (bf, bl) = emit_node(sub_node, builder, ctx, agent_resolver, loopback_target.clone())?;
+                let (bf, bl) = emit_node(sub_node, builder, ctx, registry, loopback_target.clone())?;
                 if let Some(bf_id) = bf {
                     let cond = Arc::new(VariableEdgeCondition::new(
                         condition_node_id.clone(), ComparisonOp::Eq, serde_json::json!(i)));
@@ -352,7 +420,7 @@ fn emit_node(
             }
 
             if let Some(eb) = else_branch {
-                let (ef, _) = emit_node(eb, builder, ctx, agent_resolver, loopback_target.clone())?;
+                let (ef, _) = emit_node(eb, builder, ctx, registry, loopback_target.clone())?;
                 if let Some(ef_id) = ef { fallback = Some(ef_id); }
             }
 
@@ -368,7 +436,7 @@ fn emit_node(
 
             *builder = builder.clone().add_node(entry_node_id.clone(), loop_exec).with_loop(loop_config);
 
-            let (body_first, body_last) = emit_node(body, builder, ctx, agent_resolver, Some(entry_node_id.clone()))?;
+            let (body_first, body_last) = emit_node(body, builder, ctx, registry, Some(entry_node_id.clone()))?;
             if let Some(bf) = body_first { *builder = builder.clone().add_edge(entry_node_id.clone(), bf); }
             if let Some(bl) = body_last { *builder = builder.clone().add_loopback_edge(bl, entry_node_id.clone()); }
             Ok((Some(entry_node_id.clone()), Some(entry_node_id.clone())))
@@ -383,21 +451,33 @@ fn emit_node(
 fn build_executor(
     node_id: &str,
     kind: &ExecutorKind,
-    agent_resolver: &mut AgentResolver,
+    registry: &mut CompileRegistry,
 ) -> Arc<dyn IExecutor> {
     let nid = node_id.to_string();
     match kind {
-        ExecutorKind::Agent(name) => {
-            match agent_resolver.get_agent(name) {
-                Some(agent) => Arc::new(AgentExecutor::new(&nid, agent)),
-                None => {
-                    let name = name.clone();
-                    Arc::new(FunctionExecutor::new(nid.clone(), move |_: String| -> Vec<String> {
-                        vec![format!("[Agent '{}' not found in registry]", name)]
-                    }))
-                }
-            }
-        }
+        ExecutorKind::AgentInvoke {
+            name,
+            conversation_id,
+            input_state_key,
+            input_messages,
+            output_response_key,
+            output_messages_key,
+            external_loop_when,
+            auto_send,
+            max_external_loop_iterations,
+        } => build_agent_invoke_executor(
+            &nid,
+            name,
+            conversation_id.clone(),
+            input_state_key.clone(),
+            input_messages.clone(),
+            output_response_key.clone(),
+            output_messages_key.clone(),
+            external_loop_when.clone(),
+            *auto_send,
+            *max_external_loop_iterations,
+            registry,
+        ),
 
         ExecutorKind::SetVariable { variable, value } => {
             let var = variable.clone();
@@ -498,11 +578,65 @@ fn build_executor(
             }))
         }
 
-        ExecutorKind::ToolCall { function_name, .. } => {
-            let fname = function_name.clone();
-            Arc::new(FunctionExecutor::new(nid.clone(), move |_: String| -> Vec<String> {
-                vec![format!("[Tool {} called]", fname)]
-            }))
+        ExecutorKind::ToolCall {
+            function_name,
+            arguments,
+            output_variable,
+        } => {
+            if let Some(tool) = registry.get_tool(function_name) {
+                Arc::new(crate::resolver::tool_invoke_executor::ToolInvokeExecutor::new(
+                    nid.clone(),
+                    tool,
+                    arguments.clone(),
+                    output_variable.clone(),
+                ))
+            } else {
+                let fname = function_name.clone();
+                Arc::new(FunctionExecutor::new(nid.clone(), move |_: String| -> Vec<String> {
+                    vec![format!(
+                        "[Tool '{}' not registered — prewarm via compile_workflow_with_registry]",
+                        fname
+                    )]
+                }))
+            }
+        }
+
+        #[cfg(feature = "sandbox")]
+        ExecutorKind::ExecuteCode {
+            code,
+            language,
+            sandbox_config,
+            output_variable,
+        } => {
+            let merged = crate::resolver::code_sandbox_executor::merge_sandbox_config(
+                registry.sandbox_defaults(),
+                sandbox_config,
+            );
+            match crate::sandbox_factory::build_sandbox(&merged) {
+                Ok(sandbox) => {
+                    return Arc::new(crate::resolver::CodeSandboxExecutor::new(
+                        nid,
+                        sandbox,
+                        code.clone(),
+                        rust_agent_core::SandboxLanguage(language.clone()),
+                        output_variable.clone(),
+                    ));
+                }
+                Err(e) => {
+                    let msg = format!("ExecuteCode sandbox: {e}");
+                    return Arc::new(FunctionExecutor::new(nid, move |_: String| -> Vec<String> {
+                        vec![msg.clone()]
+                    }));
+                }
+            }
+        }
+
+        #[cfg(not(feature = "sandbox"))]
+        ExecutorKind::ExecuteCode { .. } => {
+            let msg = "ExecuteCode requires decl `sandbox` feature".to_string();
+            return Arc::new(FunctionExecutor::new(nid, move |_: String| -> Vec<String> {
+                vec![msg.clone()]
+            }));
         }
 
         ExecutorKind::HumanTask(form) => {
@@ -525,7 +659,7 @@ fn build_executor(
             let out_var = output_variable.clone();
 
             // Try to look up the MCP server from the agent resolver
-            if let Some(server) = agent_resolver.get_mcp_server(&srv) {
+            if let Some(server) = registry.get_mcp_server(&srv) {
                 let server = Arc::clone(server);
                 Arc::new(crate::resolver::mcp_executor::McpRequestExecutor::new(
                     nid.clone(),
@@ -583,7 +717,7 @@ fn build_condition_executor(
         let cond = cond.clone();
         let nid1 = nid1.clone();
         async move {
-            let result = evaluate_simple_condition(&cond);
+            let result = evaluate_workflow_condition(&cond, &*ctx).await;
             ctx.write_state(&nid1, serde_json::json!(result)).await?;
             Ok(HandlerResult::Messages(vec![Arc::new(if result { "true".to_string() } else { "false".to_string() })]))
         }
@@ -604,7 +738,7 @@ fn build_multi_condition_executor(
         let nid2 = nid2.clone();
         async move {
             for (i, cond) in conditions.iter().enumerate() {
-                if evaluate_simple_condition(cond) {
+                if evaluate_workflow_condition(cond, &*ctx).await {
                     ctx.write_state(&nid1, serde_json::json!(i)).await?;
                     return Ok(HandlerResult::Messages(vec![Arc::new(i.to_string())]));
                 }
@@ -623,46 +757,217 @@ fn build_loop_entry_executor(node_id: &str) -> Arc<dyn IExecutor> {
     }))
 }
 
-/// ?????????? ==, !=, >=, <=, >, <, contains??
-///
-/// ??????PowerFx ??Rhai ?????????
-fn evaluate_simple_condition(expr: &str) -> bool {
-    let expr = expr.trim().strip_prefix('=').unwrap_or(expr);
+fn build_agent_invoke_executor(
+    node_id: &str,
+    agent_name: &str,
+    conversation_id: Option<String>,
+    input_state_key: Option<String>,
+    input_messages: Option<serde_json::Value>,
+    output_response_key: Option<String>,
+    output_messages_key: Option<String>,
+    external_loop_when: Option<String>,
+    auto_send: bool,
+    max_external_loop_iterations: usize,
+    registry: &CompileRegistry,
+) -> Arc<dyn IExecutor> {
+    let agent = match registry.get_agent(agent_name) {
+        Some(a) => a,
+        None => {
+            let name = agent_name.to_string();
+            return Arc::new(FunctionExecutor::new(node_id.to_string(), move |_: String| -> Vec<String> {
+                vec![format!("[Agent '{}' not found in registry]", name)]
+            }));
+        }
+    };
 
-    // contains
-    if let Some((left, right)) = expr.split_once(" contains ") {
-        return left.contains(right);
-    }
-    // >=
-    if let Some((a, b)) = expr.split_once(" >= ") {
-        if let (Ok(a), Ok(b)) = (a.trim().parse::<f64>(), b.trim().parse::<f64>()) { return a >= b; }
-    }
-    // <=
-    if let Some((a, b)) = expr.split_once(" <= ") {
-        if let (Ok(a), Ok(b)) = (a.trim().parse::<f64>(), b.trim().parse::<f64>()) { return a <= b; }
-    }
-    // >
-    if let Some((a, b)) = expr.split_once(" > ") {
-        if let (Ok(a), Ok(b)) = (a.trim().parse::<f64>(), b.trim().parse::<f64>()) { return a > b; }
-    }
-    // <
-    if let Some((a, b)) = expr.split_once(" < ") {
-        if let (Ok(a), Ok(b)) = (a.trim().parse::<f64>(), b.trim().parse::<f64>()) { return a < b; }
-    }
-    // !=
-    if let Some((a, b)) = expr.split_once(" != ") {
-        return a.trim() != b.trim();
-    }
-    // ==
-    if let Some((a, b)) = expr.split_once(" == ") {
-        return a.trim() == b.trim();
-    }
+    let nid = node_id.to_string();
+    Arc::new(ContextFunctionExecutor::new(nid.clone(), move |message, ctx, progress| {
+        let agent = Arc::clone(&agent);
+        let conversation_id = conversation_id.clone();
+        let input_state_key = input_state_key.clone();
+        let input_messages = input_messages.clone();
+        let output_response_key = output_response_key.clone();
+        let output_messages_key = output_messages_key.clone();
+        let external_loop_when = external_loop_when.clone();
+        async move {
+            let mut run_messages = resolve_invoke_input_messages(
+                &message,
+                &*ctx,
+                input_state_key.as_deref(),
+                input_messages.as_ref(),
+            )
+            .await
+            .map_err(|e| rust_agent_core::AgentError::WorkflowError(e.to_string()))?;
 
-    match expr.to_lowercase().as_str() {
-        "true" | "yes" | "1" => true,
-        "false" | "no" | "0" => false,
-        _ => !expr.is_empty(),
-    }
+            if let Some(ref conv_id) = conversation_id {
+                ctx.write_state("__conversation_id", serde_json::json!(conv_id))
+                    .await?;
+            }
+
+            let session = ctx.session().cloned();
+            let mut collected_text = String::new();
+            let mut iteration = 0usize;
+
+            loop {
+                iteration += 1;
+                let stream = agent.run(run_messages.clone(), session.clone(), None).await?;
+                futures_util::pin_mut!(stream);
+
+                collected_text.clear();
+                while let Some(item) = stream.next().await {
+                    let result = item?;
+                    for content in &result.contents {
+                        if let rust_agent_core::Content::Text(tc) = content {
+                            collected_text.push_str(&tc.delta);
+                            let _ = progress.send(
+                                rust_agent_workflow::executor::NodeProgress::TextDelta(
+                                    tc.delta.clone(),
+                                ),
+                            );
+                        }
+                    }
+                }
+
+                let assistant_msg = ChatMessage::assistant(&collected_text);
+                run_messages.push(assistant_msg.clone());
+
+                ctx.write_state("__invoke_response", serde_json::json!(collected_text))
+                    .await?;
+
+                let should_continue = if let Some(ref cond) = external_loop_when {
+                    iteration < max_external_loop_iterations
+                        && evaluate_workflow_condition(cond, &*ctx).await
+                } else {
+                    false
+                };
+
+                if !should_continue {
+                    break;
+                }
+            }
+
+            if let Some(ref key) = output_response_key {
+                ctx.write_state(key, serde_json::json!(collected_text))
+                    .await?;
+            }
+            if let Some(ref key) = output_messages_key {
+                let serialized: Vec<serde_json::Value> = run_messages
+                    .iter()
+                    .map(|m| {
+                        serde_json::json!({
+                            "role": format!("{:?}", m.role),
+                            "content": m.content,
+                        })
+                    })
+                    .collect();
+                ctx.write_state(key, serde_json::Value::Array(serialized))
+                    .await?;
+            }
+
+            if auto_send && !collected_text.is_empty() {
+                ctx.write_state("__last_activity", serde_json::json!(collected_text))
+                    .await?;
+            }
+
+            let assistant_arc = Arc::new(ChatMessage::assistant(&collected_text));
+            ctx.yield_output(assistant_arc.clone()).await?;
+
+            Ok(HandlerResult::Messages(vec![assistant_arc]))
+        }
+    }))
 }
 
+async fn resolve_invoke_input_messages(
+    message: &Arc<dyn std::any::Any + Send + Sync>,
+    ctx: &dyn rust_agent_workflow::engine::IWorkflowContext,
+    input_state_key: Option<&str>,
+    static_messages: Option<&serde_json::Value>,
+) -> Result<Vec<ChatMessage>> {
+    if let Some(key) = input_state_key {
+        if let Some(val) = ctx.read_state(key).await? {
+            if let Some(msgs) = parse_messages_json(&val) {
+                return Ok(msgs);
+            }
+        }
+    }
 
+    if let Some(json) = static_messages {
+        if let Some(msgs) = parse_messages_json(json) {
+            return Ok(msgs);
+        }
+    }
+
+    if let Some(msg) = message.downcast_ref::<ChatMessage>() {
+        return Ok(vec![msg.clone()]);
+    }
+    if let Some(msgs) = message.downcast_ref::<Vec<ChatMessage>>() {
+        return Ok(msgs.clone());
+    }
+    if let Some(text) = message.downcast_ref::<String>() {
+        return Ok(vec![ChatMessage::user(text)]);
+    }
+
+    if let Some(session) = ctx.session() {
+        return session.get_messages().await.map_err(Into::into);
+    }
+
+    Ok(vec![ChatMessage::user("")])
+}
+
+fn parse_messages_json(value: &serde_json::Value) -> Option<Vec<ChatMessage>> {
+    let arr = value.as_array()?;
+    let mut out = Vec::new();
+    for item in arr {
+        let role_str = item.get("role")?.as_str()?;
+        let content = item.get("content")?.as_str()?.to_string();
+        out.push(match role_str.to_lowercase().as_str() {
+            "user" => ChatMessage::user(content),
+            "assistant" => ChatMessage::assistant(content),
+            "system" => ChatMessage::system(content),
+            _ => ChatMessage::user(content),
+        });
+    }
+    Some(out)
+}
+
+/// 编译前预解析 workflow 中引用的工具（InvokeFunctionTool）。
+pub async fn prewarm_workflow_tools(
+    actions: &[ActionDecl],
+    registry: &mut CompileRegistry,
+) -> Result<()> {
+    let mut stack: Vec<&ActionDecl> = actions.iter().collect();
+    while let Some(action) = stack.pop() {
+        match action {
+            ActionDecl::InvokeFunctionTool { function_name, .. } => {
+                registry.resolve_tool(function_name).await?;
+            }
+            ActionDecl::If {
+                then_actions,
+                else_actions,
+                ..
+            } => {
+                stack.extend(then_actions.iter());
+                if let Some(e) = else_actions {
+                    stack.extend(e.iter());
+                }
+            }
+            ActionDecl::ConditionGroup {
+                conditions,
+                else_actions,
+                ..
+            } => {
+                for branch in conditions {
+                    stack.extend(branch.actions.iter());
+                }
+                if let Some(e) = else_actions {
+                    stack.extend(e.iter());
+                }
+            }
+            ActionDecl::Foreach { actions, .. } => {
+                stack.extend(actions.iter());
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}

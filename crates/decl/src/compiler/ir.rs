@@ -50,8 +50,18 @@ pub enum CompileNode {
 /// 执行器种类 — 描述节点在生产 WorkflowGraph 时应使用的执行器。
 #[derive(Debug, Clone)]
 pub enum ExecutorKind {
-    /// AgentExecutor: 调用已注册的 Agent
-    Agent(String),
+    /// AgentExecutor: 调用已注册 Agent（含 I/O 绑定 + external_loop + auto_send）
+    AgentInvoke {
+        name: String,
+        conversation_id: Option<String>,
+        input_state_key: Option<String>,
+        input_messages: Option<serde_json::Value>,
+        output_response_key: Option<String>,
+        output_messages_key: Option<String>,
+        external_loop_when: Option<String>,
+        auto_send: bool,
+        max_external_loop_iterations: usize,
+    },
     /// SetVariable: 写单个变量到 state_map
     SetVariable {
         variable: String,
@@ -96,6 +106,13 @@ pub enum ExecutorKind {
         server_url: String,
         tool_name: String,
         arguments: HashMap<String, serde_json::Value>,
+        output_variable: Option<String>,
+    },
+    /// ExecuteCode: 沙箱执行代码
+    ExecuteCode {
+        code: String,
+        language: String,
+        sandbox_config: HashMap<String, serde_json::Value>,
         output_variable: Option<String>,
     },
     /// EndWorkflow: 终止工作流

@@ -58,6 +58,15 @@ pub struct OrchestrationDecl {
     /// GroupChat：最大讨论轮次
     #[serde(default)]
     pub max_rounds: Option<usize>,
+    /// GroupChat：发言选择策略 — roundRobin / fixedOrder / llmCoordinator
+    #[serde(default)]
+    pub selector: Option<String>,
+    /// GroupChat：fixedOrder 时的发言顺序（参与者索引）
+    #[serde(default)]
+    pub speaker_order: Vec<usize>,
+    /// GroupChat：出现关键词时终止讨论
+    #[serde(default)]
+    pub termination_keywords: Vec<String>,
     /// Vote：majority / unanimous / weighted
     #[serde(default)]
     pub aggregator: Option<String>,

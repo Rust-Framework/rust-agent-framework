@@ -7,6 +7,7 @@ use rust_agent_framework::tools::{
     RemovePath, RunCommand, SearchFile, WriteFile,
 };
 use rust_agent_mcp::McpServerClient;
+#[cfg(feature = "web")]
 use rust_agent_websearch::{WebFetch, WebSearch};
 
 use crate::error::DeclError;
@@ -30,6 +31,8 @@ pub struct ToolResolver {
     factories: HashMap<String, ToolFactoryFn>,
     /// 已注册的 MCP 服务器客户端，按 server_url 键控。
     mcp_servers: HashMap<String, Arc<McpServerClient>>,
+    /// 工作流/Agent 级沙箱默认配置。
+    sandbox_defaults: HashMap<String, serde_json::Value>,
 }
 
 impl ToolResolver {
@@ -37,7 +40,12 @@ impl ToolResolver {
         Self {
             factories: HashMap::new(),
             mcp_servers: HashMap::new(),
+            sandbox_defaults: HashMap::new(),
         }
+    }
+
+    pub fn set_sandbox_defaults(&mut self, defaults: HashMap<String, serde_json::Value>) {
+        self.sandbox_defaults = defaults;
     }
 
     /// 注册自定义工具工厂。
@@ -115,8 +123,8 @@ impl ToolResolver {
             },
 
             // ── 代码执行工具 ──
-            ToolDecl::Code { name, .. } => match name.as_deref() {
-                Some(n) => self.resolve_code(n),
+            ToolDecl::Code { name, config, .. } => match name.as_deref() {
+                Some(n) => self.resolve_code(n, config),
                 None => Err(DeclError::Unsupported(
                     "kind: code without name — use resolve_category() for bulk registration"
                         .into(),
@@ -129,9 +137,33 @@ impl ToolResolver {
             }
 
             // ── OpenAPI ──
-            ToolDecl::OpenApi { .. } => Err(DeclError::Unsupported(
-                "OpenAPI tools require spec parsing + HTTP client".into(),
-            )),
+            ToolDecl::OpenApi {
+                name,
+                spec_url,
+                operation_id,
+                ..
+            } => {
+                #[cfg(feature = "openapi")]
+                {
+                    use rust_agent_openapi::{OpenApiToolConfig, OpenApiToolResolver};
+                    return OpenApiToolResolver::resolve(&OpenApiToolConfig {
+                        tool_name: name.clone(),
+                        spec_url: spec_url.clone(),
+                        operation_id: operation_id.clone(),
+                        base_url: None,
+                    })
+                    .await
+                    .map_err(DeclError::from);
+                }
+                #[cfg(not(feature = "openapi"))]
+                {
+                    let _ = (name, spec_url, operation_id);
+                    Err(DeclError::Unsupported(
+                        "OpenAPI tools require decl `openapi` feature and rust-agent-openapi crate"
+                            .into(),
+                    ))
+                }
+            }
         }
     }
 
@@ -174,9 +206,7 @@ impl ToolResolver {
             ToolDecl::Shell { .. } => Ok(vec![
                 self.resolve_shell("run_command")?,
             ]),
-            ToolDecl::Code { .. } => Err(DeclError::Unsupported(
-                "code_interpreter requires sandbox execution environment".into(),
-            )),
+            ToolDecl::Code { config, .. } => Ok(vec![self.resolve_code("code_interpreter", config)?]),
             _ => Err(DeclError::Unsupported(
                 "resolve_category only supported for web/file/code tools".into(),
             )),
@@ -198,11 +228,21 @@ impl ToolResolver {
     }
 
     fn resolve_web(&self, name: &str) -> crate::Result<Arc<dyn ITool>> {
-        match name {
-            "web_search" => Ok(Arc::new(WebSearch)),
-            "web_fetch" => Ok(Arc::new(WebFetch)),
-            other => self.lookup_factory(other, &HashMap::new()),
+        #[cfg(feature = "web")]
+        {
+            match name {
+                "web_search" => return Ok(Arc::new(WebSearch)),
+                "web_fetch" => return Ok(Arc::new(WebFetch)),
+                _ => {}
+            }
         }
+        #[cfg(not(feature = "web"))]
+        if matches!(name, "web_search" | "web_fetch") {
+            return Err(DeclError::Unsupported(
+                "web tools require decl `web` feature and rust-agent-websearch crate".into(),
+            ));
+        }
+        self.lookup_factory(name, &HashMap::new())
     }
 
     fn resolve_file(&self, name: &str) -> crate::Result<Arc<dyn ITool>> {
@@ -228,13 +268,39 @@ impl ToolResolver {
         }
     }
 
-    fn resolve_code(&self, name: &str) -> crate::Result<Arc<dyn ITool>> {
-        match name {
-            "code_interpreter" => Err(DeclError::Unsupported(
-                "CodeInterpreter requires sandbox execution environment".into(),
-            )),
-            other => self.lookup_factory(other, &HashMap::new()),
+    fn resolve_code(
+        &self,
+        name: &str,
+        config: &HashMap<String, serde_json::Value>,
+    ) -> crate::Result<Arc<dyn ITool>> {
+        if let Ok(tool) = self.lookup_factory(name, config) {
+            return Ok(tool);
         }
+        if name == "code_interpreter" {
+            let merged = crate::resolver::code_sandbox_executor::merge_sandbox_config(
+                &self.sandbox_defaults,
+                config,
+            );
+            return crate::sandbox_factory::build_code_interpreter(&merged);
+        }
+        self.lookup_factory(name, config)
+    }
+
+    /// 按 InvokeFunctionTool 的 functionName 解析工具。
+    pub async fn resolve_by_function_name(&self, name: &str) -> crate::Result<Arc<dyn ITool>> {
+        if let Ok(tool) = self.resolve_web(name) {
+            return Ok(tool);
+        }
+        if let Ok(tool) = self.resolve_file(name) {
+            return Ok(tool);
+        }
+        if let Ok(tool) = self.resolve_shell(name) {
+            return Ok(tool);
+        }
+        if let Ok(tool) = self.resolve_code(name, &HashMap::new()) {
+            return Ok(tool);
+        }
+        self.lookup_factory(name, &HashMap::new())
     }
 }
 

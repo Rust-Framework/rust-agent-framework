@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
+use crate::compression_config::{CompressionDecl, TokenCounterDecl};
 use crate::definition::AgentDefinition;
 use crate::model::Model;
 use crate::template::Template;
@@ -48,6 +51,18 @@ pub struct PromptAgentData {
     /// history 属于内置默认（InMemoryHistoryProvider），websearch 属于工具。
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "contexts")]
     pub contexts: Vec<crate::context_provider_config::ContextProviderDecl>,
+
+    /// 消息压缩策略（需同时配置 `token_counter` 或自动使用 estimate）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compression: Option<CompressionDecl>,
+
+    /// Token 计数器（压缩策略运行时依赖）。
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "tokenCounter")]
+    pub token_counter: Option<TokenCounterDecl>,
+
+    /// Agent 级沙箱默认（`kind: code` 的 code_interpreter 继承）。
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub sandbox: HashMap<String, serde_json::Value>,
 }
 
 fn is_default_max_tool_rounds(v: &usize) -> bool {
@@ -66,6 +81,9 @@ impl PromptAgentData {
             max_tool_rounds: default_max_tool_rounds(),
             sub_agents: Vec::new(),
             contexts: Vec::new(),
+            compression: None,
+            token_counter: None,
+            sandbox: HashMap::new(),
         }
     }
 

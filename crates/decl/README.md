@@ -80,6 +80,9 @@ let agent = resolver.resolve(&decl).await?;
 | `token_counter` | `object` | 否 | `null` | Token 计数器（见 TokenCounterDecl） |
 | `properties` | `object` | 否 | `{}` | 自定义键值属性 |
 | `max_tool_rounds` | `number` | 否 | `10` | 最大工具调用轮次 |
+| `compression` | `object` | 否 | `null` | 压缩策略（见 CompressionDecl，需 `token_counter` 或自动 estimate） |
+| `token_counter` | `object` | 否 | `null` | Token 计数器（见 TokenCounterDecl） |
+| `sandbox` | `object` | 否 | `{}` | 代码沙箱默认（`kind: code` 工具继承） |
 | `run_options` | `object` | 否 | `null` | 运行参数覆盖（温度、max_tokens 等） |
 | `sub_agents` | `array` | 否 | `[]` | 子 Agent 声明（递归解析） |
 
@@ -184,7 +187,41 @@ tools:
 }
 ```
 
-#### 3. 自定义工具 (`custom`)
+#### 4. 代码沙箱工具 (`code`)
+
+需启用 `sandbox` feature。声明 `kind: code` 自动构建 `code_interpreter`，无需手动 `with_tool`：
+
+```yaml
+tools:
+  - kind: code
+    name: code_interpreter
+    config:
+      backend: process          # process | container | docker | podman | wasm
+      timeout_secs: 60
+      default_language: python
+```
+
+Agent 级默认（子工具 config 可覆盖）：
+
+```yaml
+sandbox:
+  backend: process
+  timeout_secs: 30
+```
+
+#### 5. OpenAPI 工具 (`openapi`)
+
+需启用 `openapi` feature；响应 JSON Schema 校验需 `openapi-validate`：
+
+```yaml
+tools:
+  - kind: openapi
+    name: get_pet
+    specUrl: file://./petstore.yaml
+    operationId: getPetById
+```
+
+#### 6. 自定义工具 (`custom`)
 
 通过工厂函数注册的 Rust 原生工具（见下方"自定义工具"）。
 
@@ -249,7 +286,40 @@ contexts:
 
 ### WorkflowDecl — 工作流声明
 
-有向图结构的多 Agent 编排定义。
+有向图结构的多 Agent 编排定义。MAF `kind: workflow` 使用 ActionDecl DSL：
+
+```yaml
+kind: workflow
+name: code-runner
+sandbox:
+  backend: process
+  timeout_secs: 30
+trigger:
+  kind: OnConversationStart
+  id: start
+  actions:
+    - kind: ExecuteCode
+      id: run_py
+      code: print("hello")
+      language: python
+      sandbox:
+        backend: process
+      output:
+        result: Local.code_out
+```
+
+#### ExecuteCode 动作
+
+| 字段 | 说明 |
+|------|------|
+| `code` | 待执行源码（或 Rhai 表达式引用） |
+| `language` | 语言标识（如 `python`） |
+| `sandbox` | 动作级沙箱配置（继承工作流 `sandbox:` 默认值） |
+| `output.result` | 结果写入的工作流状态键 |
+
+需启用 `sandbox` feature。
+
+### WorkflowGraph — 图式工作流（legacy）
 
 ```yaml
 name: "research-workflow"
@@ -480,10 +550,20 @@ let graph = rust_agent_decl::quick_workflow("workflow.yaml").await?;
 | `json` | **是** | JSON 序列化支持 |
 | `yaml` | 否 | YAML 序列化支持（`serde_yaml`） |
 | `toml` | 否 | TOML 序列化支持（`toml`） |
+| `rhai` | 否 | Rhai 工作流条件/表达式（`rust-agent-rhai`） |
+| `web` | 否 | Web 搜索工具（`rust-agent-websearch`） |
+| `rag` | 否 | RAG 知识库上下文 |
+| `wiki` | 否 | Wiki 知识库上下文 |
+| `openapi` | 否 | OpenAPI HTTP 工具 |
+| `openapi-validate` | 否 | OpenAPI 响应 JSON Schema 校验（依赖 `jsonschema`） |
+| `sandbox` | 否 | 内置 `code_interpreter` 沙箱（process/container） |
+| `sandbox-docker` | 否 | Docker/Podman 沙箱后端 |
+| `sandbox-wasm` | 否 | WASM 沙箱后端 |
+| `mustache` | 否 | Mustache 模板渲染 |
 
 ```toml
 [dependencies]
-rust-agent-decl = { version = "0.1", features = ["yaml", "toml"] }
+rust-agent-decl = { version = "0.1", features = ["yaml", "rhai", "wiki", "openapi"] }
 ```
 
 ---

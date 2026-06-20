@@ -8,9 +8,15 @@
 //! - **RhaiTool** — 实现 [`ITool`] trait，供智能体通过 ToolRegistry 调用 Rhai 脚本
 
 pub mod executor;
+pub mod expression;
 pub mod runtime;
 pub mod tool;
 
 pub use executor::RhaiExecutor;
+pub use expression::{
+    eval_workflow_bool, eval_workflow_bool_with_reader, extract_all_state_keys,
+    extract_bare_identifiers, extract_dynamic_state_keys, extract_state_keys,
+    normalize_workflow_expr,
+};
 pub use runtime::RhaiRuntime;
 pub use tool::RhaiTool;

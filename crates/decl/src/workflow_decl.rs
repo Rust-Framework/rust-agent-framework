@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::actions::ActionDecl;
@@ -10,6 +12,9 @@ use crate::actions::ActionDecl;
 pub struct WorkflowAgentData {
     /// 启动工作流执行的触发器。
     pub trigger: WorkflowTrigger,
+    /// 工作流级沙箱默认配置（ExecuteCode / code_interpreter 继承）。
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub sandbox: HashMap<String, serde_json::Value>,
 }
 
 /// 启动工作流执行的触发器，与 MAF Declarative Workflows 触发器结构对齐。
@@ -33,6 +38,7 @@ impl WorkflowAgentData {
                 id: id.into(),
                 actions: Vec::new(),
             },
+            sandbox: HashMap::new(),
         }
     }
 

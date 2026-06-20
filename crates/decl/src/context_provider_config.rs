@@ -113,6 +113,18 @@ impl ContextProviderDecl {
         }
     }
 
+    /// 获取提供器 kind 字符串（与 `IContextProvider::kind()` 对齐）。
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            ContextProviderDecl::Memory { .. } => "memory",
+            ContextProviderDecl::Skills { .. } => "skills",
+            ContextProviderDecl::Mcp { .. } => "mcp",
+            ContextProviderDecl::Workspace { .. } => "workspace",
+            ContextProviderDecl::Knowledge { .. } => "knowledge",
+            ContextProviderDecl::Wiki { .. } => "wiki",
+        }
+    }
+
     /// 获取配置中字符串值的辅助方法。
     pub fn get_config_str(&self, key: &str) -> Option<&str> {
         self.config_map().get(key).and_then(|v| v.as_str())

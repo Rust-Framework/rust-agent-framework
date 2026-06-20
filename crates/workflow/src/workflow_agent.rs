@@ -121,7 +121,15 @@ impl IAgent for WorkflowAgent {
 
             match engine.run(initial_message, session).await {
                 Ok((mut event_stream, mut output_stream)) => {
-                    while let Some(event) = event_stream.next().await {
+                    // Drop engine so the broadcast sender owned by `run()` is released.
+                    // The background execute_loop task drops its clone when the workflow finishes.
+                    drop(engine);
+
+                    loop {
+                        let event = match event_stream.next().await {
+                            Some(ev) => ev,
+                            None => break,
+                        };
                         match event {
                             WorkflowEvent::NodeInvoking { node_id, .. } => {
                                 let meta = make_meta(&node_id);
@@ -160,7 +168,7 @@ impl IAgent for WorkflowAgent {
                                     .send(Ok(AgentResponseResult {
                                         id: Some(node_id.clone()),
                                         model: None,
-                                        finish_reason: Some(FinishReason::Stop),
+                                        finish_reason: None,
                                         contents: vec![],
                                         events: vec![Event::ExecutorInvoked(
                                             rust_agent_core::ExecutorInvokedEvent {
@@ -179,17 +187,29 @@ impl IAgent for WorkflowAgent {
                                         format!("节点 {} 失败: {}", node_id, error),
                                     )))
                                     .await;
+                                break;
                             }
                             WorkflowEvent::WorkflowError { error, .. } => {
                                 let _ = tx
                                     .send(Err(rust_agent_core::AgentError::WorkflowError(error)))
                                     .await;
+                                break;
+                            }
+                            WorkflowEvent::WorkflowCompleted { .. } => {
+                                break;
+                            }
+                            WorkflowEvent::WorkflowTimeout { .. } => {
+                                let _ = tx
+                                    .send(Err(rust_agent_core::AgentError::WorkflowError(
+                                        "工作流整体超时".into(),
+                                    )))
+                                    .await;
+                                break;
                             }
                             _ => {}
                         }
                     }
 
-                    // 消费输出流
                     while let Some(output_result) = output_stream.next().await {
                         match output_result {
                             Ok(output) => {
@@ -217,6 +237,16 @@ impl IAgent for WorkflowAgent {
                             }
                         }
                     }
+
+                    let _ = tx
+                        .send(Ok(AgentResponseResult {
+                            id: None,
+                            model: None,
+                            finish_reason: Some(FinishReason::Stop),
+                            contents: vec![],
+                            events: vec![],
+                        }))
+                        .await;
                 }
                 Err(e) => {
                     let _ = tx.send(Err(e)).await;

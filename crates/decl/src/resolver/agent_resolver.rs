@@ -84,6 +84,14 @@ impl AgentResolver {
             .map(|(_, agent)| Arc::clone(agent))
     }
 
+    pub fn register_agent_arc(
+        &mut self,
+        name: impl Into<String>,
+        agent: Arc<dyn IAgent>,
+    ) {
+        self.agent_registry.push((name.into(), agent));
+    }
+
     /// 将 `AgentDefinition` 解析为可运行的 `IAgent`。
     pub async fn resolve(&mut self, def: &AgentDefinition) -> crate::Result<Arc<dyn IAgent>> {
         match &def.kind_data {

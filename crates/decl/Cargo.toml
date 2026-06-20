@@ -12,18 +12,23 @@ rust-agent-core = { workspace = true }
 rust-agent-client = { workspace = true }
 rust-agent-framework = { workspace = true }
 rust-agent-workflow = { workspace = true }
-rust-agent-websearch = { workspace = true }
+rust-agent-websearch = { workspace = true, optional = true }
 rust-agent-mcp = { workspace = true }
+rust-agent-rhai = { workspace = true, optional = true }
+rust-agent-rag = { workspace = true, optional = true }
+rust-agent-openapi = { workspace = true, optional = true }
+rust-agent-sandbox = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { version = "0.9", optional = true }
 toml = { version = "0.8", optional = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
 async-trait = { workspace = true }
+futures-util = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
-powerfx = { version = "0.1", optional = true }
 mustache = { version = "0.9", optional = true }
 
 [features]
@@ -31,5 +36,23 @@ default = ["json"]
 json = []
 yaml = ["dep:serde_yaml"]
 toml = ["dep:toml"]
-powerfx = ["dep:powerfx"]
+web = ["dep:rust-agent-websearch"]
+rhai = ["dep:rust-agent-rhai"]
+rag = ["dep:rust-agent-rag", "rust-agent-framework/rag"]
+wiki = ["rust-agent-framework/wiki"]
+openapi = ["dep:rust-agent-openapi"]
+openapi-validate = ["openapi", "rust-agent-openapi/validate"]
+sandbox = ["dep:rust-agent-sandbox"]
+sandbox-docker = ["sandbox", "rust-agent-sandbox/docker"]
+sandbox-wasm = ["sandbox", "rust-agent-sandbox/wasm"]
 mustache = ["dep:mustache"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+async-trait = { workspace = true }
+futures-util = { workspace = true }
+tokio-stream = { workspace = true }
+chrono = { workspace = true }
+rust-agent-sandbox = { workspace = true, features = ["docker"] }
+rust-agent-openapi = { workspace = true }
+tempfile = { workspace = true }

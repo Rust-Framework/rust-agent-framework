@@ -13,14 +13,18 @@ use rust_agent_workflow::graph::LoopConfig;
 use rust_agent_workflow::orchestrations::vote::{
     MajorityAggregator, UnanimousAggregator, WeightedAggregator,
 };
+use rust_agent_workflow::orchestrations::group_chat::{
+    FixedOrderSelector, ISpeakerSelector, ITerminationCondition, KeywordTermination,
+    LLMCoordinatorSelector, MaxRoundsTermination, RoundRobinSelector,
+};
 use rust_agent_workflow::{
     ConcurrentWorkflowBuilder, GroupChatWorkflowBuilder, HandoffWorkflowBuilder,
-    MagenticWorkflowBuilder, SequentialWorkflowBuilder, VoteWorkflowBuilder, WorkflowBuilder,
-    WorkflowAgent,
+    SequentialWorkflowBuilder, VoteWorkflowBuilder, WorkflowBuilder, WorkflowAgent,
 };
 
 use crate::definition::AgentDefinition;
 use crate::error::{DeclError, Result as DeclResult};
+use crate::orchestration::agent_wrappers::{ChainedInputAgent, FixedInputAgent};
 use crate::orchestration_decl::{OrchestrationDecl, OrchestrationMode, PipelinePhaseDecl};
 
 /// 构建编排 Agent，保留 YAML 声明的 `name` 作为对外 ID。
@@ -45,13 +49,7 @@ pub fn build_orchestration_agent(
                 DeclError::Validation("magentic mode requires a root orchestrator agent".into())
             })?;
             let max = orch.max_iterations.unwrap_or(15);
-            let mut b = MagenticWorkflowBuilder::new()
-                .orchestrator(orchestrator)
-                .max_iterations(max);
-            for a in participants {
-                b = b.add_sub_agent(a);
-            }
-            b.build()?.as_agent()
+            build_magentic_iterative_agent(orchestrator, participants, max)?
         }
 
         OrchestrationMode::Sequential => {
@@ -60,6 +58,8 @@ pub fn build_orchestration_agent(
                 agents.push(o);
             }
             agents.extend(participants);
+            let pass_output = orch.pass_output.unwrap_or(true);
+            let agents = wrap_sequential_agents(agents, pass_output);
             SequentialWorkflowBuilder::new()
                 .with_agents(agents)
                 .build()?
@@ -93,7 +93,7 @@ pub fn build_orchestration_agent(
             let (coordinator, chat_participants) =
                 split_group_chat_agents(orchestrator, &sub_agents, coord_name)?;
             let mut b = GroupChatWorkflowBuilder::new();
-            if let Some(c) = coordinator {
+            if let Some(c) = coordinator.clone() {
                 b = b.coordinator(c);
             }
             for p in chat_participants {
@@ -101,6 +101,12 @@ pub fn build_orchestration_agent(
             }
             if let Some(rounds) = orch.max_rounds {
                 b = b.max_rounds(rounds);
+            }
+            if let Some(sel) = build_group_chat_selector(orch, coordinator) {
+                b = b.selector(sel);
+            }
+            if let Some(term) = build_group_chat_termination(orch) {
+                b = b.termination(term);
             }
             b.build()?.as_agent()
         }
@@ -207,6 +213,109 @@ fn apply_vote_aggregator(
         }
         _ => b.aggregator(MajorityAggregator),
     }
+}
+
+fn build_group_chat_selector(
+    orch: &OrchestrationDecl,
+    coordinator: Option<Arc<dyn IAgent>>,
+) -> Option<Arc<dyn ISpeakerSelector>> {
+    let mode = orch.selector.as_deref()?.to_ascii_lowercase();
+    Some(match mode.as_str() {
+        "fixedorder" | "fixed_order" => {
+            Arc::new(FixedOrderSelector::new(orch.speaker_order.clone()))
+        }
+        "llmcoordinator" | "llm_coordinator" | "llm" => {
+            let coord = coordinator?;
+            Arc::new(LLMCoordinatorSelector::new(coord))
+        }
+        _ => Arc::new(RoundRobinSelector::new()),
+    })
+}
+
+fn build_group_chat_termination(
+    orch: &OrchestrationDecl,
+) -> Option<Arc<dyn ITerminationCondition>> {
+    if !orch.termination_keywords.is_empty() {
+        return Some(Arc::new(KeywordTermination::new(
+            orch.termination_keywords.clone(),
+        )));
+    }
+    orch.max_rounds.map(|r| {
+        let term: Arc<dyn ITerminationCondition> = Arc::new(MaxRoundsTermination::new(r));
+        term
+    })
+}
+
+fn wrap_sequential_agents(
+    agents: Vec<Arc<dyn IAgent>>,
+    pass_output: bool,
+) -> Vec<Arc<dyn IAgent>> {
+    if agents.is_empty() {
+        return agents;
+    }
+    if pass_output {
+        let history = ChainedInputAgent::new_history(Vec::new());
+        agents
+            .into_iter()
+            .map(|a| ChainedInputAgent::wrap(a, Arc::clone(&history)))
+            .collect()
+    } else {
+        agents
+            .into_iter()
+            .map(FixedInputAgent::wrap)
+            .collect()
+    }
+}
+
+/// Magentic 迭代闭环 — decl 层用 WorkflowBuilder loopback 实现 maxIterations（非侵入）。
+fn build_magentic_iterative_agent(
+    orchestrator: Arc<dyn IAgent>,
+    sub_agents: Vec<Arc<dyn IAgent>>,
+    max_iterations: usize,
+) -> DeclResult<Arc<dyn IAgent>> {
+    let mut builder = WorkflowBuilder::new();
+    let orch_id = "magentic_orchestrator".to_string();
+    builder = builder.add_node(
+        orch_id.clone(),
+        Arc::new(AgentExecutor::new(&orch_id, orchestrator)),
+    );
+    builder = builder.set_start(&orch_id);
+    let mut last_exit = orch_id.clone();
+
+    if !sub_agents.is_empty() {
+        let fanout_id = "magentic_fanout".to_string();
+        let fanout = FunctionExecutor::new(&fanout_id, |msg: Vec<ChatMessage>| vec![msg]);
+        builder = builder.add_node(fanout_id.clone(), Arc::new(fanout));
+        builder = builder.add_edge(&orch_id, &fanout_id);
+
+        let mut targets = Vec::new();
+        for (i, agent) in sub_agents.iter().enumerate() {
+            let node_id = format!("magentic_agent_{i}");
+            builder = builder.add_node(
+                node_id.clone(),
+                Arc::new(AgentExecutor::new(&node_id, agent.clone())),
+            );
+            targets.push(node_id);
+        }
+        builder = builder.add_fan_out_edge(&fanout_id, targets.clone());
+
+        let fanin_id = "magentic_fanin".to_string();
+        let fanin = FunctionExecutor::new(&fanin_id, |_msg: String| -> Vec<String> {
+            vec!["merged".to_string()]
+        });
+        builder = builder.add_node(fanin_id.clone(), Arc::new(fanin));
+        builder = builder.add_fan_in_edge(targets, &fanin_id);
+        last_exit = fanin_id;
+    }
+
+    if max_iterations > 1 {
+        builder = builder.with_loop_on(&orch_id, LoopConfig::new(max_iterations));
+        builder = builder.add_loopback_edge(&last_exit, &orch_id);
+    }
+
+    builder = builder.with_output_from(&last_exit);
+    let graph = builder.build()?;
+    Ok(Arc::new(WorkflowAgent::new(graph)))
 }
 
 fn build_pipeline_agent(

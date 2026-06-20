@@ -71,6 +71,10 @@ pub struct DeclAgentBuilder {
     /// 代码注入的上下文提供器（通过 with_context() 添加）。
     external_contexts: Vec<Arc<dyn IContextProvider>>,
     max_tool_rounds: Option<usize>,
+    /// `kind: workflow` 中 InvokeAgent 引用的预注册 Agent。
+    workflow_agents: HashMap<String, Arc<dyn IAgent>>,
+    /// 命名连接注册表（`kind: reference` 解析）。
+    connections: HashMap<String, crate::connection::Connection>,
     /// 从 AgentDefinition 直接构建（escape hatch，不经过文件解析）。
     direct_definition: Option<crate::definition::AgentDefinition>,
 }
@@ -85,6 +89,8 @@ impl DeclAgentBuilder {
             tool_factories: Vec::new(),
             external_contexts: Vec::new(),
             max_tool_rounds: None,
+            workflow_agents: HashMap::new(),
+            connections: HashMap::new(),
             direct_definition: None,
         }
     }
@@ -187,6 +193,26 @@ impl DeclAgentBuilder {
     /// 通过此方法在运行时注入，与 YAML 中 `contexts` 声明的 provider 合并。
     pub fn with_context(mut self, provider: Arc<dyn IContextProvider>) -> Self {
         self.external_contexts.push(provider);
+        self
+    }
+
+    /// 注册 workflow 图中 `InvokeAgent` 可引用的 Agent。
+    pub fn with_workflow_agent(
+        mut self,
+        name: impl Into<String>,
+        agent: Arc<dyn IAgent>,
+    ) -> Self {
+        self.workflow_agents.insert(name.into(), agent);
+        self
+    }
+
+    /// 注册命名连接（供 model.connection `kind: reference` 引用）。
+    pub fn with_connection(
+        mut self,
+        name: impl Into<String>,
+        connection: crate::connection::Connection,
+    ) -> Self {
+        self.connections.insert(name.into(), connection);
         self
     }
 
@@ -358,7 +384,8 @@ impl DeclAgentBuilder {
                 self.build_single_prompt(&def).await
             }
             _ => Err(DeclError::Unsupported(
-                "DeclAgentBuilder supports kind: prompt and kind: workflow".into(),
+                "DeclAgentBuilder supports kind: prompt, kind: workflow, and orchestrated prompt agents. \
+                 kind: hosted (container) agents require external deployment — parse only.".into(),
             )),
         }
     }
@@ -439,18 +466,21 @@ impl DeclAgentBuilder {
     ) -> Result<Arc<dyn IAgent>> {
         use rust_agent_workflow::WorkflowAgent;
 
-        #[allow(deprecated)]
-        use crate::compiler::compile_workflow;
-        #[allow(deprecated)]
-        use crate::resolver::agent_resolver::AgentResolver;
+        use crate::compiler::{compile_workflow, prewarm_workflow_tools};
+        use crate::compiler::registry::CompileRegistry;
 
-        let mut resolver = AgentResolver::new();
+        let mut registry = CompileRegistry::new();
         for (name, factory) in &self.tool_factories {
             let factory = std::sync::Arc::clone(factory);
-            resolver.register_tool_factory(name, move |args| factory(args));
+            registry.register_tool_factory(name, move |args| factory(args));
+        }
+        for (name, agent) in &self.workflow_agents {
+            registry.register_agent(name, Arc::clone(agent));
         }
 
-        let graph = compile_workflow(data, &mut resolver)?;
+        prewarm_workflow_tools(&data.trigger.actions, &mut registry).await?;
+
+        let graph = compile_workflow(data, &mut registry)?;
         let inner = Arc::new(WorkflowAgent::new(graph));
         Ok(crate::orchestration_builder::wrap_named_agent(def, inner, vec![]))
     }
@@ -501,9 +531,17 @@ impl DeclAgentBuilder {
         }
 
         let mut sub_agents: HashMap<String, Arc<dyn IAgent>> = HashMap::new();
+        let parent_prompt = match &def.kind_data {
+            AgentKindData::Prompt(data) => Some(data.clone()),
+            _ => None,
+        };
+
         for sub_def in sub_agent_decls {
             let mut sub_def = sub_def;
             self.apply_runtime_overrides(&mut sub_def);
+            if let Some(ref parent) = parent_prompt {
+                crate::context_inheritance::inherit_parent_contexts(&mut sub_def, parent);
+            }
             let sub_agent = self.build_single_prompt(&sub_def).await?;
             sub_agents.insert(sub_def.name.clone(), sub_agent);
         }
@@ -525,11 +563,21 @@ impl DeclAgentBuilder {
             .max_tool_rounds
             .unwrap_or(prompt_data.max_tool_rounds);
 
-        let chat_client = connection_resolver::resolve_chat_client(&prompt_data.model)?;
+        let chat_client = connection_resolver::resolve_chat_client_with_registry(
+            &prompt_data.model,
+            if self.connections.is_empty() {
+                None
+            } else {
+                Some(&self.connections)
+            },
+        )?;
         let instructions = prompt_data.instructions.clone();
         let tools_list = prompt_data.tools.clone();
 
         let mut tool_resolver = crate::resolver::tool_resolver::ToolResolver::new();
+        if !prompt_data.sandbox.is_empty() {
+            tool_resolver.set_sandbox_defaults(prompt_data.sandbox.clone());
+        }
         for (name, factory) in &self.tool_factories {
             let factory = Arc::clone(factory);
             tool_resolver.register_factory(name, move |args| factory(args));
@@ -602,6 +650,20 @@ impl DeclAgentBuilder {
         }
 
         builder = builder.max_tool_rounds(max_tool_rounds);
+
+        if let Some(comp) = &prompt_data.compression {
+            use crate::compression_config::{build_compression_strategy, build_token_counter};
+            use rust_agent_framework::EstimateCounter;
+
+            let counter = prompt_data
+                .token_counter
+                .as_ref()
+                .map(build_token_counter)
+                .unwrap_or_else(|| Arc::new(EstimateCounter::new()));
+            builder = builder
+                .with_compression_strategy(build_compression_strategy(comp))
+                .with_token_counter(counter);
+        }
 
         Ok(builder.build()?)
     }
@@ -745,14 +807,32 @@ impl DeclAgentBuilder {
                     .get("source")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                tracing::error!(
-                    "Knowledge (RAG) declarative provider is not yet implemented. \
-                     Use DeclAgentBuilder::with_context() to inject a custom knowledge provider. \
-                     Knowledge base: '{}', source: '{}'",
-                    kb_name,
-                    if source.is_empty() { "(not specified)" } else { source }
-                );
-                None
+                #[cfg(feature = "rag")]
+                {
+                    if source.is_empty() {
+                        tracing::warn!(
+                            "Knowledge provider '{}' missing config.source — skipped",
+                            kb_name
+                        );
+                        return None;
+                    }
+                    return Some(Arc::new(
+                        rust_agent_framework::RagContextProvider::new(
+                            kb_name.clone(),
+                            source,
+                        ),
+                    ));
+                }
+                #[cfg(not(feature = "rag"))]
+                {
+                    tracing::error!(
+                        "Knowledge (RAG) requires decl `rag` feature. \
+                         Base: '{}', source: '{}'",
+                        kb_name,
+                        if source.is_empty() { "(not specified)" } else { source }
+                    );
+                    None
+                }
             }
 
             // ── wiki ──
@@ -761,15 +841,31 @@ impl DeclAgentBuilder {
                     .get("source")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                let source_display = if source.is_empty() { "(not specified)" } else { source };
-                tracing::error!(
-                    "Wiki declarative provider is not yet implemented. \
-                     Use DeclAgentBuilder::with_context() to inject a custom wiki provider. \
-                     Wiki: '{}', source: '{}'",
-                    wiki_name,
-                    source_display
-                );
-                None
+                #[cfg(feature = "wiki")]
+                {
+                    if source.is_empty() {
+                        tracing::warn!(
+                            "Wiki provider '{}' missing config.source — skipped",
+                            wiki_name
+                        );
+                        return None;
+                    }
+                    return Some(Arc::new(
+                        rust_agent_framework::WikiContextProvider::new(
+                            wiki_name.clone(),
+                            source,
+                        ),
+                    ));
+                }
+                #[cfg(not(feature = "wiki"))]
+                {
+                    tracing::error!(
+                        "Wiki provider requires decl `wiki` feature. Wiki: '{}', source: '{}'",
+                        wiki_name,
+                        if source.is_empty() { "(not specified)" } else { source }
+                    );
+                    None
+                }
             }
 
             ContextProviderDecl::Memory { .. } => {
@@ -922,69 +1018,3 @@ fn partition_scope_tools(tools: Vec<Arc<dyn ITool>>) -> (Vec<Arc<dyn ITool>>, Ve
 /// Re-export 自 `rust_agent_framework`，统一 AgentBuilder 和 DeclAgentBuilder
 /// 的验证报告类型，消除重复定义。
 pub use rust_agent_framework::ValidationReport;
-
-/// 已知的内置工具名称列表（用于模糊匹配提示）。
-const KNOWN_TOOL_NAMES: &[&str] = &[
-    "read_file",
-    "write_file",
-    "edit_file",
-    "list_files",
-    "inspect_file",
-    "make_directory",
-    "remove_path",
-    "move_file",
-    "find_files",
-    "search_file",
-    "run_command",
-    "web_search",
-    "web_fetch",
-    "code_interpreter",
-    "load_skill",
-    "read_skill_resource",
-];
-
-/// 使用 Levenshtein 距离查找最接近的匹配。
-fn levenshtein_suggest(input: &str, candidates: &[&str]) -> Option<String> {
-    let input_lower = input.to_lowercase();
-    let mut best: Option<(&str, usize)> = None;
-
-    for &candidate in candidates {
-        let dist = levenshtein_distance(&input_lower, candidate);
-        let threshold = if candidate.len() <= 4 { 1 } else { 2 };
-        if dist <= threshold {
-            match best {
-                Some((_, best_dist)) if dist < best_dist => {
-                    best = Some((candidate, dist));
-                }
-                None => {
-                    best = Some((candidate, dist));
-                }
-                _ => {}
-            }
-        }
-    }
-
-    best.map(|(name, _)| name.to_string())
-}
-
-fn levenshtein_distance(a: &str, b: &str) -> usize {
-    let a_chars: Vec<char> = a.chars().collect();
-    let b_chars: Vec<char> = b.chars().collect();
-    let m = a_chars.len();
-    let n = b_chars.len();
-
-    let mut prev = (0..=n).collect::<Vec<_>>();
-    let mut curr = vec![0; n + 1];
-
-    for i in 1..=m {
-        curr[0] = i;
-        for j in 1..=n {
-            let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
-            curr[j] = (prev[j] + 1)
-                .min(curr[j - 1] + 1)
-                .min(prev[j - 1] + cost);
-        }
-        std::mem::swap(&mut prev, &mut curr);
-    }
-    prev[n]
-}

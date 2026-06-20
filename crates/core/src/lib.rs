@@ -7,6 +7,7 @@ pub mod incremental_json;
 pub mod message;
 pub mod model_metadata;
 pub mod run_options;
+pub mod sandbox;
 pub mod session;
 pub mod session_store;
 pub mod stream;
@@ -26,6 +27,9 @@ pub use context_provider::{IContextProvider, InvokedContext, MessageInjection, P
 pub use model_metadata::ModelMetadata;
 pub use run_options::AgentRunOptions;
 pub use run_options::ReasoningEffort;
+pub use sandbox::{
+    ICodeSandbox, SandboxArtifact, SandboxLanguage, SandboxRequest, SandboxResult, sandbox_error,
+};
 pub use session::{AgentSession, ISession, ProviderState, ProviderStateStore, SessionMetadata, SessionSnapshot, SessionTTLOptions};
 pub use session_store::ISessionStore;
 pub use stream::{BoxStream, collect_agent_response};

@@ -109,8 +109,45 @@ rust-agent-decl = { version = "0.1", features = ["json", "yaml", "toml"] }
 | `json` (默认) | JSON | serde_json |
 | `yaml` | YAML | serde_yaml |
 | `toml` | TOML | toml |
-| `powerfx` | PowerFx 表达式 | powerfx |
+| `rhai` | Rhai 工作流/条件表达式 | rust-agent-rhai |
+| `web` | Web 搜索工具 | rust-agent-websearch |
+| `rag` | RAG 知识库上下文 | rust-agent-rag |
+| `wiki` | Wiki 知识库上下文 | rust-agent-wiki |
+| `openapi` | OpenAPI HTTP 工具 | rust-agent-openapi |
+| `sandbox` | 内置 code_interpreter 沙箱 | rust-agent-sandbox |
+| `sandbox-docker` | Docker/Podman 沙箱后端 | rust-agent-sandbox/docker |
+| `sandbox-wasm` | WASM 沙箱后端 | rust-agent-sandbox/wasm |
 | `mustache` | Mustache 模板 | mustache |
+
+### 代码沙箱（`kind: code` / `ExecuteCode`）
+
+```yaml
+# Agent 工具
+tools:
+  - kind: code
+    name: code_interpreter
+    config:
+      backend: docker    # process | container | docker | podman | wasm
+      timeout_secs: 60
+      memory_limit: 512m
+      cpus: "1.0"
+      pids_limit: 128
+      default_language: python
+
+# Workflow 级默认 + ExecuteCode 动作
+sandbox:
+  backend: process
+  timeout_secs: 30
+trigger:
+  kind: OnConversationStart
+  id: start
+  actions:
+    - kind: ExecuteCode
+      code: print("hello")
+      language: python
+      output:
+        result: Local.stdout
+```
 
 ### 解析示例
 

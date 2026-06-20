@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use anyhow::Result;
 
 use crate::cache::{GenerationCache, WikiGraphCache};
-use crate::config::{self, GlobalConfig, ResolvedConfig, WikiEntry};
+use crate::config::{self, GlobalConfig, ResolvedConfig, WikiConfig, WikiEntry};
 use crate::graph::{CommunityData, WikiGraph};
 use crate::index_manager::{IndexReport, SpaceIndexManager, StalenessKind};
 use crate::index_schema::IndexSchema;
@@ -91,6 +91,11 @@ pub struct WikiEngine {
 }
 
 impl WikiEngine {
+    /// 从本地仓库路径挂载单个 wiki（无需预先存在的全局配置文件）。
+    pub fn from_repo(wiki_name: &str, repo_path: &Path) -> Result<Self> {
+        from_repo(wiki_name, repo_path)
+    }
+
     /// Build a `WikiEngine` from the global config at `config_path`, mounting all registered wikis.
     pub fn build(config_path: &Path) -> Result<Self> {
         let config = config::load_global(config_path)?;
@@ -378,4 +383,58 @@ fn build_wiki_graph_cache(
         }
     }
     Ok(cache)
+}
+
+// ── Convenience mount ─────────────────────────────────────────────────────────
+
+/// 从本地仓库路径挂载单个 wiki（无需预先存在的全局配置文件）。
+///
+/// 适用于 Agent 声明式 `contexts: wiki` 集成：自动创建索引状态目录与 `wiki.toml`。
+pub fn from_repo(wiki_name: &str, repo_path: &Path) -> Result<WikiEngine> {
+    let repo_path = repo_path
+        .canonicalize()
+        .unwrap_or_else(|_| repo_path.to_path_buf());
+    prepare_repo_layout(&repo_path)?;
+
+    let state_dir = repo_path.join(".raf-wiki-state");
+    std::fs::create_dir_all(&state_dir)?;
+
+    let mut config = GlobalConfig::default();
+    config.global.default_wiki = wiki_name.to_string();
+    config.index.auto_rebuild = true;
+    config.wikis.push(WikiEntry {
+        name: wiki_name.to_string(),
+        path: repo_path.to_string_lossy().to_string(),
+        description: None,
+        remote: None,
+    });
+
+    let config_path = state_dir.join("wikis.toml");
+    config::save_global(&config, &config_path)?;
+    WikiEngine::build(&config_path)
+}
+
+fn prepare_repo_layout(repo: &Path) -> Result<()> {
+    if repo.join("wiki.toml").exists() {
+        return Ok(());
+    }
+    if repo.join("wiki").is_dir() {
+        return Ok(());
+    }
+    let has_md = std::fs::read_dir(repo)?
+        .filter_map(|e| e.ok())
+        .any(|e| {
+            e.path()
+                .extension()
+                .and_then(|x| x.to_str())
+                .is_some_and(|x| x.eq_ignore_ascii_case("md"))
+        });
+    if has_md {
+        let cfg = WikiConfig {
+            wiki_root: ".".to_string(),
+            ..Default::default()
+        };
+        config::save_wiki(&cfg, repo)?;
+    }
+    Ok(())
 }

@@ -14,6 +14,10 @@ pub use builder::{AgentBuilder, ValidationReport};
 pub use chat_client_agent::ChatClientAgent;
 pub use context_providers::history_provider::InMemoryHistoryProvider;
 pub use context_providers::agent_skill::{AgentSkill, SkillMetadata};
+#[cfg(feature = "rag")]
+pub use context_providers::rag_provider::RagContextProvider;
+#[cfg(feature = "wiki")]
+pub use context_providers::wiki_provider::WikiContextProvider;
 pub use context_providers::script_runner::{AgentSkillScriptRunner, SubprocessScriptRunner};
 pub use context_providers::skills_provider::AgentSkillsProvider;
 pub use context_providers::workspace::WorkspaceContextProvider;

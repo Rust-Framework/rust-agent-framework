@@ -10,6 +10,8 @@ description = "Agent runtime framework for building LLM-powered agents with tool
 [dependencies]
 rust-agent-core = { workspace = true }
 rust-agent-macros = { workspace = true }
+rust-agent-rag = { workspace = true, optional = true }
+rust-agent-wiki = { workspace = true, optional = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }
 tokio = { workspace = true }
@@ -26,10 +28,12 @@ dirs-next = "2"
 uuid = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }
 
 [features]
 default = []
+rag = ["dep:rust-agent-rag"]
+wiki = ["dep:rust-agent-wiki"]
 tiktoken = ["dep:tiktoken-rs"]
 
 [dependencies.tiktoken-rs]

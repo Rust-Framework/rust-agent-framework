@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 pub enum ActionDecl {
     // ── 变量管理 ──
 
-    /// 将变量设置为指定值，支持带 `=` 的 PowerFx 表达式。
+    /// 将变量设置为指定值，支持带 `=` 的 Rhai 表达式。
     SetVariable {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
@@ -75,11 +75,11 @@ pub enum ActionDecl {
 
     // ── 控制流 ──
 
-    /// 基于 PowerFx 表达式条件执行动作。
+    /// 基于 Rhai 表达式条件执行动作。
     If {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,
-        /// 求值为 true/false 的 PowerFx 表达式。
+        /// 求值为 true/false 的 Rhai 表达式。
         condition: String,
         /// 条件为 true 时执行的动作。
         #[serde(rename = "then")]
@@ -169,6 +169,22 @@ pub enum ActionDecl {
         require_approval: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         arguments: Option<HashMap<String, serde_json::Value>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<ToolOutput>,
+    },
+
+    /// 在沙箱中执行代码片段（工作流节点）。
+    ExecuteCode {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        /// 源码（字面量或 `=expression`）。
+        code: serde_json::Value,
+        /// 运行时语言（默认 python）。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        language: Option<String>,
+        /// 沙箱后端配置（与 tools.code.config 相同字段）。
+        #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+        sandbox: HashMap<String, serde_json::Value>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         output: Option<ToolOutput>,
     },
@@ -273,7 +289,7 @@ fn default_http_method() -> String {
 /// `ConditionGroup` 动作中的分支。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConditionBranch {
-    /// 求值为 true/false 的 PowerFx 表达式。
+    /// 求值为 true/false 的 Rhai 表达式。
     pub condition: String,
     /// 可选的分支标识符。
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -319,7 +335,7 @@ pub struct AgentInput {
 /// Agent 调用的外部循环配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalLoop {
-    /// 继续循环的 PowerFx 条件。
+    /// 继续循环的 Rhai 条件。
     pub when: String,
 }
 
@@ -393,6 +409,7 @@ impl ActionDecl {
             ActionDecl::SendActivity { .. } => "SendActivity",
             ActionDecl::InvokeAgent { .. } => "InvokeAgent",
             ActionDecl::InvokeFunctionTool { .. } => "InvokeFunctionTool",
+            ActionDecl::ExecuteCode { .. } => "ExecuteCode",
             ActionDecl::InvokeMcpTool { .. } => "InvokeMcpTool",
             ActionDecl::HttpRequestAction { .. } => "HttpRequestAction",
             ActionDecl::Question { .. } => "Question",
@@ -421,6 +438,7 @@ impl ActionDecl {
             | ActionDecl::SendActivity { id, .. }
             | ActionDecl::InvokeAgent { id, .. }
             | ActionDecl::InvokeFunctionTool { id, .. }
+            | ActionDecl::ExecuteCode { id, .. }
             | ActionDecl::InvokeMcpTool { id, .. }
             | ActionDecl::HttpRequestAction { id, .. }
             | ActionDecl::Question { id, .. }

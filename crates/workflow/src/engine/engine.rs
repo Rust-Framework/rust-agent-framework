@@ -188,6 +188,8 @@ impl WorkflowEngine {
             if let Some(tx) = done_tx {
                 let _ = tx.send(result);
             }
+            // Release the last broadcast sender so event subscribers can terminate.
+            drop(event_tx);
         });
 
         let event_stream: BoxStream<'static, WorkflowEvent> = Box::pin(

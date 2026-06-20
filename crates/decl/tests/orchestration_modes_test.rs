@@ -168,3 +168,57 @@ subAgents:
         .await
         .expect("vote builds");
 }
+
+#[tokio::test]
+async fn build_group_chat_with_selector() {
+    let yaml = format!(
+        r#"
+kind: prompt
+name: group-chat-test
+model:
+  id: gpt-4o
+  connection:
+    kind: key
+    api_key: sk-test
+instructions: coordinator
+metadata:
+  orchestration:
+    mode: groupChat
+    coordinator: coord
+    maxRounds: 3
+    selector: roundRobin
+subAgents:
+  - kind: prompt
+    name: coord
+    model:
+      id: gpt-4o
+      connection:
+        kind: key
+        api_key: sk-test
+    instructions: coordinate
+  - kind: prompt
+    name: alice
+    model:
+      id: gpt-4o
+      connection:
+        kind: key
+        api_key: sk-test
+    instructions: alice
+  - kind: prompt
+    name: bob
+    model:
+      id: gpt-4o
+      connection:
+        kind: key
+        api_key: sk-test
+    instructions: bob
+"#
+    );
+    let agent = DeclAgentBuilder::new()
+        .from_yaml_str(&yaml)
+        .build()
+        .await
+        .expect("groupChat with selector builds");
+    assert_eq!(agent.id().to_string(), "group-chat-test");
+    assert!(agent.get_subagent(&AgentId::new("alice")).is_some());
+}

@@ -46,7 +46,7 @@ pub enum DeclError {
     #[error("Missing: {0}")]
     Missing(String),
 
-    /// 表达式求值错误（PowerFx 或模板）。
+    /// 表达式求值错误（Rhai 或模板）。
     #[error("Expression error: {0}")]
     Expression(String),
 }

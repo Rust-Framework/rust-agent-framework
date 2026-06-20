@@ -19,5 +19,5 @@ pub mod watch;
 
 // Re-export core types
 pub use config::{GlobalConfig, WikiConfig, ResolvedConfig};
-pub use engine::{WikiEngine, EngineState, SpaceContext};
+pub use engine::{from_repo, WikiEngine, EngineState, SpaceContext};
 pub use slug::{Slug, WikiUri, ReadTarget};

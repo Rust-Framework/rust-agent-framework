@@ -128,6 +128,9 @@ pub enum ToolDecl {
         /// 可选描述（覆盖内建描述）。
         #[serde(default, skip_serializing_if = "String::is_empty")]
         description: String,
+        /// 沙箱后端配置：`backend`, `timeout_secs`, `default_language` 等。
+        #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+        config: HashMap<String, serde_json::Value>,
     },
 
     /// MCP（Model Context Protocol）远程工具。

@@ -31,12 +31,15 @@
 //! - `json` (default): serde_json support
 //! - `yaml`: serde_yaml support
 //! - `toml`: toml support
-//! - `powerfx`: PowerFx expression engine (alpha, optional)
+//! - `rhai`: Rhai embedded expression engine (RAF script/expression system)
+//! - `web`: web_search / web_fetch tools (pulls rust-agent-websearch)
 //! - `mustache`: Mustache template rendering (optional)
 
 pub mod actions;
+pub mod compression_config;
 pub mod connection;
 pub mod container_agent;
+pub mod context_inheritance;
 pub mod context_provider_config;
 pub mod definition;
 pub mod document;
@@ -51,10 +54,12 @@ pub mod workflow_decl;
 
 pub mod compiler;
 pub mod decl_agent_builder;
+pub mod orchestration;
 pub mod orchestration_builder;
 pub mod orchestration_decl;
 pub mod ext;
 pub mod resolver;
+pub mod sandbox_factory;
 
 // ── Core document types ──
 pub use document::{AgentDocument, AgentManifest, ManifestResource};
@@ -63,6 +68,7 @@ pub use definition::{AgentDefinition, AgentKindData};
 // ── Core schema types ──
 pub use schema::{PropertySchema, Property, PropertyType};
 pub use model::{Model, ModelOptions, ApiType};
+pub use compression_config::{CompressionDecl, TokenCounterDecl};
 pub use connection::{Connection, ConnectionKind, ConnectionDetails, AuthenticationMode};
 pub use template::{Template, TemplateFormat, TemplateParser};
 pub use tools::{ToolDecl, ToolBinding};
@@ -85,10 +91,14 @@ pub use actions::{
     MessagePayload, ExternalLoop,
 };
 
+// ── Compiler ──
+pub use compiler::registry::CompileRegistry;
+pub use compiler::{compile_workflow, prewarm_workflow_tools};
+
 // ── Resolver ──
 #[allow(deprecated)]
 pub use resolver::{
-    AgentResolver, McpRequestExecutor, ToolResolver, WorkflowResolver,
+    AgentResolver, McpRequestExecutor, ToolInvokeExecutor, ToolResolver, WorkflowResolver,
     quick_agent, quick_workflow, ToolFactoryFn,
 };
 
