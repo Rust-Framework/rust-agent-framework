@@ -58,7 +58,7 @@ pub fn resolve_chat_client_with_registry(
         },
         other => {
             return Err(DeclError::Unsupported(format!(
-                "Unknown provider '{}'. Supported: openai, deepseek, custom",
+                "Unknown provider '{}'. Supported: openai, custom",
                 other
             )));
         }
@@ -89,7 +89,7 @@ pub fn resolve_chat_client_with_registry(
         "deepseek" => Ok(Arc::new(DeepSeekChatClient::new(options)?)),
         "custom" => Ok(Arc::new(OpenAiChatClient::new(options)?)),
         other => Err(DeclError::Unsupported(format!(
-            "Unknown provider in build_client: {}",
+            "Unknown provider: {}",
             other
         ))),
     }

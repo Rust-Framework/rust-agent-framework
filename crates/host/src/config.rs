@@ -54,10 +54,10 @@ impl std::fmt::Display for TransportMode {
 /// LLM 提供商配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
-    /// 提供商名称："deepseek"、"openai"、"custom"。
+    /// 提供商名称："openai"、"custom"。
     #[serde(default = "default_provider_name")]
     pub provider: String,
-    /// 模型名称，例如 "deepseek-v4-flash"。
+    /// 模型名称，例如 "agnes-2.0-flash"。
     #[serde(default = "default_model")]
     pub model: String,
     /// API 密钥，支持 $ENV_VAR 语法。
@@ -73,17 +73,17 @@ pub struct ProviderConfig {
     #[serde(default)]
     pub max_tokens: Option<u32>,
     /// 模型上下文窗口大小（token 数）。用于自动上下文压缩。
-    /// 例如 DeepSeek-V3 为 128000，GPT-4o 为 128000。
+    /// 例如 GPT-4o 为 128000。
     #[serde(default = "default_context_window")]
     pub context_window_tokens: usize,
     /// 模型最大输出 token 数。用于计算输入预算。
-    /// 例如 DeepSeek-V3 为 8192，GPT-4o 为 16384。
+    /// 例如 GPT-4o 为 16384。
     #[serde(default = "default_max_output_tokens")]
     pub max_output_tokens: usize,
 }
 
-fn default_provider_name() -> String { "deepseek".into() }
-fn default_model() -> String { "deepseek-v4-flash".into() }
+fn default_provider_name() -> String { "openai".into() }
+fn default_model() -> String { "agnes-2.0-flash".into() }
 fn default_context_window() -> usize { 128_000 }
 fn default_max_output_tokens() -> usize { 8_192 }
 

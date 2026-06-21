@@ -9,7 +9,7 @@ use rust_agent_framework::AgentBuilder;
 use rust_agent_client::DeepSeekChatClient;
 
 let client = DeepSeekChatClient::new(
-    ChatClientOptions::deepseek("deepseek-v4-flash", "your-api-key")
+    ChatClientOptions::deepseek("agnes-2.0-flash", "your-api-key")
 )?;
 
 let agent = AgentBuilder::new("my_agent")
@@ -267,10 +267,10 @@ let agent = AgentBuilder::new("scriptable").chat_client(client).with_tool(tool).
 
 ```bash
 # WebSocket 模式
-rust-agent-host --mode ws --bind 0.0.0.0:9876 --api-key $DEEPSEEK_API_KEY
+rust-agent-host --mode ws --bind 0.0.0.0:9876 --api-key $AGNES_API_KEY
 
 # 或 Stdio 模式（IDE 集成）
-rust-agent-host --mode stdio --api-key $DEEPSEEK_API_KEY
+rust-agent-host --mode stdio --api-key $AGNES_API_KEY
 ```
 
 ### Q: 如何整合多个 Agent 到一个实例？
@@ -333,10 +333,11 @@ let agent = AgentBuilder::new("multi-mcp")
 kind: prompt
 name: mcp-agent
 model:
-  id: deepseek-v3
+  id: agnes-2.0-flash
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
+    api_key: $AGNES_API_KEY
+    endpoint: https://apihub.agnes-ai.com/v1
 tools:
   - kind: mcp
     name: read_file

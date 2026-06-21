@@ -2,7 +2,7 @@
 //!
 //! 用法：
 //! ```bash
-//! export DEEPSEEK_API_KEY=your_key
+//! export AGNES_API_KEY=your_key
 //! cargo run -p rust-agent-coding -- "实现一个 TODO 应用"
 //! ```
 
@@ -18,8 +18,8 @@ use rust_agent_workflow::{ResumeCommand, WorkflowEvent, WorkflowRuntime};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // ── 解析参数 ──
-    let api_key = std::env::var("DEEPSEEK_API_KEY")
-        .map_err(|_| anyhow::anyhow!("请设置 DEEPSEEK_API_KEY 环境变量"))?;
+    let api_key = std::env::var("AGNES_API_KEY")
+        .map_err(|_| anyhow::anyhow!("请设置 AGNES_API_KEY 环境变量"))?;
     let initial_requirement = std::env::args().nth(1).unwrap_or_else(|| {
         eprintln!("用法: coding <需求描述>");
         eprintln!("请输入需求描述:");
@@ -32,7 +32,8 @@ async fn main() -> anyhow::Result<()> {
         anyhow::bail!("需求描述不能为空");
     }
 
-    let options = ChatClientOptions::deepseek("deepseek-v4-flash", api_key);
+    let mut options = ChatClientOptions::openai("agnes-2.0-flash", api_key);
+    options.api_base = "https://apihub.agnes-ai.com/v1".to_string();
     let workspace_root = std::env::current_dir()?;
 
     println!("=== 6 阶段开发流水线启动 ===");

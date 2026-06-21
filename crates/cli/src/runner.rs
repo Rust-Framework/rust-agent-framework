@@ -17,7 +17,7 @@
 //!
 //! let agent = DeclAgentBuilder::new()
 //!     .from_yaml_file("cli-agent.yaml")
-//!     .with_model("deepseek-v4-flash")
+//!     .with_model("agnes-2.0-flash")
 //!     .with_api_key(&api_key)
 //!     .with_tool("echo", |_| Ok(Arc::new(Echo)))
 //!     .with_context(skill_memory.clone())

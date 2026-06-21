@@ -44,7 +44,7 @@ pub struct AgentMetadata {
     /// 已注册工具名称列表（如 ["read_file", "web_search"]）
     #[serde(default)]
     pub tool_names: Vec<String>,
-    /// LLM 模型标识符（如 "deepseek-v4-flash"）
+    /// LLM 模型标识符（如 "agnes-2.0-flash"）
     #[serde(default)]
     pub model_id: Option<String>,
     /// 用于发现的能力标签（如 ["file_operations", "code"]）

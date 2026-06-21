@@ -231,7 +231,7 @@ async fn celsius_to_fahrenheit(
 kind: prompt
 name: my-agent
 model:
-  id: deepseek-v4-flash
+  id: agnes-2.0-flash
   provider: deepseek
   connection:
     kind: key

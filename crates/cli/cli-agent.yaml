@@ -4,11 +4,12 @@ name: cli-agent
 displayName: CLI 助手
 description: 具备技能记忆、网页搜索和文件操作能力的交互式 CLI 智能助手。
 model:
-  id: deepseek-v4-flash
-  provider: deepseek
+  id: agnes-2.0-flash
+  provider: openai
   connection:
     kind: key
-    api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+    api_key: sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m
+    endpoint: https://apihub.agnes-ai.com/v1
 instructions: |
   你是一个编程助手。核心准则：最少代码，最少改动，最高确定性。
 

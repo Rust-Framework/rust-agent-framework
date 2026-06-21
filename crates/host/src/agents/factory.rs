@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use tracing::warn;
 use rust_agent_core::{IAgent, ModelMetadata};
-use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
+use rust_agent_client::{ChatClientOptions, OpenAiChatClient};
 use rust_agent_framework::{AgentBuilder, TokenBudgetStrategy, EstimateCounter};
 use rust_agent_workflow::WorkflowAgent;
 
@@ -46,7 +46,7 @@ impl<'a> AgentFactory<'a> {
         }
 
         if agents.is_empty() {
-            warn!("No agents were created. Ensure DEEPSEEK_API_KEY (or OPENAI_API_KEY) is set and the provider config is correct.");
+            warn!("No agents were created. Ensure AGNES_API_KEY (or OPENAI_API_KEY) is set and the provider config is correct.");
         }
 
         Ok(agents)
@@ -89,15 +89,15 @@ impl<'a> AgentFactory<'a> {
         let api_key = provider
             .resolve_api_key()
             .ok_or_else(|| anyhow!(
-                "No API key configured. Set DEEPSEEK_API_KEY or OPENAI_API_KEY environment variable, \
+                "No API key configured. Set AGNES_API_KEY or OPENAI_API_KEY environment variable, \
                  or configure via CLI: --api-key YOUR_KEY"
             ))?;
 
         let model = provider.model.clone();
 
         let mut options = match provider.provider.as_str() {
-            "openai" => ChatClientOptions::openai(&model, api_key),
-            "deepseek" | _ => ChatClientOptions::deepseek(&model, api_key),
+            "deepseek" => ChatClientOptions::deepseek(&model, api_key),
+            _ => ChatClientOptions::openai(&model, api_key),
         };
 
         if let Some(url) = &provider.base_url {
@@ -118,20 +118,20 @@ impl<'a> AgentFactory<'a> {
     }
 
     /// Create a chat client from the provider config.
-    fn create_client(&self, model_override: Option<&str>) -> Result<DeepSeekChatClient> {
+    fn create_client(&self, model_override: Option<&str>) -> Result<OpenAiChatClient> {
         let provider = &self.config.provider;
         let api_key = provider
             .resolve_api_key()
             .ok_or_else(|| anyhow!(
-                "No API key configured. Set DEEPSEEK_API_KEY or OPENAI_API_KEY environment variable, \
+                "No API key configured. Set AGNES_API_KEY or OPENAI_API_KEY environment variable, \
                  or configure via CLI: --api-key YOUR_KEY"
             ))?;
 
         let model = model_override.unwrap_or(&provider.model).to_string();
 
         let mut options = match provider.provider.as_str() {
-            "openai" => ChatClientOptions::openai(&model, api_key),
-            "deepseek" | _ => ChatClientOptions::deepseek(&model, api_key),
+            "deepseek" => ChatClientOptions::deepseek(&model, api_key),
+            _ => ChatClientOptions::openai(&model, api_key),
         };
 
         if let Some(url) = &provider.base_url {
@@ -145,7 +145,7 @@ impl<'a> AgentFactory<'a> {
             provider.max_output_tokens,
         ));
 
-        Ok(DeepSeekChatClient::new(options)?)
+        Ok(OpenAiChatClient::new(options)?)
     }
 
     /// 为 AgentBuilder 装配上下文压缩管线。

@@ -31,7 +31,7 @@
 | **frequency_penalty** | 支持 | **已废弃**，传入无效果 |
 | **presence_penalty** | 支持 | **已废弃**，传入无效果 |
 | **user 字段** | `user` | `user_id` |
-| **模型** | gpt-4, gpt-4o, gpt-3.5-turbo... | deepseek-v4-flash, deepseek-v4-pro |
+| **模型** | gpt-4, gpt-4o, gpt-3.5-turbo... | agnes-2.0-flash, deepseek-v4-pro |
 | **Strict Tool Calls** | N/A | Beta 功能 |
 | **FIM 补全** | N/A | Beta 功能 (`/completions`) |
 | **Prefix Completion** | N/A | Beta 功能（最后一条 assistant 设 prefix: true） |

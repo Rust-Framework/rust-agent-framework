@@ -21,11 +21,12 @@ metadata:
   tags: [coding, multi-agent, parallel, closed-loop]
   version: "1.0.0"
 model:
-  id: deepseek-v4-flash
-  provider: deepseek
+  id: agnes-2.0-flash
+  provider: openai
   connection:
     kind: key
-    api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+    api_key: sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m
+    endpoint: https://apihub.agnes-ai.com/v1
 instructions: |
   你是编码编排主控（Orchestrator），负责驱动完整软件开发闭环，调度专家子 Agent 协作完成任务。
 
@@ -74,11 +75,12 @@ subAgents:
     metadata:
       capabilityTags: [planning, architecture]
     model:
-      id: deepseek-v4-flash
-      provider: deepseek
+      id: agnes-2.0-flash
+      provider: openai
       connection:
         kind: key
-        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+        api_key: sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m
+        endpoint: https://apihub.agnes-ai.com/v1
     instructions: |
       你是软件架构规划师。根据需求输出结构化实施计划，包含：
       - 需求摘要与验收标准（可测试、可量化）
@@ -107,11 +109,12 @@ subAgents:
     metadata:
       capabilityTags: [exploration, read-only]
     model:
-      id: deepseek-v4-flash
-      provider: deepseek
+      id: agnes-2.0-flash
+      provider: openai
       connection:
         kind: key
-        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+        api_key: sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m
+        endpoint: https://apihub.agnes-ai.com/v1
     instructions: |
       你是代码探索专家。职责是只读分析代码库：
       - 定位与任务相关的文件、模块、入口点
@@ -139,11 +142,12 @@ subAgents:
     metadata:
       capabilityTags: [coding, parallel, implement]
     model:
-      id: deepseek-v4-flash
-      provider: deepseek
+      id: agnes-2.0-flash
+      provider: openai
       connection:
         kind: key
-        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+        api_key: sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m
+        endpoint: https://apihub.agnes-ai.com/v1
     instructions: |
       你是并行开发者 A，负责实现分配给你的工作包（模块 A / 前端 / 左侧分支）。
       - 仅修改 orchestrator 明确分配给你的文件与模块
@@ -163,11 +167,12 @@ subAgents:
     metadata:
       capabilityTags: [coding, parallel, implement]
     model:
-      id: deepseek-v4-flash
-      provider: deepseek
+      id: agnes-2.0-flash
+      provider: openai
       connection:
         kind: key
-        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+        api_key: sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m
+        endpoint: https://apihub.agnes-ai.com/v1
     instructions: |
       你是并行开发者 B，负责实现分配给你的工作包（模块 B / 后端 / 右侧分支）。
       - 仅修改 orchestrator 明确分配给你的文件与模块
@@ -187,11 +192,12 @@ subAgents:
     metadata:
       capabilityTags: [testing, verification, qa]
     model:
-      id: deepseek-v4-flash
-      provider: deepseek
+      id: agnes-2.0-flash
+      provider: openai
       connection:
         kind: key
-        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+        api_key: sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m
+        endpoint: https://apihub.agnes-ai.com/v1
     instructions: |
       你是测试工程师。职责：
       - 根据验收标准设计并执行验证（构建、单元测试、集成测试、lint）
@@ -217,11 +223,12 @@ subAgents:
     metadata:
       capabilityTags: [review, quality, security]
     model:
-      id: deepseek-v4-flash
-      provider: deepseek
+      id: agnes-2.0-flash
+      provider: openai
       connection:
         kind: key
-        api_key: sk-b8136a230aea467e8cdfe4649cab2d3e
+        api_key: sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m
+        endpoint: https://apihub.agnes-ai.com/v1
     instructions: |
       你是资深代码审查员。审查维度：
       - 正确性：逻辑是否正确，边界条件是否处理

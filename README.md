@@ -632,11 +632,11 @@ kind: prompt
 name: cli-agent
 displayName: CLI Assistant
 model:
-  id: deepseek-v4-flash
+  id: agnes-2.0-flash
   provider: deepseek
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY   # env-var syntax supported
+    api_key: $AGNES_API_KEY   # env-var syntax supported
 instructions: |
   You are a helpful assistant.
 

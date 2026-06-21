@@ -37,8 +37,8 @@
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|:---:|--------|------|
-| `model.id` | string | **是** | — | 模型 ID，如 `"deepseek-v4-flash"`、`"gpt-4o"` |
-| `model.provider` | string | 否 | — | Provider 标识：`"openai"` / `"deepseek"` / `"custom"` |
+| `model.id` | string | **是** | — | 模型 ID，如 `"agnes-2.0-flash"`、`"gpt-4o"` |
+| `model.provider` | string | 否 | — | Provider 标识：`"openai"` / `"custom"` |
 | `model.connection.kind` | string | 否 | — | 连接类型：`key` / `remote` / `reference` / `oauth` / `anonymous` |
 | `model.connection.api_key` | string | 否 | — | API 密钥。支持 `$ENV_VAR` / `=Env.VAR` |
 | `model.connection.name` | string | 否 | — | `reference` 连接的目标名称 |
@@ -62,12 +62,12 @@
 ```json
 {
     "model": {
-        "id": "deepseek-v4-flash",
-        "provider": "deepseek",
+        "id": "agnes-2.0-flash",
+        "provider": "openai",
         "connection": {
             "kind": "key",
-            "api_key": "$DEEPSEEK_API_KEY",
-            "base_url": "https://api.deepseek.com/v1"
+            "api_key": "$AGNES_API_KEY",
+            "endpoint": "https://apihub.agnes-ai.com/v1"
         },
         "options": {
             "temperature": 0.3,
@@ -82,12 +82,12 @@
 
 ```yaml
 model:
-  id: deepseek-v4-flash
-  provider: deepseek
+  id: agnes-2.0-flash
+  provider: openai
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
-    base_url: https://api.deepseek.com/v1
+    api_key: $AGNES_API_KEY
+    endpoint: https://apihub.agnes-ai.com/v1
   options:
     temperature: 0.3
     maxTokens: 4096
@@ -98,13 +98,13 @@ model:
 
 ```toml
 [model]
-id = "deepseek-v4-flash"
-provider = "deepseek"
+id = "agnes-2.0-flash"
+provider = "openai"
 
 [model.connection]
 kind = "key"
-api_key = "$DEEPSEEK_API_KEY"
-base_url = "https://api.deepseek.com/v1"
+api_key = "$AGNES_API_KEY"
+endpoint = "https://apihub.agnes-ai.com/v1"
 
 [model.options]
 temperature = 0.3
@@ -527,12 +527,12 @@ metadata:
   version: "1.2.0"
   tags: [coding, enterprise, rust]
 model:
-  id: deepseek-v4-flash
-  provider: deepseek
+  id: agnes-2.0-flash
+  provider: openai
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
-    base_url: https://api.deepseek.com/v1
+    api_key: $AGNES_API_KEY
+    endpoint: https://apihub.agnes-ai.com/v1
   options:
     temperature: 0.3
     maxTokens: 8192
@@ -582,12 +582,12 @@ subAgents:
   - kind: prompt
     name: code-reviewer
     displayName: 代码审查员
-    model:
-      id: deepseek-v4-flash
-      provider: deepseek
-      connection:
-        kind: key
-        api_key: $DEEPSEEK_API_KEY
+model:
+  id: agnes-2.0-flash
+  provider: openai
+  connection:
+    kind: key
+    api_key: $AGNES_API_KEY
     instructions: 你是资深代码审查员。
     tools:
       - kind: file
@@ -609,12 +609,12 @@ subAgents:
         "tags": ["coding", "enterprise", "rust"]
     },
     "model": {
-        "id": "deepseek-v4-flash",
-        "provider": "deepseek",
+        "id": "agnes-2.0-flash",
+        "provider": "openai",
         "connection": {
             "kind": "key",
-            "api_key": "$DEEPSEEK_API_KEY",
-            "base_url": "https://api.deepseek.com/v1"
+            "api_key": "$AGNES_API_KEY",
+            "endpoint": "https://apihub.agnes-ai.com/v1"
         },
         "options": {
             "temperature": 0.3,
@@ -666,13 +666,13 @@ author = "team-platform"
 version = "1.2.0"
 
 [model]
-id = "deepseek-v4-flash"
-provider = "deepseek"
+id = "agnes-2.0-flash"
+provider = "openai"
 
 [model.connection]
 kind = "key"
-api_key = "$DEEPSEEK_API_KEY"
-base_url = "https://api.deepseek.com/v1"
+api_key = "$AGNES_API_KEY"
+endpoint = "https://apihub.agnes-ai.com/v1"
 
 [model.options]
 temperature = 0.3

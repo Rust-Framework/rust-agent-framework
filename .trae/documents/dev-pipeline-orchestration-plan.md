@@ -570,7 +570,7 @@ pub fn build(config: &DevPipelineConfig) -> Result<WorkflowGraph> {
 ### 7. `src/bin/coding.rs` — 交互式二进制入口
 
 ```rust
-/// 用法: coding --requirement "实现一个 REST API..." --workspace . --model deepseek-v4-flash
+/// 用法: coding --requirement "实现一个 REST API..." --workspace . --model agnes-2.0-flash
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 1. 解析 CLI 参数 (clap 或手动解析)
@@ -737,7 +737,7 @@ pub use conditions::ReviewPassedCondition;
    * 并行测试验证 FanOut/FanIn
 
    * 反馈循环测试验证回跳与终止
-3. **集成验证**: `cargo run -p rust-agent-coding -- --requirement "实现一个简单的 echo REST API" --workspace . --model deepseek-v4-flash`
+3. **集成验证**: `cargo run -p rust-agent-coding -- --requirement "实现一个简单的 echo REST API" --workspace . --model agnes-2.0-flash`
 
    * 阶段 1 后暂停，用户确认后继续
 

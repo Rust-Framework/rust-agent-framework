@@ -43,12 +43,12 @@
             "properties": {
                 "id": {
                     "type": "string",
-                    "description": "Model ID (e.g., deepseek-v4-flash, gpt-4o)"
+                    "description": "Model ID (e.g., agnes-2.0-flash, gpt-4o)"
                 },
                 "provider": {
                     "type": "string",
                     "description": "Provider identifier",
-                    "enum": ["openai", "deepseek", "custom"]
+                    "enum": ["openai", "custom"]
                 },
                 "connection": {
                     "type": "object",

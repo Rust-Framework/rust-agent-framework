@@ -10,7 +10,7 @@
 //!
 //! let agent = DeclAgentBuilder::new()
 //!     .from_yaml_file("my-agent.yaml")
-//!     .with_model("deepseek-v4-flash")
+//!     .with_model("agnes-2.0-flash")
 //!     .with_api_key(&std::env::var("DEEPSEEK_API_KEY").unwrap())
 //!     .build()
 //!     .await?;

@@ -176,10 +176,10 @@ pub struct HostConfig {
 
 ```bash
 # WebSocket 模式
-rust-agent-host --mode ws --bind 0.0.0.0:9876 --api-key $DEEPSEEK_API_KEY
+rust-agent-host --mode ws --bind 0.0.0.0:9876 --api-key $AGNES_API_KEY
 
 # Stdio 模式（默认）
-rust-agent-host --api-key $DEEPSEEK_API_KEY
+rust-agent-host --api-key $AGNES_API_KEY
 
 # 加载声明式 Agent
 rust-agent-host --agents-dir ./agents

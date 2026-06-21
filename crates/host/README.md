@@ -83,7 +83,7 @@ cargo run -p rust-agent-host -- --mode ws --config host.toml --agents-dir ./agen
 ### 环境要求
 
 - Rust 1.80+
-- DeepSeek API Key（或其他 OpenAI 兼容提供商）
+- Agnes API Key（或其他 OpenAI 兼容提供商）
 
 ### CLI 参数
 
@@ -93,8 +93,8 @@ cargo run -p rust-agent-host -- --mode ws --config host.toml --agents-dir ./agen
 | `--bind` | WebSocket 监听地址 | `127.0.0.1:9876` |
 | `--config` | TOML 配置文件路径 | `host.toml` |
 | `--agents-dir` | 声明式智能体文件目录 | 无 |
-| `--provider` | LLM 提供商 | `deepseek` |
-| `--model` | 模型名称 | `deepseek-v4-flash` |
+| `--provider` | LLM 提供商 | `openai` |
+| `--model` | 模型名称 | `agnes-2.0-flash` |
 | `--api-key` | API 密钥（支持 `$ENV_VAR` 语法） | 无 |
 
 ### 环境变量
@@ -102,9 +102,9 @@ cargo run -p rust-agent-host -- --mode ws --config host.toml --agents-dir ./agen
 配置可通过 `RAF_` 前缀环境变量覆盖：
 
 ```bash
-export RAF_PROVIDER__PROVIDER=deepseek
-export RAF_PROVIDER__MODEL=deepseek-v4-flash
-export RAF_PROVIDER__API_KEY=$DEEPSEEK_API_KEY
+export RAF_PROVIDER__PROVIDER=openai
+export RAF_PROVIDER__MODEL=agnes-2.0-flash
+export RAF_PROVIDER__API_KEY=$AGNES_API_KEY
 ```
 
 > 注：使用双下划线 `__` 分隔嵌套字段。
@@ -120,9 +120,10 @@ ws_bind = "0.0.0.0:9876"
 
 # LLM 提供商
 [provider]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-api_key = "$DEEPSEEK_API_KEY"
+provider = "openai"
+model = "agnes-2.0-flash"
+api_key = "$AGNES_API_KEY"
+base_url = "https://apihub.agnes-ai.com/v1"
 temperature = 0.7
 
 # 内置智能体开关
@@ -149,11 +150,12 @@ agents_dir = "./agents"
 支持任意 OpenAI 兼容的 API 提供商：
 
 ```toml
-# DeepSeek（默认）
+# Agnes（默认）
 [provider]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-api_key = "$DEEPSEEK_API_KEY"
+provider = "openai"
+model = "agnes-2.0-flash"
+api_key = "$AGNES_API_KEY"
+base_url = "https://apihub.agnes-ai.com/v1"
 
 # OpenAI
 [provider]
@@ -295,8 +297,9 @@ Host 内置 `TokenBudgetStrategy` 上下文压缩管线，自动管理长会话�
 
 ```toml
 [provider]
-provider = "deepseek"
-model = "deepseek-v4-flash"
+provider = "openai"
+model = "agnes-2.0-flash"
+base_url = "https://apihub.agnes-ai.com/v1"
 context_window_tokens = 128000
 max_output_tokens = 8192
 ```
@@ -948,9 +951,10 @@ while let Some(msg) = read.next().await {
   "description": "代码专家智能体（声明式）",
   "instructions": "你是资深软件工程师。用中文回复，代码块使用 markdown 格式。",
   "model": {
-    "provider": "deepseek",
-    "model": "deepseek-v4-flash",
-    "api_key": "$DEEPSEEK_API_KEY"
+    "provider": "openai",
+    "model": "agnes-2.0-flash",
+    "api_key": "$AGNES_API_KEY",
+    "base_url": "https://apihub.agnes-ai.com/v1"
   },
   "tools": [
     { "type": "builtin", "name": "read_file" },

@@ -199,10 +199,11 @@ let agent = AgentBuilder::new("assistant")
 kind: prompt
 name: mcp-agent
 model:
-  id: deepseek-v3
+  id: agnes-2.0-flash
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
+    api_key: $AGNES_API_KEY
+    endpoint: https://apihub.agnes-ai.com/v1
 instructions: You can use MCP tools to interact with external services.
 tools:
   - kind: mcp

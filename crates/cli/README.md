@@ -21,7 +21,7 @@ cli-agent.yaml (MAF v1.0) → DeclAgentBuilder → Arc<dyn IAgent> → ReplRunne
 - 设置环境变量：
 
 ```bash
-export DEEPSEEK_API_KEY="sk-your-key-here"
+export AGNES_API_KEY="sk-your-key-here"
 ```
 
 未设置时将使用编译期默认值（仅供开发测试）。
@@ -66,11 +66,11 @@ Agent 的核心配置在 `cli-agent.yaml` 中维护，遵循 MAF AgentSchema v1.
 kind: prompt
 name: cli-agent
 model:
-  id: deepseek-v4-flash
+  id: agnes-2.0-flash
   provider: deepseek
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY          # 从环境变量读取
+    api_key: $AGNES_API_KEY          # 从环境变量读取
 instructions: |
   You are a helpful AI assistant. Respond concisely.
   # ... 完整系统指令 ...
@@ -162,7 +162,7 @@ use rust_agent_decl::DeclAgentBuilder;
 
 let agent = DeclAgentBuilder::new()
     .from_yaml_file("cli-agent.yaml")    // YAML 声明文件
-    .with_model("deepseek-v4-flash")      // 可选：覆盖 YAML 中的模型
+    .with_model("agnes-2.0-flash")      // 可选：覆盖 YAML 中的模型
     .with_api_key(&api_key)               // 可选：覆盖 API Key
     .with_tool("echo", |_| Ok(Arc::new(Echo)))
     .with_context(skill_memory)           // 可选：注入 ContextProvider
@@ -208,11 +208,11 @@ let agent = DeclAgentBuilder::new()
 
 支持三种方式，优先级从高到低：
 
-1. **环境变量** `DEEPSEEK_API_KEY`（推荐生产环境）
+1. **环境变量** `AGNES_API_KEY`（推荐生产环境）
 2. **`DeclAgentBuilder::with_api_key()`** 运行时传入
 3. **编译期默认值**（仅供开发测试，`main.rs:20`）
 
-YAML 中的 `api_key: $DEEPSEEK_API_KEY` 在解析时自动展开环境变量（由 `ConnectionResolver` 处理）。
+YAML 中的 `api_key: $AGNES_API_KEY` 在解析时自动展开环境变量（由 `ConnectionResolver` 处理）。
 
 ## 依赖
 

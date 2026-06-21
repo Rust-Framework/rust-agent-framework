@@ -175,10 +175,10 @@ let yaml = r#"
 kind: prompt
 name: coding-agent
 model:
-  id: deepseek-v4-flash
+  id: agnes-2.0-flash
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
+    api_key: $AGNES_API_KEY
 instructions: 你是一个资深软件工程师。
 tools:
   - kind: function
@@ -365,10 +365,10 @@ let agent = DeclAgentBuilder::quick("agents/my-agent.yaml").await?;
     "name": "coding-assistant",
     "description": "代码助手智能体",
     "model": {
-        "id": "deepseek-v4-flash",
+        "id": "agnes-2.0-flash",
         "connection": {
             "kind": "key",
-            "api_key": "$DEEPSEEK_API_KEY"
+            "api_key": "$AGNES_API_KEY"
         },
         "options": {
             "temperature": 0.3,
@@ -402,10 +402,10 @@ let agent = DeclAgentBuilder::quick("agents/my-agent.yaml").await?;
             "kind": "prompt",
             "name": "code-reviewer",
             "model": {
-                "id": "deepseek-v4-flash",
+                "id": "agnes-2.0-flash",
                 "connection": {
                     "kind": "key",
-                    "api_key": "$DEEPSEEK_API_KEY"
+                    "api_key": "$AGNES_API_KEY"
                 }
             },
             "instructions": "你是代码审查专家。",

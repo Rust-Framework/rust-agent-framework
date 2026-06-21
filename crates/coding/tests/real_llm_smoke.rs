@@ -1,12 +1,12 @@
-//! 真实 LLM 集成测试 — 验证 coding crate 与 DeepSeek API 的端到端连通性。
+//! 真实 LLM 集成测试 — 验证 coding crate 与 Agnes API 的端到端连通性。
 //!
 //! 这些测试需要真实 API key，默认被忽略（`#[ignore]`）。
 //! 运行方式：
 //! ```bash
-//! DEEPSEEK_API_KEY=sk-xxx cargo test -p rust-agent-coding --test real_llm_smoke -- --ignored --nocapture
+//! AGNES_API_KEY=sk-xxx cargo test -p rust-agent-coding --test real_llm_smoke -- --ignored --nocapture
 //! ```
 //!
-//! 若未设置 `DEEPSEEK_API_KEY` 环境变量，将回退到 cli crate 的 `cli-agent.yaml` 中配置的 key。
+//! 若未设置 `AGNES_API_KEY` 环境变量，将回退到 cli crate 的 `cli-agent.yaml` 中配置的 key。
 
 use std::sync::Arc;
 
@@ -25,11 +25,11 @@ use rust_agent_workflow::{
 
 /// 从环境变量或 cli-agent.yaml 回退获取 API key。
 fn resolve_api_key() -> String {
-    if let Ok(key) = std::env::var("DEEPSEEK_API_KEY") {
+    if let Ok(key) = std::env::var("AGNES_API_KEY") {
         return key;
     }
     // 回退到 cli crate 的 cli-agent.yaml 中配置的 key
-    "sk-b8136a230aea467e8cdfe4649cab2d3e".to_string()
+    "sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m".to_string()
 }
 
 /// 构建一个调用 `yield_output` 的终点节点。
@@ -55,7 +55,8 @@ fn output_node(node_id: &str) -> Arc<dyn IExecutor> {
 #[ignore]
 async fn test_real_requirements_analysis() {
     let api_key = resolve_api_key();
-    let options = ChatClientOptions::deepseek("deepseek-v4-flash", api_key);
+    let mut options = ChatClientOptions::openai("agnes-2.0-flash", api_key);
+    options.api_base = "https://apihub.agnes-ai.com/v1".to_string();
     let workspace_root = std::env::temp_dir();
 
     // 构建简化图：p1_inject → p1_analyst → p1_persist → output

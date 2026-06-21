@@ -19,11 +19,11 @@ flowchart LR
 **AgentBuilder（手写）**：
 
 ```rust
-use rust_agent_client::DeepSeekChatClient;
+use rust_agent_client::OpenAiChatClient;
 
-let client = DeepSeekChatClient::from_key(
-    &std::env::var("DEEPSEEK_API_KEY").unwrap(),
-    "deepseek-chat",
+let client = OpenAiChatClient::from_key(
+    &std::env::var("AGNES_API_KEY").unwrap(),
+    "agnes-2.0-flash",
 )?;
 
 let agent = AgentBuilder::new("my-agent")
@@ -39,11 +39,12 @@ let agent = AgentBuilder::new("my-agent")
 kind: prompt
 name: my-agent
 model:
-  id: deepseek-chat
-  provider: deepseek
+  id: agnes-2.0-flash
+  provider: openai
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
+    api_key: $AGNES_API_KEY
+    endpoint: https://apihub.agnes-ai.com/v1
 instructions: 你是一个助手。
 ```
 
@@ -241,7 +242,7 @@ contexts:
 
 ```rust
 // 切换模型需要重建 ChatClient 和 AgentBuilder
-let client = DeepSeekChatClient::from_key(&key, "deepseek-reasoner")?;
+let client = OpenAiChatClient::from_key(&key, "agnes-2.0-flash")?;
 let agent = AgentBuilder::new("agent")
     .chat_client(client)
     .build()?;
@@ -253,7 +254,7 @@ let agent = AgentBuilder::new("agent")
 // 覆盖 YAML 中的模型，无需修改配置文件
 let agent = DeclAgentBuilder::new()
     .from_yaml_file("agent.yaml")
-    .with_model("deepseek-reasoner")
+    .with_model("agnes-2.0-flash")
     .build()
     .await?;
 ```
@@ -266,7 +267,7 @@ let agent = DeclAgentBuilder::new()
 let agent = DeclAgentBuilder::new()
     .from_yaml_file("agent.yaml")          // YAML 基础配置
     .with_api_key(&env_key)                 // 运行时注入 API Key
-    .with_model("deepseek-reasoner")        // 运行时切换模型
+    .with_model("agnes-2.0-flash")        // 运行时切换模型
     .with_context(Arc::new(custom_prov))    // 注入 YAML 不支持的 Provider
     .with_tool("my_tool", factory)          // 注册自定义工具工厂
     .max_tool_rounds(20)                    // 覆盖 YAML 中的 maxToolRounds

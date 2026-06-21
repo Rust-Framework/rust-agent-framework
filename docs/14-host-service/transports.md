@@ -78,7 +78,7 @@ Stdio 传输使用行分隔的 JSON（Line-Delimited JSON）：
 
 ```bash
 # 启动 Stdio 模式（默认）
-rust-agent-host --api-key $DEEPSEEK_API_KEY
+rust-agent-host --api-key $AGNES_API_KEY
 
 # 或显式指定
 rust-agent-host --mode stdio --api-key $DEEPSEEK_API_KEY
@@ -194,9 +194,9 @@ mode = "ws"
 ws_bind = "0.0.0.0:9876"
 
 [provider]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-api_key = "$DEEPSEEK_API_KEY"
+provider = "openai"
+model = "agnes-2.0-flash"
+api_key = "$AGNES_API_KEY"
 
 [agents]
 coding = true
@@ -209,8 +209,8 @@ analysis = true
 ```bash
 export RAF_MODE=ws
 export RAF_WS_BIND=0.0.0.0:9876
-export RAF_PROVIDER__PROVIDER=deepseek
-export RAF_PROVIDER__MODEL=deepseek-v4-flash
+export RAF_PROVIDER__PROVIDER=openai
+export RAF_PROVIDER__MODEL=agnes-2.0-flash
 ```
 
 ## 传输对比

@@ -98,7 +98,7 @@ services.AddSingleton<IChatClient>(new OpenAIChatClient(model, apiKey));
 use rust_agent_client::{DeepSeekChatClient, ChatClientOptions};
 
 let client = DeepSeekChatClient::new(
-    ChatClientOptions::deepseek("deepseek-v4-flash", api_key)
+    ChatClientOptions::deepseek("agnes-2.0-flash", api_key)
 )?;
 
 // 或 OpenAI 兼容
@@ -183,10 +183,10 @@ RAF 的 AgentSchema v1.0 与 MAF 完全兼容：
     "kind": "prompt",
     "name": "my-agent",
     "model": {
-        "id": "deepseek-v4-flash",
+        "id": "agnes-2.0-flash",
         "connection": {
             "kind": "key",
-            "api_key": "$DEEPSEEK_API_KEY"
+            "api_key": "$AGNES_API_KEY"
         }
     },
     "instructions": "You are a helpful assistant.",
@@ -203,7 +203,7 @@ RAF 的 AgentSchema v1.0 与 MAF 完全兼容：
 | 步骤 | 说明 |
 |------|------|
 | 1. 工具迁移 | 将 MAF 工具类转换为 `#[tool]` 宏标注的异步函数 |
-| 2. Provider 切换 | 从 MAF 的 IChatClient 切换到 RAF 的 DeepSeekChatClient |
+| 2. Provider 切换 | 从 MAF 的 IChatClient 切换到 RAF 的 OpenAiChatClient |
 | 3. 流式处理 | 从 `IAsyncEnumerable` 切换到 `StreamExt` |
 | 4. 会话管理 | 从 `AgentThread` 切换到 `AgentSession` |
 | 5. 编排模式 | 使用 `SequentialWorkflow`、`ConcurrentWorkflow` 等对应类型 |

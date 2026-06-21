@@ -129,7 +129,7 @@ Host 服务端内置 `TokenBudgetStrategy` 上下文压缩管线，自动管理�
 ```toml
 [provider]
 provider = "deepseek"
-model = "deepseek-v4-flash"
+model = "agnes-2.0-flash"
 context_window_tokens = 128000
 max_output_tokens = 8192
 ```

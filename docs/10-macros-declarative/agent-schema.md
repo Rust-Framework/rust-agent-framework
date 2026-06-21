@@ -68,7 +68,7 @@ pub struct PromptAgentData {
 
 ```rust
 pub struct Model {
-    pub id: String,                    // 模型 ID（如 "deepseek-v4-flash"）
+    pub id: String,                    // 模型 ID（如 "agnes-2.0-flash"）
     pub connection: Connection,        // 连接配置
     pub options: Option<ModelOptions>, // 可选：模型参数
 }
@@ -238,12 +238,12 @@ pub struct Property {
         ]
     },
     "model": {
-        "id": "deepseek-v4-flash",
+        "id": "agnes-2.0-flash",
         "connection": {
             "kind": "key",
-            "api_key": "$DEEPSEEK_API_KEY",
+            "api_key": "$AGNES_API_KEY",
             "auth_mode": "key",
-            "base_url": "https://api.deepseek.com/v1"
+            "endpoint": "https://apihub.agnes-ai.com/v1"
         },
         "options": {
             "temperature": 0.3,
@@ -296,10 +296,10 @@ pub struct Property {
             "displayName": "代码审查员",
             "description": "专注于代码质量审查",
             "model": {
-                "id": "deepseek-v4-flash",
+                "id": "agnes-2.0-flash",
                 "connection": {
                     "kind": "key",
-                    "api_key": "$DEEPSEEK_API_KEY"
+                    "api_key": "$AGNES_API_KEY"
                 }
             },
             "instructions": "你是资深代码审查员。关注安全漏洞、性能问题和代码异味。",
@@ -318,10 +318,10 @@ pub struct Property {
             "displayName": "测试生成器",
             "description": "自动生成单元测试和集成测试",
             "model": {
-                "id": "deepseek-v4-flash",
+                "id": "agnes-2.0-flash",
                 "connection": {
                     "kind": "key",
-                    "api_key": "$DEEPSEEK_API_KEY"
+                    "api_key": "$AGNES_API_KEY"
                 }
             },
             "instructions": "你专门生成高质量的测试代码。覆盖边界条件和异常路径。",
@@ -354,7 +354,7 @@ pub struct Property {
     "template": {
         "kind": "prompt",
         "name": "coding-assistant",
-        "model": { "id": "deepseek-v4-flash", "connection": { "kind": "key", "api_key": "$DEEPSEEK_API_KEY" } },
+        "model": { "id": "agnes-2.0-flash", "connection": { "kind": "key", "api_key": "$AGNES_API_KEY" } },
         "instructions": "..."
     },
     "parameters": {
@@ -363,7 +363,7 @@ pub struct Property {
         ]
     },
     "resources": [
-        { "name": "primary-model", "kind": "model", "id": "deepseek-v4-flash" },
+        { "name": "primary-model", "kind": "model", "id": "agnes-2.0-flash" },
         { "name": "filesystem-tools", "kind": "tool", "id": "builtin.filesystem" }
     ]
 }

@@ -24,9 +24,10 @@ cargo run -p rust-agent-host -- --mode ws --bind 127.0.0.1:9876
 
 ```toml
 [provider]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-api_key = "$DEEPSEEK_API_KEY"
+provider = "openai"
+model = "agnes-2.0-flash"
+api_key = "$AGNES_API_KEY"
+base_url = "https://apihub.agnes-ai.com/v1"
 temperature = 0.3
 max_tokens = 8192
 context_window_tokens = 128000
@@ -46,11 +47,11 @@ max_iterations = 3
 或通过环境变量 / CLI 参数：
 
 ```bash
-DEEPSEEK_API_KEY=sk-xxx \
+AGNES_API_KEY=sk-xxx \
 cargo run -p rust-agent-host -- \
   --mode stdio \
   --provider deepseek \
-  --model deepseek-v4-flash \
+  --model agnes-2.0-flash \
   --workspace-root /path/to/project
 ```
 
@@ -68,7 +69,7 @@ const hostProcess = spawn('cargo', [
   'run', '-p', 'rust-agent-host', '--',
   '--mode', 'stdio',
   '--provider', 'deepseek',
-  '--api-key', '$DEEPSEEK_API_KEY'
+  '--api-key', '$AGNES_API_KEY'
 ], {
   stdio: ['pipe', 'pipe', 'pipe']
 });
@@ -345,7 +346,7 @@ IDE 客户端应在聊天窗口中提供模型配置选择器：
 ├─────────────────────────────────────────────┤
 │  [输入消息...]                    [发送]     │
 ├─────────────────────────────────────────────┤
-│  模型: deepseek-v4-flash | 温度: 0.3 |      │
+│  模型: agnes-2.0-flash | 温度: 0.3 |      │
 │  思考: ✓ high | max_tokens: 8192            │
 └─────────────────────────────────────────────┘
 ```

@@ -31,11 +31,12 @@ kind: prompt
 name: workspace-agent
 description: 工作区管理的全栈开发助手
 model:
-  id: deepseek-v4-flash
-  provider: deepseek
+  id: agnes-2.0-flash
+  provider: openai
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
+    api_key: $AGNES_API_KEY
+    endpoint: https://apihub.agnes-ai.com/v1
 instructions: |
   你是一个工作区感知的开发助手。
   

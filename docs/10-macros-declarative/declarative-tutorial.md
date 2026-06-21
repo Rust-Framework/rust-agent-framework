@@ -17,11 +17,11 @@
 kind: prompt
 name: hello-agent
 model:
-  id: deepseek-v4-flash
-  provider: deepseek
+  id: agnes-2.0-flash
+  provider: openai
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
+    api_key: $AGNES_API_KEY
 instructions: 你是一个友好的助手，用中文简洁作答。
 maxToolRounds: 3
 ```
@@ -50,11 +50,11 @@ let mut stream = agent.run(messages, Some(session), None).await?;
 kind: prompt
 name: tool-agent
 model:
-  id: deepseek-v4-flash
-  provider: deepseek
+  id: agnes-2.0-flash
+  provider: openai
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
+    api_key: $AGNES_API_KEY
 instructions: 你是文件管理助手，可以读写文件。
 tools:
   # 内置工具：只需 kind + name
@@ -162,12 +162,12 @@ displayName: 生产级全栈助手
 description: 具备工作区管理、记忆、技能和多种工具的全栈开发 Agent
 
 model:
-  id: deepseek-v4-flash
-  provider: deepseek
+  id: agnes-2.0-flash
+  provider: openai
   connection:
     kind: key
-    api_key: $DEEPSEEK_API_KEY
-    base_url: https://api.deepseek.com/v1
+    api_key: $AGNES_API_KEY
+    endpoint: https://apihub.agnes-ai.com/v1
   options:
     temperature: 0.3
     maxTokens: 8192
