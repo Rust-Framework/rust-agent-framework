@@ -7,7 +7,7 @@ use serde_json::Value;
 use agent_client_protocol::{Client, ConnectionTo};
 use agent_client_protocol::schema::{
     InitializeRequest, InitializeResponse, AgentCapabilities, PromptCapabilities,
-    SessionCapabilities, McpCapabilities,
+    SessionCapabilities,
     NewSessionRequest, NewSessionResponse, SessionId,
     PromptRequest,
     CancelNotification,
@@ -50,8 +50,7 @@ impl RafAgentHost {
                     debug!("Initialize request");
                     let caps = AgentCapabilities::new()
                         .prompt_capabilities(PromptCapabilities::new())
-                        .session_capabilities(SessionCapabilities::new())
-                        .mcp_capabilities(McpCapabilities::new());
+                        .session_capabilities(SessionCapabilities::new());
                     let mut resp = InitializeResponse::new(req.protocol_version)
                         .agent_capabilities(caps);
                     let agent_list = r1.build_agent_list_meta();

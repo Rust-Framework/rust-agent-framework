@@ -27,6 +27,9 @@ pub struct HostConfig {
     /// 工作区根目录（供 Agent 文件工具使用）。默认为当前目录。
     #[serde(default = "default_workspace_root")]
     pub workspace_root: String,
+    /// 会话持久化目录。设置后，会话将持久化到文件系统，服务重启后可恢复。
+    #[serde(default)]
+    pub session_store_dir: Option<String>,
 }
 
 fn default_mode() -> TransportMode { TransportMode::Stdio }
@@ -198,6 +201,10 @@ pub struct CliArgs {
     #[arg(long)]
     #[serde(skip)]
     pub no_dev_pipeline: bool,
+    /// 会话持久化目录（设置后启用会话持久化）
+    #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_store_dir: Option<String>,
 }
 
 /// 从分层源加载配置：

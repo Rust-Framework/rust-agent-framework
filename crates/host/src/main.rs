@@ -94,8 +94,14 @@ async fn main() -> Result<()> {
         "All agents registered"
     );
 
-    // Create session bridge
-    let session_bridge = Arc::new(SessionBridge::new());
+    // Create session bridge (with optional persistence)
+    let session_bridge = if let Some(ref dir) = config.session_store_dir {
+        info!(session_store_dir = %dir, "Session persistence enabled");
+        let store = rust_agent_framework::FileSystemSessionStore::new(dir);
+        Arc::new(SessionBridge::with_store(Arc::new(store)))
+    } else {
+        Arc::new(SessionBridge::new())
+    };
     let graph_registry = Arc::new(tokio::sync::Mutex::new(graph_registry));
 
     info!("Starting ACP server in {:?} mode", config.mode);

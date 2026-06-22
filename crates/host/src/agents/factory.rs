@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use tracing::warn;
-use rust_agent_core::{IAgent, ModelMetadata};
+use rust_agent_core::{IAgent, ModelMetadata, WorkspaceScope};
 use rust_agent_client::{ChatClientOptions, OpenAiChatClient};
-use rust_agent_framework::{AgentBuilder, TokenBudgetStrategy, EstimateCounter};
+use rust_agent_framework::{AgentBuilder, TokenBudgetStrategy, EstimateCounter, WorkspaceContextProvider};
 use rust_agent_workflow::WorkflowAgent;
 
 use crate::config::HostConfig;
@@ -162,6 +162,15 @@ impl<'a> AgentFactory<'a> {
             .with_token_counter(Arc::new(EstimateCounter::new()))
     }
 
+    /// 创建工作区上下文提供器，让 Agent 感知工作区根路径和文件树。
+    fn create_workspace_provider(&self) -> WorkspaceContextProvider {
+        let scope = Arc::new(WorkspaceScope::new(
+            &self.config.workspace_root,
+            "workspace",
+        ));
+        WorkspaceContextProvider::new(scope)
+    }
+
     /// Create the coding agent.
     fn create_coding_agent(&self) -> Result<Arc<dyn IAgent>> {
         let client = self.create_client(None)?;
@@ -221,6 +230,7 @@ impl<'a> AgentFactory<'a> {
 
         let agent = Self::apply_compression(AgentBuilder::new("analysis"))
             .chat_client(client)
+            .add_context_provider(self.create_workspace_provider())
             .instructions(
                 "你是数据分析师，专注于深度研究、多源对比和趋势分析。\n\n\
                 工作方法：\n\
