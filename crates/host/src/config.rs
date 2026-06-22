@@ -30,11 +30,19 @@ pub struct HostConfig {
     /// 会话持久化目录。设置后，会话将持久化到文件系统，服务重启后可恢复。
     #[serde(default)]
     pub session_store_dir: Option<String>,
+    /// 记忆系统目录。设置后，Agent 将拥有跨会话持久记忆（SkillMemoryContextProvider）。
+    /// 记忆文件存储在此目录下，包含 AGENT.md、SKILL.md 和各记忆条目。
+    #[serde(default)]
+    pub memory_dir: Option<String>,
+    /// 工作区越界策略。可选值：allow_all（无限制）、approve_outside（越界审批，默认）、deny_outside（禁止越界）。
+    #[serde(default = "default_scope_policy")]
+    pub scope_policy: String,
 }
 
 fn default_mode() -> TransportMode { TransportMode::Stdio }
 fn default_ws_bind() -> String { "127.0.0.1:9876".into() }
 fn default_workspace_root() -> String { ".".into() }
+fn default_scope_policy() -> String { "approve_outside".into() }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
@@ -205,6 +213,14 @@ pub struct CliArgs {
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_store_dir: Option<String>,
+    /// 记忆系统目录（设置后启用跨会话持久记忆）
+    #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_dir: Option<String>,
+    /// 工作区越界策略（allow_all/approve_outside/deny_outside）
+    #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope_policy: Option<String>,
 }
 
 /// 从分层源加载配置：

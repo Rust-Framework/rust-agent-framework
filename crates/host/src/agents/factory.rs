@@ -3,10 +3,14 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use anyhow::{anyhow, Result};
-use tracing::warn;
-use rust_agent_core::{IAgent, ModelMetadata, WorkspaceScope};
+use tracing::{debug, warn};
+use rust_agent_core::{IAgent, ModelMetadata, ScopePolicy, WorkspaceScope};
 use rust_agent_client::{ChatClientOptions, OpenAiChatClient};
-use rust_agent_framework::{AgentBuilder, TokenBudgetStrategy, EstimateCounter, WorkspaceContextProvider};
+use rust_agent_framework::{
+    AgentBuilder, TokenBudgetStrategy, EstimateCounter,
+    WorkspaceContextProvider, tools,
+    memory::SkillMemoryContextProvider,
+};
 use rust_agent_workflow::WorkflowAgent;
 
 use crate::config::HostConfig;
@@ -163,20 +167,64 @@ impl<'a> AgentFactory<'a> {
     }
 
     /// 创建工作区上下文提供器，让 Agent 感知工作区根路径和文件树。
+    ///
+    /// 文件相关工具通过 `add_tool()` 注册，自动应用：
+    /// 1. **Scope 注入** — 工具实现 `IScopeTool` 时自动注入 workspace scope，
+    ///    相对路径在工作区内解析，越界操作标记 `outside_workspace`
+    /// 2. **审批包裹** — 根据 `scope_policy`：
+    ///    - `ApproveOutside`（默认）→ 越界操作包裹 `ApprovalRequiredTool`，触发 HITL 审批
+    ///    - `DenyOutside` → 越界操作直接拒绝
+    ///    - `AllowAll` → 无限制
     fn create_workspace_provider(&self) -> WorkspaceContextProvider {
-        let scope = Arc::new(WorkspaceScope::new(
-            &self.config.workspace_root,
-            "workspace",
-        ));
+        let policy = ScopePolicy::from_config_str(&self.config.scope_policy);
+        let scope = Arc::new(
+            WorkspaceScope::new(&self.config.workspace_root, "workspace")
+                .with_policy(policy),
+        );
         WorkspaceContextProvider::new(scope)
     }
 
+    /// 创建带完整文件工具集的工作区上下文提供器。
+    ///
+    /// 所有文件工具通过 `add_tool()` 注册，受 scope 管控和审批策略约束。
+    fn create_workspace_provider_with_tools(&self) -> WorkspaceContextProvider {
+        self.create_workspace_provider()
+            .add_tool(tools::ReadFile::default())
+            .add_tool(tools::WriteFile::default())
+            .add_tool(tools::EditFile::default())
+            .add_tool(tools::ListFiles::default())
+            .add_tool(tools::SearchFile::default())
+            .add_tool(tools::FindFiles::default())
+            .add_tool(tools::RunCommand::default())
+            .add_tool(tools::MakeDirectory::default())
+            .add_tool(tools::MoveFile::default())
+            .add_tool(tools::RemovePath::default())
+            .add_tool(tools::InspectFile::default())
+    }
+
+    /// 创建记忆上下文提供器（如果配置了 `memory_dir`）。
+    ///
+    /// 启用后，Agent 拥有跨会话持久记忆：
+    /// - 自动加载 `memory_dir/AGENT.md` 和 `SKILL.md`
+    /// - 每 `consolidation_interval` 轮自动运行 MemoryAgent 整合记忆
+    /// - 记忆文件持久化到 `memory_dir`
+    fn create_memory_provider(&self) -> Option<SkillMemoryContextProvider> {
+        self.config.memory_dir.as_ref().map(|dir| {
+            debug!(memory_dir = %dir, "Creating memory provider");
+            SkillMemoryContextProvider::new(dir)
+        })
+    }
+
     /// Create the coding agent.
+    ///
+    /// 文件工具通过 WorkspaceContextProvider 注入，受 scope 管控和审批策略约束。
+    /// 如果配置了 memory_dir，同时挂载 SkillMemoryContextProvider 实现跨会话记忆。
     fn create_coding_agent(&self) -> Result<Arc<dyn IAgent>> {
         let client = self.create_client(None)?;
 
-        let agent = Self::apply_compression(AgentBuilder::new("coding"))
+        let mut builder = Self::apply_compression(AgentBuilder::new("coding"))
             .chat_client(client)
+            .add_context_provider(self.create_workspace_provider_with_tools())
             .instructions(
                 "你是资深软件工程师，专注于代码生成、代码审查、Bug 定位和代码重构。\n\n\
                 工作原则：\n\
@@ -187,28 +235,22 @@ impl<'a> AgentFactory<'a> {
                 5. 修改文件前先读取文件内容\n\
                 6. 用中文回复")
             .with_description("代码专家智能体 — 代码生成、审查、调试、重构")
-            .with_tool(rust_agent_framework::tools::ReadFile::default())
-            .with_tool(rust_agent_framework::tools::WriteFile::default())
-            .with_tool(rust_agent_framework::tools::EditFile::default())
-            .with_tool(rust_agent_framework::tools::ListFiles::default())
-            .with_tool(rust_agent_framework::tools::SearchFile::default())
-            .with_tool(rust_agent_framework::tools::FindFiles::default())
-            .with_tool(rust_agent_framework::tools::RunCommand::default())
-            .with_tool(rust_agent_framework::tools::MakeDirectory::default())
-            .with_tool(rust_agent_framework::tools::MoveFile::default())
-            .with_tool(rust_agent_framework::tools::RemovePath::default())
-            .with_tool(rust_agent_framework::tools::InspectFile::default())
-            .max_tool_rounds(15)
-            .build()?;
+            .max_tool_rounds(15);
 
-        Ok(agent)
+        if let Some(memory_provider) = self.create_memory_provider() {
+            builder = builder.add_context_provider(memory_provider);
+        }
+
+        Ok(builder.build()?)
     }
 
     /// Create the general agent.
+    ///
+    /// 通用助手不需要文件工具，但如果配置了记忆系统则挂载记忆 provider。
     fn create_general_agent(&self) -> Result<Arc<dyn IAgent>> {
         let client = self.create_client(None)?;
 
-        let agent = Self::apply_compression(AgentBuilder::new("general"))
+        let mut builder = Self::apply_compression(AgentBuilder::new("general"))
             .chat_client(client)
             .instructions(
                 "你是通用 AI 助手，擅长回答问题、写作、分析和创意工作。\n\n\
@@ -218,19 +260,28 @@ impl<'a> AgentFactory<'a> {
                 3. 使用 markdown 格式组织长回复\n\
                 4. 用中文回复")
             .with_description("通用 AI 助手 — 回答问题、写作、分析、创意")
-            .max_tool_rounds(5)
-            .build()?;
+            .max_tool_rounds(5);
 
-        Ok(agent)
+        if let Some(memory_provider) = self.create_memory_provider() {
+            builder = builder.add_context_provider(memory_provider);
+        }
+
+        Ok(builder.build()?)
     }
 
     /// Create the analysis agent.
+    ///
+    /// 文件工具通过 WorkspaceContextProvider 注入，受 scope 管控。
+    /// 如果配置了 memory_dir，同时挂载记忆 provider。
     fn create_analysis_agent(&self) -> Result<Arc<dyn IAgent>> {
         let client = self.create_client(None)?;
 
-        let agent = Self::apply_compression(AgentBuilder::new("analysis"))
+        let mut builder = Self::apply_compression(AgentBuilder::new("analysis"))
             .chat_client(client)
-            .add_context_provider(self.create_workspace_provider())
+            .add_context_provider(
+                self.create_workspace_provider()
+                    .add_tool(tools::ReadFile::default())
+            )
             .instructions(
                 "你是数据分析师，专注于深度研究、多源对比和趋势分析。\n\n\
                 工作方法：\n\
@@ -240,10 +291,12 @@ impl<'a> AgentFactory<'a> {
                 4. 使用表格和列表增强可读性\n\
                 5. 用中文回复")
             .with_description("数据分析师 — 深度研究、多源对比、趋势分析")
-            .with_tool(rust_agent_framework::tools::ReadFile::default())
-            .max_tool_rounds(10)
-            .build()?;
+            .max_tool_rounds(10);
 
-        Ok(agent)
+        if let Some(memory_provider) = self.create_memory_provider() {
+            builder = builder.add_context_provider(memory_provider);
+        }
+
+        Ok(builder.build()?)
     }
 }
