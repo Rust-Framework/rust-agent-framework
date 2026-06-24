@@ -72,14 +72,21 @@ pub(crate) struct OpenAICompletionTokensDetails {
 
 impl OpenAIUsage {
     fn into_usage(self) -> Usage {
+        let cache_hit = self
+            .prompt_cache_hit_tokens
+            .or_else(|| {
+                self.prompt_tokens_details
+                    .and_then(|d| d.cached_tokens)
+            });
+        let cache_miss = self.prompt_cache_miss_tokens.or_else(|| {
+            cache_hit.map(|hit| self.prompt_tokens.saturating_sub(hit))
+        });
         Usage {
             prompt_tokens: self.prompt_tokens,
             completion_tokens: self.completion_tokens,
             total_tokens: self.total_tokens,
-            prompt_cache_hit_tokens: self
-                .prompt_tokens_details
-                .and_then(|d| d.cached_tokens),
-            prompt_cache_miss_tokens: None, // OpenAI does not report cache miss
+            prompt_cache_hit_tokens: cache_hit,
+            prompt_cache_miss_tokens: cache_miss,
             reasoning_tokens: self
                 .completion_tokens_details
                 .and_then(|d| d.reasoning_tokens),
