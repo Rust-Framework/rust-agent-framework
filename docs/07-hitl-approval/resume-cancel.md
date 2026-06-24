@@ -13,7 +13,7 @@
 当审批触发时，`FunctionInvokingChatClient` 构造一条 `Assistant` 角色的消息并通过 `msg_tx` 通道传递：
 
 ```rust
-// crates/framework/src/chat_client_decorators/function_invoking.rs
+// crates/framework/src/decorators/invoke.rs
 
 let assistant_tool_msg = ChatMessage {
     role: MessageRole::Assistant,

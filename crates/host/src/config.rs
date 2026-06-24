@@ -1,4 +1,4 @@
-//! Host configuration — multi-layered config via figment + clap.
+﻿//! Host configuration — multi-layered config via figment + clap.
 
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
@@ -30,10 +30,9 @@ pub struct HostConfig {
     /// 会话持久化目录。设置后，会话将持久化到文件系统，服务重启后可恢复。
     #[serde(default)]
     pub session_store_dir: Option<String>,
-    /// 记忆系统目录。设置后，Agent 将拥有跨会话持久记忆（SkillMemoryContextProvider）。
-    /// 记忆文件存储在此目录下，包含 AGENT.md、SKILL.md 和各记忆条目。
+    /// OKF 知识包目录。设置后 Agent 拥有跨会话持久知识（BundleProvider）。
     #[serde(default)]
-    pub memory_dir: Option<String>,
+    pub bundle_dir: Option<String>,
     /// 工作区越界策略。可选值：allow_all（无限制）、approve_outside（越界审批，默认）、deny_outside（禁止越界）。
     #[serde(default = "default_scope_policy")]
     pub scope_policy: String,
@@ -213,10 +212,10 @@ pub struct CliArgs {
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_store_dir: Option<String>,
-    /// 记忆系统目录（设置后启用跨会话持久记忆）
+    /// OKF 知识包目录（设置后启用跨会话持久知识）
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub memory_dir: Option<String>,
+    pub bundle_dir: Option<String>,
     /// 工作区越界策略（allow_all/approve_outside/deny_outside）
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]

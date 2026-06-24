@@ -1,4 +1,4 @@
-use async_trait::async_trait;
+﻿use async_trait::async_trait;
 use std::sync::Arc;
 
 use crate::{AgentResponse, AgentRunOptions, ChatMessage, IAgent, ISession, ITool, Result};
@@ -65,7 +65,7 @@ pub trait IContextProvider: Send + Sync {
 
     /// 提供器分类——开放字符串，由实现者自行定义。
     ///
-    /// 内置约定值：`"memory"`、`"skills"`、`"mcp"`、`"workspace"`、
+    /// 内置约定值：`"bundle"`、`"skills"`、`"mcp"`、`"workspace"`、
     /// `"knowledge"`、`"wiki"`、`"history"`。
     /// 默认返回 `"unknown"`。
     fn kind(&self) -> &str {

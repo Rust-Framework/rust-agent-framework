@@ -2,6 +2,7 @@ pub mod cache;
 pub mod config;
 pub mod confidence;
 pub mod conflict;
+pub mod context_provider;
 pub mod default_schemas;
 pub mod engine;
 pub mod forgetting;
@@ -39,3 +40,4 @@ pub use governance::{GovernanceConfig, GovernanceScheduler, GovernanceTask, Gove
 pub use hybrid::{hybrid_search, render_hybrid_llms, HybridParams, HybridResult, SourceRank};
 pub use memory::{MemoryStore, MemoryConfig, MemoryTier, MemoryStats, Observation, EpisodicEntry, SemanticEntry, ProceduralEntry};
 pub use vector::{VectorIndex, VectorHit};
+pub use context_provider::WikiContextProvider;

@@ -69,7 +69,7 @@ sequenceDiagram
 审批检测位于 `FunctionInvokingChatClient` 内部流消费的 spawned task 中：
 
 ```rust
-// crates/framework/src/chat_client_decorators/function_invoking.rs
+// crates/framework/src/decorators/invoke.rs
 
 // ── Approval gate: if any tool requires approval, pause and wait ──
 let any_requires_approval = tool_calls.iter().any(|tc| {

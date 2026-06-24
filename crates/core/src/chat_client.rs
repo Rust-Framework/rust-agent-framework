@@ -131,7 +131,7 @@ pub trait IChatClient: Send + Sync {
 
     /// 返回装饰器链中的内部客户端，叶子（API）客户端返回 `None`
     ///
-    /// 上下文提供器（如 SkillMemory）使用此方法解包装饰器层，
+    /// 上下文提供器（如 KnowledgeBundle）使用此方法解包装饰器层，
     /// 以访问原始 API 客户端。装饰器如 `FunctionInvokingChatClient`
     /// 重写此方法；叶子客户端保持默认的 `None`。
     fn inner_client(&self) -> Option<&Arc<dyn IChatClient>> {

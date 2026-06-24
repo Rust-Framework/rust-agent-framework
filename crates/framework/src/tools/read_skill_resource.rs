@@ -1,9 +1,9 @@
-use std::sync::Arc;
+﻿use std::sync::Arc;
 
 use rust_agent_core::ToolResult;
 use rust_agent_macros::tool;
 
-use crate::context_providers::agent_skill::AgentSkill;
+use crate::context::skill::AgentSkill;
 
 pub struct ReadSkillResourceTool {
     pub skills: Arc<Vec<AgentSkill>>,

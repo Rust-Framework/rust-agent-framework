@@ -164,7 +164,7 @@ tools:
 **AgentBuilder**：
 
 ```rust
-use rust_agent_framework::context_providers::AgentSkillsProvider;
+use rust_agent_framework::AgentSkillsProvider;
 
 let skills = AgentSkillsProvider::scan("skills/code-review")?;
 

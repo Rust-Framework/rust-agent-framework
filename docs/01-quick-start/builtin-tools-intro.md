@@ -40,7 +40,7 @@ let agent = AgentBuilder::new("file-agent")
 
 ```rust
 use rust_agent_core::{WorkspaceScope, ScopePolicy};
-use rust_agent_framework::context_providers::WorkspaceContextProvider;
+use rust_agent_framework::WorkspaceContextProvider;
 use rust_agent_framework::tools::*;
 
 let scope = Arc::new(WorkspaceScope::new("/project", "my-project")

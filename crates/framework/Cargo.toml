@@ -10,13 +10,12 @@ description = "Agent runtime framework for building LLM-powered agents with tool
 [dependencies]
 rust-agent-core = { workspace = true }
 rust-agent-macros = { workspace = true }
-rust-agent-rag = { workspace = true, optional = true }
-rust-agent-wiki = { workspace = true, optional = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
@@ -32,8 +31,6 @@ tempfile = { workspace = true }
 
 [features]
 default = []
-rag = ["dep:rust-agent-rag"]
-wiki = ["dep:rust-agent-wiki"]
 tiktoken = ["dep:tiktoken-rs"]
 
 [dependencies.tiktoken-rs]

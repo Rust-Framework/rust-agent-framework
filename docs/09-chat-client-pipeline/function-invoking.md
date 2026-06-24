@@ -5,7 +5,7 @@
 `FunctionInvokingChatClient` 是 RAF 中最核心的装饰器。它实现了完整的工具调用循环——消费 LLM 的流式响应，检测工具调用，执行工具，将结果注入对话，然后循环调用 LLM 直到没有更多工具调用或达到轮次上限。
 
 ```rust
-// crates/framework/src/chat_client_decorators/function_invoking.rs
+// crates/framework/src/decorators/invoke.rs
 
 pub struct FunctionInvokingChatClient {
     inner: Arc<dyn IChatClient>,

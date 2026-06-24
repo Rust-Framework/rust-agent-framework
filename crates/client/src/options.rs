@@ -30,7 +30,8 @@ pub struct ChatClientOptions {
     pub extra_headers: HashMap<String, String>,
     /// 请求超时时间（秒）。
     pub timeout_secs: Option<u64>,
-    /// 描述模型能力边界（上下文窗口、最大输出）的元数据。
+    /// 流式响应是否在 `stream_options` 中请求 `include_usage`（部分兼容网关不支持）。
+    pub stream_include_usage: bool,
     /// 当为 `None` 时，框架无法自动强制 token 限制。
     #[serde(skip)]
     pub model_metadata: Option<ModelMetadata>,
@@ -58,6 +59,7 @@ impl Default for ChatClientOptions {
             stop: None,
             extra_headers: HashMap::new(),
             timeout_secs: Some(60),
+            stream_include_usage: true,
             model_metadata: None,
         }
     }

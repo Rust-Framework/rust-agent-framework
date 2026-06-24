@@ -245,16 +245,16 @@ pub fn resolve_value_ref(spec: &OpenApiSpec, value: &Value) -> Value {
         return value.clone();
     };
 
-    let resolved = match ref_path.strip_prefix("#/components/") {
-        Some(rest) if let Some((kind, name)) = rest.split_once('/') => {
+    let resolved = ref_path
+        .strip_prefix("#/components/")
+        .and_then(|rest| rest.split_once('/'))
+        .and_then(|(kind, name)| {
             spec.components.as_ref().and_then(|c| match kind {
                 "schemas" => c.schemas.get(name).cloned(),
                 "parameters" => c.parameters.get(name).cloned(),
                 _ => None,
             })
-        }
-        _ => None,
-    };
+        });
 
     resolved
         .map(|v| resolve_value_ref(spec, &v))

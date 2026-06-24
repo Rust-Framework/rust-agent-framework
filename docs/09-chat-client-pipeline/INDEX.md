@@ -53,7 +53,7 @@ graph TB
 | `IChatClient` | `rust_agent_core::chat_client` | 聊天客户端 trait，管道叶子接口 |
 | `DelegatingChatClient` | `rust_agent_core::chat_client` | 装饰器基类，透传所有方法 |
 | `ChatClientBuilder` | `rust_agent_core::chat_client` | 管道构建器，按序组装装饰器 |
-| `FunctionInvokingChatClient` | `rust_agent_framework::chat_client_decorators` | 工具调用循环装饰器 |
+| `FunctionInvokingChatClient` | `rust_agent_framework::decorators` | 工具调用循环装饰器 |
 | `ChatClient` | `rust_agent_client::chat_client` | 通用 HTTP/SSE 传输引擎 |
 | `DeepSeekChatClient` | `rust_agent_client::deepseek_client` | DeepSeek 提供商客户端 |
 | `OpenAiChatClient` | `rust_agent_client::openai_client` | OpenAI 提供商客户端 |

@@ -105,7 +105,7 @@ async fn on_invoked(
 ### 基础使用
 
 ```rust
-use rust_agent_framework::context_providers::InMemoryHistoryProvider;
+use rust_agent_framework::InMemoryHistoryProvider;
 
 let provider = InMemoryHistoryProvider::new();
 

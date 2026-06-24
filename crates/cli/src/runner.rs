@@ -472,7 +472,7 @@ impl ReplRunner {
         println!("  /think on    Enable thinking mode");
         println!("  /think off   Disable thinking mode");
         if self.switch_model.is_some() {
-            println!("  /model NAME  Switch model (e.g. deepseek-chat, deepseek-reasoner)");
+            println!("  /model NAME  Switch model (e.g. agnes-2.0-flash)");
         }
         println!("  /quit|exit   Exit (also: quit, exit without slash)");
     }

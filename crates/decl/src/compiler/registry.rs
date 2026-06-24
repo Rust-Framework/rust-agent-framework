@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use rust_agent_core::{IAgent, ITool};
+#[cfg(feature = "mcp")]
 use rust_agent_mcp::McpServerClient;
 
 use crate::resolver::tool_resolver::ToolResolver;
@@ -13,6 +14,7 @@ use crate::resolver::tool_resolver::ToolResolver;
 pub struct CompileRegistry {
     agents: Vec<(String, Arc<dyn IAgent>)>,
     tool_resolver: ToolResolver,
+    #[cfg(feature = "mcp")]
     mcp_servers: HashMap<String, Arc<McpServerClient>>,
     /// 工作流/Agent 级沙箱默认配置
     sandbox_defaults: HashMap<String, serde_json::Value>,
@@ -50,6 +52,7 @@ impl CompileRegistry {
             .map(|(_, a)| Arc::clone(a))
     }
 
+    #[cfg(feature = "mcp")]
     pub fn register_mcp_server(
         &mut self,
         server_url: impl Into<String>,
@@ -61,6 +64,7 @@ impl CompileRegistry {
         self.mcp_servers.insert(url, server);
     }
 
+    #[cfg(feature = "mcp")]
     pub fn get_mcp_server(&self, server_url: &str) -> Option<&Arc<McpServerClient>> {
         self.mcp_servers.get(server_url)
     }

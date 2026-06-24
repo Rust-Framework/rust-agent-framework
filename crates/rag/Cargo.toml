@@ -8,6 +8,8 @@ homepage.workspace = true
 description = "RAG (Retrieval-Augmented Generation) support for the rust-agent-framework ecosystem — document loading, chunking, embedding, vector storage, and retrieval"
 
 [dependencies]
+rust-agent-core = { workspace = true }
+
 # Async runtime
 tokio = { workspace = true }
 
@@ -31,10 +33,14 @@ unicode-segmentation = "1.12"
 # UUID generation for document IDs
 uuid = { workspace = true }
 
+# Directory traversal (context provider indexing)
+walkdir = { workspace = true }
+
 # HTML parsing (for HTML document loading)
 scraper = "0.22"
 
 [dev-dependencies]
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [features]

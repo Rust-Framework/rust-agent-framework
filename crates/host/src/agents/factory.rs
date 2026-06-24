@@ -1,4 +1,4 @@
-//! Agent factory — create built-in agents from configuration presets.
+﻿//! Agent factory — create built-in agents from configuration presets.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -9,7 +9,7 @@ use rust_agent_client::{ChatClientOptions, OpenAiChatClient};
 use rust_agent_framework::{
     AgentBuilder, TokenBudgetStrategy, EstimateCounter,
     WorkspaceContextProvider, tools,
-    memory::SkillMemoryContextProvider,
+    bundle::BundleProvider,
 };
 use rust_agent_workflow::WorkflowAgent;
 
@@ -208,10 +208,10 @@ impl<'a> AgentFactory<'a> {
     /// - 自动加载 `memory_dir/AGENT.md` 和 `SKILL.md`
     /// - 每 `consolidation_interval` 轮自动运行 MemoryAgent 整合记忆
     /// - 记忆文件持久化到 `memory_dir`
-    fn create_memory_provider(&self) -> Option<SkillMemoryContextProvider> {
-        self.config.memory_dir.as_ref().map(|dir| {
-            debug!(memory_dir = %dir, "Creating memory provider");
-            SkillMemoryContextProvider::new(dir)
+    fn create_bundle_provider(&self) -> Option<BundleProvider> {
+        self.config.bundle_dir.as_ref().map(|dir| {
+            debug!(bundle_dir = %dir, "Creating knowledge bundle provider");
+            BundleProvider::new(dir)
         })
     }
 
@@ -237,8 +237,8 @@ impl<'a> AgentFactory<'a> {
             .with_description("代码专家智能体 — 代码生成、审查、调试、重构")
             .max_tool_rounds(15);
 
-        if let Some(memory_provider) = self.create_memory_provider() {
-            builder = builder.add_context_provider(memory_provider);
+        if let Some(bundle_provider) = self.create_bundle_provider() {
+            builder = builder.add_context_provider(bundle_provider);
         }
 
         Ok(builder.build()?)
@@ -262,8 +262,8 @@ impl<'a> AgentFactory<'a> {
             .with_description("通用 AI 助手 — 回答问题、写作、分析、创意")
             .max_tool_rounds(5);
 
-        if let Some(memory_provider) = self.create_memory_provider() {
-            builder = builder.add_context_provider(memory_provider);
+        if let Some(bundle_provider) = self.create_bundle_provider() {
+            builder = builder.add_context_provider(bundle_provider);
         }
 
         Ok(builder.build()?)
@@ -293,8 +293,8 @@ impl<'a> AgentFactory<'a> {
             .with_description("数据分析师 — 深度研究、多源对比、趋势分析")
             .max_tool_rounds(10);
 
-        if let Some(memory_provider) = self.create_memory_provider() {
-            builder = builder.add_context_provider(memory_provider);
+        if let Some(bundle_provider) = self.create_bundle_provider() {
+            builder = builder.add_context_provider(bundle_provider);
         }
 
         Ok(builder.build()?)

@@ -13,9 +13,10 @@ rust-agent-client = { workspace = true }
 rust-agent-framework = { workspace = true }
 rust-agent-workflow = { workspace = true }
 rust-agent-websearch = { workspace = true, optional = true }
-rust-agent-mcp = { workspace = true }
+rust-agent-mcp = { workspace = true, optional = true }
 rust-agent-rhai = { workspace = true, optional = true }
 rust-agent-rag = { workspace = true, optional = true }
+rust-agent-wiki = { workspace = true, optional = true }
 rust-agent-openapi = { workspace = true, optional = true }
 rust-agent-sandbox = { workspace = true, optional = true }
 serde = { workspace = true }
@@ -37,9 +38,10 @@ json = []
 yaml = ["dep:serde_yaml"]
 toml = ["dep:toml"]
 web = ["dep:rust-agent-websearch"]
+mcp = ["dep:rust-agent-mcp"]
 rhai = ["dep:rust-agent-rhai"]
-rag = ["dep:rust-agent-rag", "rust-agent-framework/rag"]
-wiki = ["rust-agent-framework/wiki"]
+rag = ["dep:rust-agent-rag"]
+wiki = ["dep:rust-agent-wiki"]
 openapi = ["dep:rust-agent-openapi"]
 openapi-validate = ["openapi", "rust-agent-openapi/validate"]
 sandbox = ["dep:rust-agent-sandbox"]

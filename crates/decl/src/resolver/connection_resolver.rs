@@ -58,11 +58,15 @@ pub fn resolve_chat_client_with_registry(
         },
         other => {
             return Err(DeclError::Unsupported(format!(
-                "Unknown provider '{}'. Supported: openai, custom",
+                "Unknown provider '{}'. Supported: openai, deepseek, custom",
                 other
             )));
         }
     };
+
+    if let Some(url) = base_url {
+        options.api_base = url;
+    }
 
     // Apply model options
     if let Some(opts) = &model.options {

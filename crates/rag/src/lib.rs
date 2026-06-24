@@ -16,6 +16,7 @@ pub mod embedding;
 pub mod retriever;
 pub mod types;
 pub mod vector_store;
+pub mod context_provider;
 
 // ── 重新导出核心公共 API ──
 
@@ -33,6 +34,7 @@ pub use types::{
 pub use vector_store::{
     DistanceMetric, IVectorStore, InMemoryVectorStore, IndexEntry, VectorStore, VectorStoreError,
 };
+pub use context_provider::RagContextProvider;
 
 /// 便捷 Result 别名
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

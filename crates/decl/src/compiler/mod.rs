@@ -655,30 +655,33 @@ fn build_executor(
         ExecutorKind::McpRequest { server_url, tool_name, arguments, output_variable } => {
             let srv = server_url.clone();
             let tn = tool_name.clone();
-            let args = arguments.clone();
-            let out_var = output_variable.clone();
 
-            // Try to look up the MCP server from the agent resolver
-            if let Some(server) = registry.get_mcp_server(&srv) {
-                let server = Arc::clone(server);
-                Arc::new(crate::resolver::mcp_executor::McpRequestExecutor::new(
-                    nid.clone(),
-                    server,
-                    tn,
-                    args,
-                    out_var,
-                ))
-            } else {
-                // Fall back to placeholder when no MCP server is registered
-                tracing::warn!(
-                    server_url = %srv,
-                    tool = %tn,
-                    "No MCP server registered, using placeholder executor for workflow MCP tool call"
-                );
-                Arc::new(FunctionExecutor::new(nid.clone(), move |_: String| -> Vec<String> {
-                    vec![format!("[MCP {} @ {}]", tn, srv)]
-                }))
+            #[cfg(feature = "mcp")]
+            {
+                let args = arguments.clone();
+                let out_var = output_variable.clone();
+                if let Some(server) = registry.get_mcp_server(&srv) {
+                    let server = Arc::clone(server);
+                    return Arc::new(crate::resolver::mcp_executor::McpRequestExecutor::new(
+                        nid.clone(),
+                        server,
+                        tn,
+                        args,
+                        out_var,
+                    ));
+                }
             }
+            #[cfg(not(feature = "mcp"))]
+            let _ = (arguments, output_variable);
+
+            tracing::warn!(
+                server_url = %srv,
+                tool = %tn,
+                "No MCP server registered, using placeholder executor for workflow MCP tool call"
+            );
+            Arc::new(FunctionExecutor::new(nid.clone(), move |_: String| -> Vec<String> {
+                vec![format!("[MCP {} @ {}]", tn, srv)]
+            }))
         }
 
         ExecutorKind::EndWorkflow => {

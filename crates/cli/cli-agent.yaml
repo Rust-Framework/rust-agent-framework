@@ -1,4 +1,5 @@
-# MAF AgentSchema v1.0 — cli-agent declaration
+﻿# MAF AgentSchema v1.0 — cli-agent declaration
+# LLM: Agnes AI (OpenAI-compatible) via OpenAiChatClient
 kind: prompt
 name: cli-agent
 displayName: CLI 助手
@@ -21,10 +22,10 @@ instructions: |
   6. 身份、偏好、目标类问题优先从持久记忆中检索，不用训练数据默认值；已读取的文件不重复读取。
 
 contexts:
-  - kind: memory
-    name: skill-memory
+  - kind: bundle
+    name: knowledge-bundle
     config:
-      directory: logs/memory
+      directory: logs/knowledge-bundle
       consolidationInterval: 1
 
 tools:

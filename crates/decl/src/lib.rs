@@ -33,6 +33,7 @@
 //! - `toml`: toml support
 //! - `rhai`: Rhai embedded expression engine (RAF script/expression system)
 //! - `web`: web_search / web_fetch tools (pulls rust-agent-websearch)
+//! - `mcp`: MCP server tools and context providers (pulls rust-agent-mcp)
 //! - `mustache`: Mustache template rendering (optional)
 
 pub mod actions;
@@ -98,9 +99,12 @@ pub use compiler::{compile_workflow, prewarm_workflow_tools};
 // ── Resolver ──
 #[allow(deprecated)]
 pub use resolver::{
-    AgentResolver, McpRequestExecutor, ToolInvokeExecutor, ToolResolver, WorkflowResolver,
+    AgentResolver, ToolInvokeExecutor, ToolResolver, WorkflowResolver,
     quick_agent, quick_workflow, ToolFactoryFn,
 };
+#[cfg(feature = "mcp")]
+#[allow(deprecated)]
+pub use resolver::McpRequestExecutor;
 
 // ── Orchestration ──
 pub use orchestration_decl::{
@@ -114,7 +118,9 @@ pub use decl_agent_builder::{DeclAgentBuilder, ValidationReport};
 pub use context_provider_config::ContextProviderDecl;
 
 // ── Extension traits ──
-pub use ext::{AgentBuilderMcpExt, ChatClientWrapper, ToolWrapper};
+pub use ext::{build_provider_from_decl, build_workspace_provider, ChatClientWrapper, ToolWrapper};
+#[cfg(feature = "mcp")]
+pub use ext::AgentBuilderMcpExt;
 
 // ── Expression engine ──
 pub use expression::ExpressionEngine;

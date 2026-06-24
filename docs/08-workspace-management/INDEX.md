@@ -24,7 +24,7 @@
 | `WorkspaceScope` | `rust_agent_core::workspace` | 定义工作区根路径、名称、策略和属性 |
 | `ScopePolicy` | `rust_agent_core::workspace` | 越界策略枚举：`AllowAll`、`ApproveOutside`、`DenyOutside` |
 | `IScopeTool` | `rust_agent_core::workspace` | 可感知工作区范围的工具 trait |
-| `WorkspaceContextProvider` | `rust_agent_framework::context_providers::workspace` | 工作区管理的 `IContextProvider` 实现 |
+| `WorkspaceContextProvider` | `rust_agent_framework::WorkspaceContextProvider` | 工作区管理的 `IContextProvider` 实现 |
 | `resolve_safe()` / `resolve_safe_new()` | `rust_agent_framework::tools::path_guard` | 安全路径解析函数 |
 | `ScopeStatus` | `rust_agent_framework::tools::path_guard` | 路径范围检测结果枚举 |
 

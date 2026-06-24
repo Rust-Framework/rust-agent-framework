@@ -86,8 +86,8 @@ pub struct ContextResult {
 |------|-------|-----------------|-------|------|
 | **WebSearch** | ✅ | ✅ (auto-search) | rust-agent-websearch | reqwest, servo-fetch, scraper |
 | **WebFetch** | ✅ | ❌ | rust-agent-websearch | servo-fetch |
-| **RAG** | ❌ | ✅ (`RagContextProvider`) | rust-agent-rag | rag feature |
-| **Wiki** | ❌ | ✅ (`WikiContextProvider`) | rust-agent-wiki | wiki feature |
+| **RAG** | ❌ | ✅ (`RagContextProvider`) | rust-agent-rag | 无额外 feature |
+| **Wiki** | ❌ | ✅ (`WikiContextProvider`) | rust-agent-wiki | 无额外 feature |
 | **Skills** | ✅ (工具) | ✅ | rust-agent-framework | 无额外依赖 |
 | **Rhai** | ✅ (RhaiTool) | ❌ | rust-agent-rhai | rhai |
 | **Code Sandbox** | ✅ (`CodeInterpreterTool`) | ❌ | rust-agent-sandbox | sandbox feature |

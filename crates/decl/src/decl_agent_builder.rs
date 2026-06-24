@@ -1,4 +1,4 @@
-//! DeclAgentBuilder — 声明式 Agent 构建器
+﻿//! DeclAgentBuilder — 声明式 Agent 构建器
 //!
 //! 对标 `AgentBuilder`（框架层），将 YAML/JSON/TOML 声明文件
 //! 加载为可执行的 `Arc<dyn IAgent>`。
@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use rust_agent_core::{IAgent, IContextProvider, ITool, ScopePolicy, WorkspaceScope};
+use rust_agent_core::{IAgent, IContextProvider, ITool};
 use rust_agent_framework::AgentBuilder;
 
 use crate::connection::{ConnectionDetails, ConnectionKind};
@@ -330,8 +330,8 @@ impl DeclAgentBuilder {
         // 验证 context providers
         for ctx_decl in &prompt_data.contexts {
             let ctx_kind = match ctx_decl {
-                crate::context_provider_config::ContextProviderDecl::Memory { name, .. } => {
-                    format!("memory({})", name)
+                crate::context_provider_config::ContextProviderDecl::Bundle { name, .. } => {
+                    format!("bundle({})", name)
                 }
                 crate::context_provider_config::ContextProviderDecl::Skills { name, .. } => {
                     format!("skills({})", name)
@@ -354,7 +354,7 @@ impl DeclAgentBuilder {
                 }
             };
 
-            let provider = self.build_provider_from_decl(ctx_decl);
+            let provider = crate::ext::build_provider_from_decl(ctx_decl);
             if provider.is_some() {
                 report.resolved_providers.push(ctx_kind);
             } else {
@@ -599,19 +599,19 @@ impl DeclAgentBuilder {
             // 构建 providers，workspace 特殊处理以接收 IScopeTool
             for decl in &prompt_data.contexts {
                 if matches!(decl, crate::context_provider_config::ContextProviderDecl::Workspace { .. }) {
-                    if let Some(ws_provider) = self.build_workspace_provider(decl, &scope_tools) {
+                    if let Some(ws_provider) =
+                        crate::ext::build_workspace_provider(decl, &scope_tools)
+                    {
                         all_context_providers.push(ws_provider);
                     }
-                } else {
-                    if let Some(provider) = self.build_provider_from_decl(decl) {
-                        all_context_providers.push(provider);
-                    }
+                } else if let Some(provider) = crate::ext::build_provider_from_decl(decl) {
+                    all_context_providers.push(provider);
                 }
             }
         } else {
             remaining_tools = resolved_tools;
             for decl in &prompt_data.contexts {
-                if let Some(provider) = self.build_provider_from_decl(decl) {
+                if let Some(provider) = crate::ext::build_provider_from_decl(decl) {
                     all_context_providers.push(provider);
                 }
             }
@@ -668,213 +668,6 @@ impl DeclAgentBuilder {
         Ok(builder.build()?)
     }
 
-    /// 从声明式配置构建单个上下文提供器。
-    fn build_provider_from_decl(
-        &self,
-        decl: &crate::context_provider_config::ContextProviderDecl,
-    ) -> Option<Arc<dyn IContextProvider>> {
-        use crate::context_provider_config::ContextProviderDecl;
-
-        match decl {
-            // ── memory ──
-            ContextProviderDecl::Memory { name, config } if name == "skill-memory" => {
-                let dir = config
-                    .get("directory")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("logs/memory");
-                let enabled = config
-                    .get("enabled")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true);
-                let interval = config
-                    .get("consolidationInterval")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(3) as usize;
-
-                let memory_dir = std::path::PathBuf::from(dir);
-                std::fs::create_dir_all(&memory_dir).ok();
-
-                let sm = rust_agent_framework::memory::SkillMemoryContextProvider::new(&memory_dir)
-                    .with_enabled(enabled)
-                    .with_consolidation_interval(interval);
-                Some(Arc::new(sm))
-            }
-
-            // ── skills ──
-            ContextProviderDecl::Skills { name: skill_name, config } => {
-                let dir = config
-                    .get("directory")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let dir_path = if dir.is_empty() {
-                    std::path::PathBuf::from("skills").join(skill_name)
-                } else {
-                    std::path::PathBuf::from(dir)
-                };
-
-                match rust_agent_framework::AgentSkillsProvider::scan(&dir_path)
-                {
-                    Ok(provider) => {
-                        if provider.skills.is_empty() {
-                            tracing::warn!(
-                                "No SKILL.md found in skills directory '{}' for skill '{}'",
-                                dir_path.display(),
-                                skill_name
-                            );
-                        }
-                        Some(Arc::new(provider))
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            "Failed to scan skills directory '{}' for skill '{}': {}",
-                            dir_path.display(),
-                            skill_name,
-                            e
-                        );
-                        None
-                    }
-                }
-            }
-
-            // ── mcp ──
-            ContextProviderDecl::Mcp { name: server_name, config } => {
-                let server_url = config
-                    .get("serverUrl")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let server_command = config
-                    .get("command")
-                    .and_then(|v| v.as_str());
-                let server_args = config
-                    .get("args")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect::<Vec<_>>()
-                    });
-
-                // 此处仅给出引导性日志——这是已知的硬限制。
-                let _ = server_command;
-                let _ = server_args;
-                tracing::error!(
-                    "MCP declarative provider requires async connection and cannot be constructed \
-                     in build_provider_from_decl. Use DeclAgentBuilder::with_context() to inject a \
-                     pre-connected McpContextProvider. \
-                     Server: '{}', URL: '{}'",
-                    server_name,
-                    if server_url.is_empty() { "(not specified)" } else { server_url }
-                );
-                None
-            }
-
-            // ── workspace ──
-            ContextProviderDecl::Workspace { name: ws_name, config } => {
-                let root = config
-                    .get("root")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(".");
-                let policy_str = config
-                    .get("policy")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("approve");
-
-                let policy = ScopePolicy::from_config_str(policy_str);
-                if policy == ScopePolicy::DenyOutside && policy_str != "deny_outside" && policy_str != "deny" && policy_str != "restrict" {
-                    tracing::error!(
-                        "Unknown workspace policy '{}' for '{}', falling back to DenyOutside (fail closed). \
-                         Valid values: read/allow/allow_all, approve/ask/approve_outside, deny/restrict/deny_outside",
-                        policy_str, ws_name
-                    );
-                }
-
-                let scope = WorkspaceScope::new(root, ws_name.as_str())
-                    .with_policy(policy);
-
-                // WorkspaceContextProvider 负责注入工作区边界指令到 system prompt。
-                // 工具的工作区感知由各工具自身的 IScopeTool 实现和 path_guard 处理，
-                // 无需在 provider 中重复注册。
-                let provider =
-                    rust_agent_framework::WorkspaceContextProvider::new(
-                        Arc::new(scope),
-                    );
-                Some(Arc::new(provider))
-            }
-
-            // ── knowledge (RAG) ──
-            ContextProviderDecl::Knowledge { name: kb_name, config } => {
-                let source = config
-                    .get("source")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                #[cfg(feature = "rag")]
-                {
-                    if source.is_empty() {
-                        tracing::warn!(
-                            "Knowledge provider '{}' missing config.source — skipped",
-                            kb_name
-                        );
-                        return None;
-                    }
-                    return Some(Arc::new(
-                        rust_agent_framework::RagContextProvider::new(
-                            kb_name.clone(),
-                            source,
-                        ),
-                    ));
-                }
-                #[cfg(not(feature = "rag"))]
-                {
-                    tracing::error!(
-                        "Knowledge (RAG) requires decl `rag` feature. \
-                         Base: '{}', source: '{}'",
-                        kb_name,
-                        if source.is_empty() { "(not specified)" } else { source }
-                    );
-                    None
-                }
-            }
-
-            // ── wiki ──
-            ContextProviderDecl::Wiki { name: wiki_name, config } => {
-                let source = config
-                    .get("source")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                #[cfg(feature = "wiki")]
-                {
-                    if source.is_empty() {
-                        tracing::warn!(
-                            "Wiki provider '{}' missing config.source — skipped",
-                            wiki_name
-                        );
-                        return None;
-                    }
-                    return Some(Arc::new(
-                        rust_agent_framework::WikiContextProvider::new(
-                            wiki_name.clone(),
-                            source,
-                        ),
-                    ));
-                }
-                #[cfg(not(feature = "wiki"))]
-                {
-                    tracing::error!(
-                        "Wiki provider requires decl `wiki` feature. Wiki: '{}', source: '{}'",
-                        wiki_name,
-                        if source.is_empty() { "(not specified)" } else { source }
-                    );
-                    None
-                }
-            }
-
-            ContextProviderDecl::Memory { .. } => {
-                tracing::debug!("Unknown memory provider name (expected 'skill-memory')");
-                None
-            }
-        }
-    }
-
     fn load_document(&self) -> Result<AgentDocument> {
         match &self.source {
             Some(Source::File(path)) => {
@@ -926,60 +719,6 @@ impl DeclAgentBuilder {
                 "DeclAgentBuilder requires a source: use from_file(), from_yaml_str(), or from_definition()".into(),
             )),
         }
-    }
-
-    
-
-    /// 构建 workspace 提供器并将 IScopeTool 工具路由到 workspace.add_tool_arc()，
-    /// 以完成 scope 注入 + 审批包裹两阶段处理。
-    fn build_workspace_provider(
-        &self,
-        decl: &crate::context_provider_config::ContextProviderDecl,
-        scope_tools: &[Arc<dyn ITool>],
-    ) -> Option<Arc<dyn IContextProvider>> {
-        let (ws_name, config) = match decl {
-            crate::context_provider_config::ContextProviderDecl::Workspace { name, config } => {
-                (name, config)
-            }
-            _ => return self.build_provider_from_decl(decl),
-        };
-
-        let root = config
-            .get("root")
-            .and_then(|v| v.as_str())
-            .unwrap_or(".");
-        let policy_str = config
-            .get("policy")
-            .and_then(|v| v.as_str())
-            .unwrap_or("approve");
-
-        let policy = ScopePolicy::from_config_str(policy_str);
-        if policy == ScopePolicy::DenyOutside && policy_str != "deny_outside" && policy_str != "deny" && policy_str != "restrict" {
-            tracing::error!(
-                "Unknown workspace policy '{}' for '{}', falling back to DenyOutside",
-                policy_str, ws_name
-            );
-        }
-
-        let scope = WorkspaceScope::new(root, ws_name.as_str()).with_policy(policy);
-        let mut provider =
-            rust_agent_framework::WorkspaceContextProvider::new(Arc::new(scope));
-
-        // 路由 IScopeTool 工具：逐个通过 add_tool_arc 注入 scope + 审批包裹
-        for tool in scope_tools {
-            provider.add_tool_arc(Arc::clone(tool));
-        }
-
-        if !scope_tools.is_empty() {
-            tracing::debug!(
-                "Workspace '{}' managing {} IScopeTool(s): {}",
-                ws_name,
-                scope_tools.len(),
-                scope_tools.iter().map(|t| t.name()).collect::<Vec<_>>().join(", ")
-            );
-        }
-
-        Some(Arc::new(provider))
     }
 }
 

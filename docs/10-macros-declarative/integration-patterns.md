@@ -8,6 +8,31 @@ RAF 框架中多个组件之间存在自动联动关系。理解这些规则对�
 
 ---
 
+## 规则 0：Decl 扩展模式（按需启用 feature）
+
+`rust-agent-decl` 核心仅链接 `core` + `client` + `framework` + `workflow`。可选集成通过 Cargo feature 启用，**调用方只引入所需扩展**：
+
+```toml
+# 宿主服务 — 最小依赖
+rust-agent-decl = { path = "../decl" }
+
+# CLI 全功能
+rust-agent-decl = { path = "../decl", features = ["yaml", "web", "mcp", "sandbox", "openapi"] }
+```
+
+| 声明 | 所需 feature | 构建入口 |
+|------|-------------|---------|
+| `kind: web` 工具 | `web` | `ToolResolver` |
+| `kind: mcp` 工具/上下文 | `mcp` | `ToolResolver` + `AgentBuilderMcpExt` |
+| `kind: knowledge` | `rag` | `ext::context::build_provider_from_decl` |
+| `kind: wiki` | `wiki` | `ext::context::build_provider_from_decl` |
+| `kind: code` | `sandbox` | `sandbox_factory` |
+| `kind: bundle` / `skills` / `workspace` | （内置） | `ext::context` |
+
+代码注入扩展使用 `DeclAgentBuilder::with_context()` 或 `AgentBuilderMcpExt`（需 `mcp` feature），无需修改 decl 核心。
+
+---
+
 ## 规则 1：Workspace + IScopeTool 工具自动路由
 
 ### 规则说明
@@ -182,17 +207,17 @@ context_providers: vec![
 ]
 ```
 
-### 记忆系统（memory）是独立组件
+### OKF 知识包（bundle）是独立组件
 
-`SkillMemoryContextProvider`（kind = `"memory"`）**需要显式声明**，它是一个独立的上下文提供器，负责跨会话的持久化记忆存储和检索。
+`BundleProvider`（`kind: bundle`, `name: knowledge-bundle`）**需要显式声明**，负责跨会话的 OKF 持久知识包存储与 Curator 整理。
 
 ```yaml
 contexts:
-  - kind: memory          # 需要显式声明
-    name: skill-memory
+  - kind: bundle
+    name: knowledge-bundle
     config:
-      directory: logs/memory
-      consolidationInterval: 1
+      directory: logs/knowledge-bundle
+      consolidationInterval: 3
   # history 由框架自动注入，无需声明
 ```
 
@@ -202,7 +227,7 @@ contexts:
 sequenceDiagram
     participant Engine as Agent 引擎
     participant H as HistoryProvider<br/>(框架内置)
-    participant M as MemoryProvider<br/>(YAML 声明)
+    participant B as BundleProvider<br/>(YAML 声明)
     participant W as WorkspaceProvider<br/>(YAML 声明)
     participant S as SkillsProvider<br/>(YAML 声明)
 
@@ -376,8 +401,8 @@ async fn on_invoking(&self, agent: &dyn IAgent, session: &dyn ISession, ...) -> 
 
 ```yaml
 contexts:
-  - kind: memory          # 1. 先注入记忆摘要
-    name: skill-memory
+  - kind: bundle          # 1. 先注入知识包摘要
+    name: knowledge-bundle
   - kind: workspace       # 2. 注入工作区边界
   - kind: skills          # 3. 注入技能工具
     # 若要压缩，应将 CompressionProvider 放在靠后位置
@@ -396,7 +421,7 @@ contexts:
 | **name-expansion** | `tools` 中某 `kind` 无 `name` | `ToolResolver` 展开为全部同类工具 | 一行注册多个工具 |
 | **压缩替换** | Provider 设 `replace_messages = true` | 丢弃前面的消息 | 控制 token 预算 |
 | **Provider 顺序** | `contexts` 数组顺序 | 即 on_invoking() 执行顺序 | 后执行的 Provider 可覆盖前面 |
-| **Memory 持久化** | `contexts` 含 `memory` | `SkillMemoryContextProvider` 在每次对话后整理记忆 | `consolidationInterval` 次对话触发一次 |
+| **Bundle 持久化** | `contexts` 含 `bundle` | `BundleProvider` + Curator 在对话后整理知识包 | `consolidationInterval` 次对话触发一次 |
 
 ---
 

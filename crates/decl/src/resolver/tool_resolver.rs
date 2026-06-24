@@ -6,6 +6,7 @@ use rust_agent_framework::tools::{
     EditFile, FindFiles, InspectFile, ListFiles, MakeDirectory, MoveFile, ReadFile,
     RemovePath, RunCommand, SearchFile, WriteFile,
 };
+#[cfg(feature = "mcp")]
 use rust_agent_mcp::McpServerClient;
 #[cfg(feature = "web")]
 use rust_agent_websearch::{WebFetch, WebSearch};
@@ -29,7 +30,8 @@ pub type ToolFactoryFn =
 pub struct ToolResolver {
     /// 按名称键控的自定义工具工厂（`function` 和 `custom` 共用）。
     factories: HashMap<String, ToolFactoryFn>,
-    /// 已注册的 MCP 服务器客户端，按 server_url 键控。
+    /// 已注册的 MCP 服务器客户端，按 server_url 键控（需 `mcp` feature）。
+    #[cfg(feature = "mcp")]
     mcp_servers: HashMap<String, Arc<McpServerClient>>,
     /// 工作流/Agent 级沙箱默认配置。
     sandbox_defaults: HashMap<String, serde_json::Value>,
@@ -39,6 +41,7 @@ impl ToolResolver {
     pub fn new() -> Self {
         Self {
             factories: HashMap::new(),
+            #[cfg(feature = "mcp")]
             mcp_servers: HashMap::new(),
             sandbox_defaults: HashMap::new(),
         }
@@ -60,7 +63,8 @@ impl ToolResolver {
         self.factories.insert(name.into(), Box::new(factory));
     }
 
-    /// 注册 MCP 服务器客户端。
+    /// 注册 MCP 服务器客户端（需 `mcp` feature）。
+    #[cfg(feature = "mcp")]
     pub fn register_mcp_server(
         &mut self,
         server_url: impl Into<String>,
@@ -70,7 +74,8 @@ impl ToolResolver {
             .insert(server_url.into(), Arc::new(server));
     }
 
-    /// 使用 Arc 注册 MCP 服务器客户端。
+    /// 使用 Arc 注册 MCP 服务器客户端（需 `mcp` feature）。
+    #[cfg(feature = "mcp")]
     pub fn register_mcp_server_arc(
         &mut self,
         server_url: impl Into<String>,
@@ -79,7 +84,8 @@ impl ToolResolver {
         self.mcp_servers.insert(server_url.into(), server);
     }
 
-    /// 获取已注册的 MCP 服务器 URL 列表。
+    /// 获取已注册的 MCP 服务器 URL 列表（需 `mcp` feature）。
+    #[cfg(feature = "mcp")]
     pub fn mcp_server_urls(&self) -> Vec<&str> {
         self.mcp_servers.keys().map(|s| s.as_str()).collect()
     }
@@ -133,7 +139,23 @@ impl ToolResolver {
 
             // ── MCP ──
             ToolDecl::Mcp { name, server_url, tool_name, .. } => {
-                resolve_mcp(&self.mcp_servers, name, server_url.as_deref(), tool_name.as_deref()).await
+                #[cfg(feature = "mcp")]
+                {
+                    return resolve_mcp(
+                        &self.mcp_servers,
+                        name,
+                        server_url.as_deref(),
+                        tool_name.as_deref(),
+                    )
+                    .await;
+                }
+                #[cfg(not(feature = "mcp"))]
+                {
+                    let _ = (name, server_url, tool_name);
+                    Err(DeclError::Unsupported(
+                        "MCP tools require decl `mcp` feature and rust-agent-mcp crate".into(),
+                    ))
+                }
             }
 
             // ── OpenAPI ──
@@ -312,6 +334,7 @@ impl Default for ToolResolver {
 
 // ── MCP 解析 ──
 
+#[cfg(feature = "mcp")]
 async fn resolve_mcp(
     mcp_servers: &HashMap<String, Arc<McpServerClient>>,
     name: &str,

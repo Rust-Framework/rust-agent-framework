@@ -94,17 +94,31 @@ impl ChatClient {
         let msgs: Vec<serde_json::Value> = messages
             .iter()
             .map(|m| {
-                let mut obj = serde_json::json!({
-                    "role": match m.role {
-                        MessageRole::System => "system",
-                        MessageRole::User => "user",
-                        MessageRole::Assistant => "assistant",
-                        MessageRole::Tool => "tool",
-                    },
-                    "content": m.content,
-                });
-                if let Some(name) = &m.name {
-                    obj["name"] = serde_json::Value::String(name.clone());
+                let role = match m.role {
+                    MessageRole::System => "system",
+                    MessageRole::User => "user",
+                    MessageRole::Assistant => "assistant",
+                    MessageRole::Tool => "tool",
+                };
+
+                let mut obj = serde_json::Map::new();
+                obj.insert("role".into(), serde_json::Value::String(role.into()));
+
+                // OpenAI: assistant+tool_calls 时 content 应为 null 而非空字符串
+                if m.role == MessageRole::Assistant
+                    && m.tool_calls.is_some()
+                    && m.content.is_empty()
+                {
+                    obj.insert("content".into(), serde_json::Value::Null);
+                } else {
+                    obj.insert("content".into(), serde_json::Value::String(m.content.clone()));
+                }
+
+                // name 仅用于 legacy function 消息；tool 角色不应携带 name
+                if m.role != MessageRole::Tool {
+                    if let Some(name) = &m.name {
+                        obj.insert("name".into(), serde_json::Value::String(name.clone()));
+                    }
                 }
                 // Serialize tool_calls for assistant messages
                 if let Some(ref tool_calls) = m.tool_calls {
@@ -129,14 +143,15 @@ impl ChatClient {
                             })
                         })
                         .collect();
-                    obj["tool_calls"] = serde_json::Value::Array(tc_json);
+                    obj.insert("tool_calls".into(), serde_json::Value::Array(tc_json));
                 }
-                // Include tool_call_id for tool messages
                 if let Some(ref tool_call_id) = m.tool_call_id {
-                    obj["tool_call_id"] =
-                        serde_json::Value::String(tool_call_id.clone());
+                    obj.insert(
+                        "tool_call_id".into(),
+                        serde_json::Value::String(tool_call_id.clone()),
+                    );
                 }
-                obj
+                serde_json::Value::Object(obj)
             })
             .collect();
 
@@ -144,10 +159,11 @@ impl ChatClient {
             "model": self.options.model,
             "messages": msgs,
             "stream": true,
-            "stream_options": {
-                "include_usage": true,
-            },
         });
+
+        if self.options.stream_include_usage {
+            body["stream_options"] = serde_json::json!({ "include_usage": true });
+        }
 
         // Per-call overrides take precedence; fall back to client defaults
         let max_tokens = run_options.max_tokens.or(self.options.max_tokens);
@@ -205,5 +221,37 @@ impl IChatClient for ChatClient {
 
     fn model_metadata(&self) -> Option<&ModelMetadata> {
         self.options.model_metadata.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_agent_core::ToolCall;
+
+    #[test]
+    fn serializes_tool_loop_messages_openai_compatible() {
+        let client = ChatClient::new(ChatClientOptions::openai("gpt-4", "sk-test")).unwrap();
+        let messages = vec![
+            ChatMessage::user("hi"),
+            ChatMessage {
+                role: MessageRole::Assistant,
+                content: String::new(),
+                name: None,
+                tool_calls: Some(vec![ToolCall {
+                    id: "c1".into(),
+                    name: "list_files".into(),
+                    arguments: serde_json::json!({"path": "."}),
+                }]),
+                tool_call_id: None,
+                source: None,
+            },
+            ChatMessage::tool("{\"ok\":true}", "c1"),
+        ];
+        let body = client.build_request_body(&messages, &ChatClientRunOptions::default());
+        let msgs = body["messages"].as_array().unwrap();
+        assert!(msgs[1]["content"].is_null());
+        assert!(msgs[2].get("name").is_none());
+        assert_eq!(msgs[2]["tool_call_id"], "c1");
     }
 }

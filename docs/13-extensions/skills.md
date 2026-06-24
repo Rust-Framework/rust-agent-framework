@@ -131,7 +131,7 @@ skills/
 ### from_dir — 从目录加载
 
 ```rust
-use rust_agent_framework::context_providers::agent_skill::AgentSkill;
+use rust_agent_framework::context::skill::AgentSkill;
 
 // 从文件系统加载技能
 let skill = AgentSkill::from_dir("./skills/code-review")?;
@@ -186,7 +186,7 @@ assert!(skill.has_resources());
 `AgentSkillsProvider` 是技能与 Agent 之间的桥梁，作为 `IContextProvider` 将技能注入 Agent：
 
 ```rust
-use rust_agent_framework::context_providers::skills_provider::AgentSkillsProvider;
+use rust_agent_framework::AgentSkillsProvider;
 
 // 创建技能提供器
 let skills_provider = AgentSkillsProvider::new()
@@ -229,7 +229,7 @@ let provider = WorkspaceContextProvider::new(scope)
 ```rust
 use rust_agent_framework::{
     AgentBuilder,
-    context_providers::{
+    context::{
         agent_skill::AgentSkill,
         skills_provider::AgentSkillsProvider,
     },

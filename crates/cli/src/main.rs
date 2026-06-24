@@ -1,4 +1,4 @@
-//! rust-agent-cli — Interactive Chat (DeepSeek)
+//! rust-agent-cli — Interactive Chat (Agnes AI)
 //!
 //! 使用声明式 YAML + DeclAgentBuilder 构建 Agent，
 //! 通过 ReplRunner 提供 REPL 交互界面。
@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
 
     // 启动 REPL
     ReplRunner::new(agent)
-        .banner("rust-agent-cli — 声明式聊天助手 (DeepSeek)")
+        .banner("rust-agent-cli — 声明式聊天助手 (Agnes AI · agnes-2.0-flash)")
         .on_switch_model(Box::new(move |model| {
             Box::pin(async move {
                 let a = DeclAgentBuilder::new()

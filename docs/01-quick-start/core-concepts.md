@@ -95,7 +95,7 @@ pub trait IAgent: Send + Sync {
 }
 ```
 
-**实现**：`ChatClientAgent`（定义在 `rust_agent_framework::chat_client_agent`）
+**实现**：`ChatClientAgent`（`rust_agent_framework::agent`，crate 根 re-export）
 
 ### 2. Tool（工具）
 

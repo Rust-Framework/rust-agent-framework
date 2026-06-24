@@ -417,7 +417,7 @@ pub async fn collect_agent_response(
 ## 在 ChatClientAgent 中的集成
 
 ```rust
-// crates/framework/src/chat_client_agent.rs
+// crates/framework/src/agent/run.rs
 
 // Phase 2: LLM 调用
 let stream = self.chat_client.run(&full_messages, client_opts).await?;

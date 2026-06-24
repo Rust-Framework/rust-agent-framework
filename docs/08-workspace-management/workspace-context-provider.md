@@ -5,7 +5,7 @@
 `WorkspaceContextProvider` 是工作区管理的主入口。它实现了 `IContextProvider` trait，在 Agent 的 `on_invoking()` 阶段向 LLM 注入工作区指令，并将工具配置为工作区感知。它与 `AgentSkillsProvider` 设计模式一致，但由于工作区 scope 是 Agent 运行的必要条件，scope 通过**构造函数注入**（编译期保证必须提供）。
 
 ```rust
-// crates/framework/src/context_providers/workspace.rs
+// crates/framework/src/context/workspace.rs
 
 pub struct WorkspaceContextProvider {
     scope: Arc<WorkspaceScope>,

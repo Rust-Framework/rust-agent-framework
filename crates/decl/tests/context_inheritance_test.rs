@@ -61,8 +61,8 @@ fn inherit_does_not_duplicate_same_named_context() {
         name: "default".to_string(),
         config: HashMap::from([("root".to_string(), serde_json::json!("."))]),
     });
-    parent.contexts.push(ContextProviderDecl::Memory {
-        name: "skill-memory".to_string(),
+    parent.contexts.push(ContextProviderDecl::Bundle {
+        name: "knowledge-bundle".to_string(),
         config: HashMap::new(),
     });
 
@@ -82,7 +82,7 @@ fn inherit_does_not_duplicate_same_named_context() {
     };
     assert_eq!(sub_data.contexts.len(), 2);
     assert!(sub_data.contexts.iter().any(|c| {
-        matches!(c, ContextProviderDecl::Memory { name, .. } if name == "skill-memory")
+        matches!(c, ContextProviderDecl::Bundle { name, .. } if name == "knowledge-bundle")
     }));
     if let ContextProviderDecl::Workspace { config, .. } = &sub_data.contexts[0] {
         assert_eq!(config.get("root").and_then(|v| v.as_str()), Some("/custom"));

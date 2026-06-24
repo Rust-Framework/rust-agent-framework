@@ -46,10 +46,11 @@ graph TD
     CLIENT --> CORE
     FRAMEWORK --> CORE
     FRAMEWORK --> MACROS
-    WORKFLOW --> CORE
-    WEBSEARCH --> CORE
     RAG --> CORE
     WIKI --> CORE
+    WIKI --> RAG
+    WORKFLOW --> CORE
+    WEBSEARCH --> CORE
     OPENAPI --> CORE
     SANDBOX --> CORE
     RHAI --> CORE
@@ -60,6 +61,8 @@ graph TD
     DECL --> WORKFLOW
     DECL --> RHAI
     DECL --> WEBSEARCH
+    DECL --> RAG
+    DECL --> WIKI
     DECL --> OPENAPI
     DECL --> SANDBOX
     HOST --> CORE
@@ -82,14 +85,15 @@ graph TD
 | `rust-agent-framework` | `crates/framework/` | `rust-agent-core`, `rust-agent-macros` |
 | `rust-agent-workflow` | `crates/workflow/` | `rust-agent-core` |
 | `rust-agent-rhai` | `crates/rhai/` | `rust-agent-core`, `rust-agent-workflow` |
-| `rust-agent-decl` | `crates/decl/` | `rust-agent-core`, `rust-agent-client`, `rust-agent-framework`, `rust-agent-workflow`, `rust-agent-rhai`, `rust-agent-websearch`, `rust-agent-openapi`*, `rust-agent-sandbox`* |
+| `rust-agent-decl` | `crates/decl/` | `rust-agent-core`, `rust-agent-client`, `rust-agent-framework`, `rust-agent-workflow`, `rust-agent-rhai`, `rust-agent-websearch`*, `rust-agent-rag`*, `rust-agent-wiki`*, `rust-agent-openapi`*, `rust-agent-sandbox`* |
 | `rust-agent-openapi` | `crates/openapi/` | `rust-agent-core` |
 | `rust-agent-sandbox` | `crates/sandbox/` | `rust-agent-core` |
 
 \* 通过 Cargo optional dependency + feature 引入
+
 | `rust-agent-websearch` | `crates/websearch/` | `rust-agent-core` |
 | `rust-agent-rag` | `crates/rag/` | `rust-agent-core` |
-| `rust-agent-wiki` | `crates/wiki/` | `rust-agent-core` |
+| `rust-agent-wiki` | `crates/wiki/` | `rust-agent-core`, `rust-agent-rag` |
 | `rust-agent-host` | `crates/host/` | `rust-agent-core`, `rust-agent-framework`, `rust-agent-client`, `rust-agent-decl` |
 | `rust-agent-cli` | `crates/cli/` | `rust-agent-core`, `rust-agent-framework`, `rust-agent-client`, `rust-agent-workflow` |
 ## Crate 职责说明
@@ -106,8 +110,8 @@ graph TD
 | **rust-agent-openapi** | OpenAPI HTTP 工具：规范解析、Bearer 认证、可选响应 Schema 校验 |
 | **rust-agent-sandbox** | 代码沙箱：`ICodeSandbox` 实现、`CodeInterpreterTool`、ExecuteCode 后端 |
 | **rust-agent-websearch** | 网络搜索：WebSearch/WebFetch 工具、多后端、反检测 |
-| **rust-agent-rag** | RAG 管道：DocumentLoader、Chunker、IEmbeddingModel、IVectorStore、IRetriever traits |
-| **rust-agent-wiki** | Wiki 引擎：空间管理、Tantivy 全文搜索、Petgraph 概念图 |
+| **rust-agent-rag** | RAG 管道与 `RagContextProvider`：DocumentLoader、Chunker、IEmbeddingModel、IVectorStore、IRetriever |
+| **rust-agent-wiki** | Wiki 引擎与 `WikiContextProvider`：空间管理、Tantivy 全文搜索、Petgraph 概念图 |
 | **rust-agent-host** | 宿主服务：ACP 服务器、Stdio/WebSocket 传输、SessionBridge、AgentRegistry |
 | **rust-agent-cli** | CLI 工具：命令行 Agent 交互 REPL |
 ## 外部关键依赖

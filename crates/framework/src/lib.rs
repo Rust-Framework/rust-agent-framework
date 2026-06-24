@@ -1,39 +1,30 @@
-pub mod memory;
+pub mod agent;
 pub mod builder;
-pub mod chat_client_agent;
-pub mod chat_client_decorators;
+pub mod bundle;
 pub mod compression;
-pub mod context_providers;
+pub mod context;
 pub mod converter;
+pub mod decorators;
 pub mod planner;
-pub mod session_store;
-pub mod token_counter;
+pub mod session;
+pub mod token;
 pub mod tools;
 
+pub use agent::ChatClientAgent;
 pub use builder::{AgentBuilder, ValidationReport};
-pub use chat_client_agent::ChatClientAgent;
-pub use context_providers::history_provider::InMemoryHistoryProvider;
-pub use context_providers::agent_skill::{AgentSkill, SkillMetadata};
-#[cfg(feature = "rag")]
-pub use context_providers::rag_provider::RagContextProvider;
-#[cfg(feature = "wiki")]
-pub use context_providers::wiki_provider::WikiContextProvider;
-pub use context_providers::script_runner::{AgentSkillScriptRunner, SubprocessScriptRunner};
-pub use context_providers::skills_provider::AgentSkillsProvider;
-pub use context_providers::workspace::WorkspaceContextProvider;
-pub use chat_client_decorators::FunctionInvokingChatClient;
-pub use chat_client_decorators::PerServiceCallPersistingChatClient;
+pub use context::history::InMemoryHistoryProvider;
+pub use context::skill::{AgentSkill, SkillMetadata};
+pub use context::runner::{AgentSkillScriptRunner, SubprocessScriptRunner};
+pub use context::skills::AgentSkillsProvider;
+pub use context::workspace::WorkspaceContextProvider;
+pub use decorators::{FunctionInvokingChatClient, PerServiceCallPersistingChatClient};
 pub use compression::SlidingWindowStrategy;
 pub use compression::TokenBudgetStrategy;
 pub use compression::CompressionPipeline;
 pub use converter::AgentResponseConverter;
 pub use planner::{IPlanner, ReActPlanner, PlannerDecision};
-pub use session_store::InMemorySessionStore;
-pub use session_store::FileSystemSessionStore;
-pub use session_store::IsolationScopedSessionStore;
-pub use session_store::IIsolationKeyProvider;
-pub use session_store::FixedIsolationKeyProvider;
-pub use token_counter::EstimateCounter;
+pub use session::{FileSystemSessionStore, FixedIsolationKeyProvider, IIsolationKeyProvider};
+pub use session::{InMemorySessionStore, IsolationScopedSessionStore};
+pub use token::EstimateCounter;
 
-// Re-export #[tool] macro — framework is the natural home for tool definition utilities
 pub use rust_agent_macros::tool;

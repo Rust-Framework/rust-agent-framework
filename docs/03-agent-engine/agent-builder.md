@@ -28,7 +28,7 @@ use rust_agent_client::DeepSeekChatClient;
 use rust_agent_framework::{
     AgentBuilder,
     tools::{ReadFile, WriteFile, ListFiles, RunCommand},
-    context_providers::WorkspaceContextProvider,
+    WorkspaceContextProvider,
 };
 
 #[tokio::main]

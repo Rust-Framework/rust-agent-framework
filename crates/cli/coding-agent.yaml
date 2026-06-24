@@ -1,4 +1,4 @@
-# MAF AgentSchema v1.0 — coding-agent 多智能体编排声明
+﻿# MAF AgentSchema v1.0 — coding-agent 多智能体编排声明
 #
 # 编排模式：Pipeline（顺序 + 并行 + 闭环）
 # 流程：规划/探索 → 并行实现 → 测试/审查 → 未通过则回跳并行实现阶段
@@ -50,10 +50,10 @@ instructions: |
   - **对用户透明**：不向用户暴露子 Agent 名称或内部编排机制，直接呈现结果。
 
 contexts:
-  - kind: memory
-    name: skill-memory
+  - kind: bundle
+    name: knowledge-bundle
     config:
-      directory: logs/memory
+      directory: logs/knowledge-bundle
       consolidationInterval: 1
   - kind: workspace
     name: project

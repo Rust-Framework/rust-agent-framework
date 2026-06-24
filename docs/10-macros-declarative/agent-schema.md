@@ -59,8 +59,8 @@ pub struct PromptAgentData {
 | `skills` | `AgentSkillsProvider` | ✅ 已实现（通过 `scan()` 扫描目录） |
 | `workspace` | `WorkspaceContextProvider` | ✅ 已实现（`root` + `policy` 配置） |
 | `mcp` | `McpContextProvider` | ⚠️ 需代码注入（需异步连接，通过 `with_context()` 注入） |
-| `knowledge` | `RagContextProvider` | ✅ 已实现（需 `rag` feature） |
-| `wiki` | `WikiContextProvider` | ✅ 已实现（需 `wiki` feature） |
+| `knowledge` | `rust_agent_rag::RagContextProvider` | ✅ 已实现（需 decl `rag` feature） |
+| `wiki` | `rust_agent_wiki::WikiContextProvider` | ✅ 已实现（需 decl `wiki` feature） |
 
 `history`（对话历史管理）由 `AgentBuilder` 内置自动注入 `InMemoryHistoryProvider`，无需在 `contexts` 中声明。
 

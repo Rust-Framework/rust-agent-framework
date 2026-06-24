@@ -196,7 +196,7 @@ pub fn build_tools(&self) -> Vec<Arc<dyn ITool>> {
 ```rust
 use std::sync::Arc;
 use rust_agent_core::{AgentBuilder, WorkspaceScope};
-use rust_agent_framework::context_providers::{
+use rust_agent_framework::context::{
     AgentSkillsProvider,
     agent_skill::{AgentSkill, SkillMetadata},
 };

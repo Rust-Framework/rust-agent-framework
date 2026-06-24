@@ -1228,15 +1228,15 @@ A: 当前内置支持：
 
 | 类型 | 位置 | 说明 |
 |---|---|---|
-| `ChatClientAgent` | `chat_client_agent.rs` | 核心 Agent 实现，组合 ChatClient + Tools + ContextProviders |
-| `PerServiceCallPersistingChatClient` | `chat_client_decorators` | ChatClient 装饰器，每次 LLM 调用后自动持久化 Session |
+| `ChatClientAgent` | `agent/` | 核心 Agent 实现，组合 ChatClient + Tools + ContextProviders |
+| `PerServiceCallPersistingChatClient` | `decorators/` | ChatClient 装饰器，每次 LLM 调用后自动持久化 Session |
 | `AgentResponseConverter` | `converter.rs` | 将内部 `AgentResponseUpdate` 流转换为 `AgentResponseResult` 流 |
-| `InMemorySessionStore` | `session_store` | 基于 `HashMap` 的内存 Session 存储，支持 TTL 自动清理 |
-| `FileSystemSessionStore` | `session_store` | 基于文件系统的 Session 持久化存储 |
-| `IsolationScopedSessionStore` | `session_store` | 基于租户/隔离键的 Session 存储包装器 |
-| `IIsolationKeyProvider` | `session_store` | 隔离键提供者 trait |
-| `FixedIsolationKeyProvider` | `session_store` | 固定隔离键的实现 |
-| `EstimateCounter` | `token_counter` | 基于字符数的简易 Token 计数器（默认） |
+| `InMemorySessionStore` | `session/` | 基于 `HashMap` 的内存 Session 存储，支持 TTL 自动清理 |
+| `FileSystemSessionStore` | `session/` | 基于文件系统的 Session 持久化存储 |
+| `IsolationScopedSessionStore` | `session/` | 基于租户/隔离键的 Session 存储包装器 |
+| `IIsolationKeyProvider` | `session/` | 隔离键提供者 trait |
+| `FixedIsolationKeyProvider` | `session/` | 固定隔离键的实现 |
+| `EstimateCounter` | `token/` | 基于字符数的简易 Token 计数器（默认） |
 
 ---
 

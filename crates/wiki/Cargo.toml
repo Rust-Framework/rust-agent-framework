@@ -8,6 +8,8 @@ homepage.workspace = true
 description = "File-system based wiki engine with full-text search, typed pages, and concept graphs"
 
 [dependencies]
+rust-agent-core = { workspace = true }
+
 # Async runtime
 tokio = { workspace = true }
 tokio-util = "0.7"

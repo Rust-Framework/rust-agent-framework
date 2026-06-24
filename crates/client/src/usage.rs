@@ -51,6 +51,11 @@ pub(crate) struct OpenAIUsage {
     pub prompt_tokens_details: Option<OpenAIPromptTokensDetails>,
     #[serde(default)]
     pub completion_tokens_details: Option<OpenAICompletionTokensDetails>,
+    /// 部分 OpenAI 兼容网关（如 DeepSeek、Agnes）在顶层返回缓存字段。
+    #[serde(default)]
+    pub prompt_cache_hit_tokens: Option<u32>,
+    #[serde(default)]
+    pub prompt_cache_miss_tokens: Option<u32>,
 }
 
 #[derive(Debug, serde::Deserialize)]

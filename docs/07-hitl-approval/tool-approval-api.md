@@ -44,7 +44,7 @@ pub enum AgentResponseUpdate {
 审批请求在 `FunctionInvokingChatClient` 的 spawned task 中产生，发生在工具调用累积完毕后、实际执行之前：
 
 ```rust
-// crates/framework/src/chat_client_decorators/function_invoking.rs
+// crates/framework/src/decorators/invoke.rs
 
 // 1. 检查是否有任何工具需要审批
 let any_requires_approval = tool_calls.iter().any(|tc| {

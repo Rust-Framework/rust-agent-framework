@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::sync::Arc;
 
 use rust_agent_core::{
@@ -6,9 +6,9 @@ use rust_agent_core::{
     ITokenCounter, ITool, Result, ToolRegistry,
 };
 
-use crate::ChatClientAgent;
-use crate::chat_client_decorators::FunctionInvokingChatClient;
-use crate::context_providers::history_provider::InMemoryHistoryProvider;
+use crate::agent::ChatClientAgent;
+use crate::decorators::FunctionInvokingChatClient;
+use crate::context::history::InMemoryHistoryProvider;
 
 /// AgentBuilder 配置验证报告。
 ///

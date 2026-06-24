@@ -143,20 +143,21 @@ graph TB
 | 组件 | 文件 | 说明 |
 |------|------|------|
 | `AgentBuilder` | `builder.rs` | 流畅构建器，生成 `Arc<dyn IAgent>` |
-| `ChatClientAgent` | `chat_client_agent.rs` | `IAgent` 核心实现，三阶段生命周期 |
-| `FunctionInvokingChatClient` | `chat_client_decorators/` | `IChatClient` 装饰器，透明工具调用循环 |
-| `PerServiceCallPersistingChatClient` | `chat_client_decorators/` | 每次 LLM 调用后自动持久化 |
+| `ChatClientAgent` | `agent/` | `IAgent` 核心实现，三阶段生命周期 |
+| `FunctionInvokingChatClient` | `decorators/` | `IChatClient` 装饰器，透明工具调用循环 |
+| `PerServiceCallPersistingChatClient` | `decorators/` | 每次 LLM 调用后自动持久化 |
 | `AgentResponseConverter` | `converter.rs` | 将 SSE 增量转换为结构化内容 |
-| `InMemoryHistoryProvider` | `context_providers/` | 默认会话历史注入器 |
-| `WorkspaceContextProvider` | `context_providers/` | 工作区工具和路径管理 |
-| `AgentSkillsProvider` | `context_providers/` | Agent Skills 加载器 |
+| `InMemoryHistoryProvider` | `context/` | 默认会话历史注入器 |
+| `WorkspaceContextProvider` | `context/` | 工作区工具和路径管理 |
+| `AgentSkillsProvider` | `context/` | Agent Skills 加载器 |
+| `BundleProvider` | `bundle/` | OKF 持久知识包 |
 | `SlidingWindowStrategy` | `compression/` | 滑动窗口压缩 |
 | `TokenBudgetStrategy` | `compression/` | Token 预算压缩（含工具结果淘汰） |
 | `CompressionPipeline` | `compression/` | 压缩策略链式组合 |
-| `EstimateCounter` | `token_counter.rs` | 估算 Token 计数器 |
-| `InMemorySessionStore` | `session_store/` | 内存会话存储 |
-| `FileSystemSessionStore` | `session_store/` | 文件系统会话存储 |
-| `IsolationScopedSessionStore` | `session_store/` | 隔离域会话存储 |
+| `EstimateCounter` | `token/` | 估算 Token 计数器 |
+| `InMemorySessionStore` | `session/` | 内存会话存储 |
+| `FileSystemSessionStore` | `session/` | 文件系统会话存储 |
+| `IsolationScopedSessionStore` | `session/` | 隔离域会话存储 |
 | 14 个内置工具 | `tools/` | 文件操作和命令执行工具集 |
 
 ### 设计要点

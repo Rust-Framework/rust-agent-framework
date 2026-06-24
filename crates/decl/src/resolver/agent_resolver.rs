@@ -1,8 +1,10 @@
+#[cfg(feature = "mcp")]
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use rust_agent_core::{IAgent, IChatClient, ITool};
 use rust_agent_framework::AgentBuilder;
+#[cfg(feature = "mcp")]
 use rust_agent_mcp::McpServerClient;
 
 use crate::definition::{AgentDefinition, AgentKindData};
@@ -25,7 +27,8 @@ pub struct AgentResolver {
     tool_resolver: ToolResolver,
     /// 已解析 Agent 的注册表，按名称键控。
     agent_registry: Vec<(String, Arc<dyn IAgent>)>,
-    /// 已注册的 MCP 服务器，按 server_url 键控（用于工作流编译）。
+    /// 已注册的 MCP 服务器，按 server_url 键控（需 `mcp` feature）。
+    #[cfg(feature = "mcp")]
     mcp_servers: HashMap<String, Arc<McpServerClient>>,
 }
 
@@ -36,6 +39,7 @@ impl AgentResolver {
         Self {
             tool_resolver: ToolResolver::new(),
             agent_registry: Vec::new(),
+            #[cfg(feature = "mcp")]
             mcp_servers: HashMap::new(),
         }
     }
@@ -57,7 +61,8 @@ impl AgentResolver {
         self.tool_resolver.register_factory(name, factory);
     }
 
-    /// 注册 MCP 服务器客户端（同时注册到 ToolResolver 用于工具解析）。
+    /// 注册 MCP 服务器客户端（需 `mcp` feature）。
+    #[cfg(feature = "mcp")]
     pub fn register_mcp_server(
         &mut self,
         server_url: impl Into<String>,
@@ -70,7 +75,8 @@ impl AgentResolver {
         self.mcp_servers.insert(url, arc);
     }
 
-    /// 按 server_url 查找 MCP 服务器客户端。
+    /// 按 server_url 查找 MCP 服务器客户端（需 `mcp` feature）。
+    #[cfg(feature = "mcp")]
     pub fn get_mcp_server(&self, server_url: &str) -> Option<&Arc<McpServerClient>> {
         self.mcp_servers.get(server_url)
     }

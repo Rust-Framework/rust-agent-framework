@@ -157,38 +157,55 @@ rust-agent-framework = { git = "...", package = "rust-agent-framework" }
 ```rust
 // Agent
 pub use builder::AgentBuilder;
-pub use chat_client_agent::ChatClientAgent;
+pub use agent::ChatClientAgent;
 
-// Context Providers
-pub use context_providers::history_provider::InMemoryHistoryProvider;
-pub use context_providers::workspace::WorkspaceContextProvider;
-pub use context_providers::agent_skill::{AgentSkill, SkillMetadata};
-pub use context_providers::skills_provider::AgentSkillsProvider;
+// Context Providers (re-exported at crate root)
+pub use context::history::InMemoryHistoryProvider;
+pub use context::workspace::WorkspaceContextProvider;
+pub use context::skill::{AgentSkill, SkillMetadata};
+pub use context::skills::AgentSkillsProvider;
+
+// OKF knowledge bundle
+pub use bundle::{BundleProvider, KnowledgeBundle, validate_bundle, ...};
 
 // Compression
 pub use compression::{SlidingWindowStrategy, TokenBudgetStrategy, CompressionPipeline};
 
 // Session
-pub use session_store::{InMemorySessionStore, FileSystemSessionStore, IsolationScopedSessionStore};
+pub use session::{InMemorySessionStore, FileSystemSessionStore, IsolationScopedSessionStore};
 
 // Token Counter
-pub use token_counter::EstimateCounter;
+pub use token::EstimateCounter;
 
 // Converter
 pub use converter::AgentResponseConverter;
 
 // ChatClient Decorators
-pub use chat_client_decorators::{FunctionInvokingChatClient, PerServiceCallPersistingChatClient};
+pub use decorators::{FunctionInvokingChatClient, PerServiceCallPersistingChatClient};
 
 // Tools (14 built-in)
 pub use tools::{
     ReadFile, WriteFile, EditFile, ListFiles, InspectFile,
     MakeDirectory, RemovePath, MoveFile, FindFiles, SearchFile,
-    RunCommand, LoadSkillTool, ReadSkillResourceTool, RunSkillScriptTool,
+    RunCommand, LoadSkillTool, ReadSkillResourceTool,
 };
 
 // Re-export macros
 pub use rust_agent_macros::tool;
+```
+
+**模块目录**（`mod.rs` 仅做导出，实现拆分到子文件）：
+
+```
+framework/src/
+├── agent/          # chat_client.rs, run.rs, post_invoke.rs, proxy.rs
+├── bundle/         # okf/, curator/, search/, provider.rs
+├── context/        # history, skill, skills, workspace, runner
+├── decorators/     # invoke, persist
+├── session/        # memory, disk, scoped
+├── token/          # estimate, tiktoken
+├── compression/
+└── tools/
 ```
 
 ## 扩展层 Crate 详解
@@ -247,10 +264,29 @@ rust-agent-rhai = { git = "...", package = "rust-agent-rhai" }
 
 ### rust-agent-decl
 
-声明式 Agent DSL，支持用 YAML/TOML 定义 Agent 行为。可选 feature：`yaml`、`rhai`、`web`、`rag`、`wiki`、`openapi`、`openapi-validate`、`sandbox`、`sandbox-docker`、`sandbox-wasm`。
+声明式 Agent DSL，支持用 YAML/TOML 定义 Agent 行为。
+
+**扩展模式**：核心 crate 仅依赖 `core` + `client` + `framework` + `workflow`；可选集成通过 Cargo feature 按需启用，调用方只引入所需扩展，避免依赖爆炸：
+
+| Feature | 拉取的 crate | 用途 |
+|---------|-------------|------|
+| `yaml` / `toml` | serde_yaml / toml | 多格式解析 |
+| `web` | rust-agent-websearch | web_search / web_fetch 工具 |
+| `mcp` | rust-agent-mcp | MCP 工具 + `AgentBuilderMcpExt` |
+| `rag` | rust-agent-rag | `kind: knowledge` 上下文 |
+| `wiki` | rust-agent-wiki | `kind: wiki` 上下文 |
+| `openapi` | rust-agent-openapi | OpenAPI HTTP 工具 |
+| `sandbox` | rust-agent-sandbox | code_interpreter |
+| `rhai` | rust-agent-rhai | Rhai 表达式 |
+
+内置上下文（`bundle`、`skills`、`workspace`）由 `ext::context` 模块构建；可选上下文和工具在对应 feature 启用后才链接。
 
 ```toml
-rust-agent-decl = { git = "...", package = "rust-agent-decl", features = ["yaml", "sandbox", "openapi"] }
+# 最小依赖 — 仅 JSON + 框架内置
+rust-agent-decl = { git = "...", package = "rust-agent-decl" }
+
+# 全功能 CLI 场景
+rust-agent-decl = { git = "...", package = "rust-agent-decl", features = ["yaml", "web", "mcp", "sandbox", "openapi"] }
 ```
 
 ### rust-agent-wiki
