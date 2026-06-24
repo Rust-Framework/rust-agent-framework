@@ -1,0 +1,23 @@
+# 本地 Qwen2.5-0.5B-Instruct 对话验证
+#
+# 运行:
+#   cargo run -p rust-agent-cli -- --config local-agent-qwen.yaml
+kind: prompt
+name: local-agent-qwen
+displayName: 本地 Qwen 助手
+description: 使用 Qwen2.5-0.5B-Instruct Q8_0 GGUF 本地对话（llama-gguf 已验证支持 ChatML）。
+model:
+  id: qwen2.5-0.5b-instruct-q8_0
+  provider: llama
+  connection:
+    kind: anonymous
+    endpoint: D:/AIModels/gguf/qwen2.5-0.5b-instruct-q8_0.gguf
+  options:
+    kind: chat
+    temperature: 0.7
+    max_output_tokens: 512
+    top_p: 0.9
+instructions: |
+  你是一个简洁、准确的中文助手。直接回答问题，避免冗长铺垫。
+
+max_tool_rounds: 50
