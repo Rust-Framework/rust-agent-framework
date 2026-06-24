@@ -27,13 +27,17 @@ pub fn resolve_chat_client_with_registry(
     model: &Model,
     connections: Option<&HashMap<String, Connection>>,
 ) -> crate::Result<Arc<dyn IChatClient>> {
-    let connection = model.connection.as_ref();
     let provider = model
         .provider
         .as_deref()
         .unwrap_or("openai")
         .to_lowercase();
 
+    if provider == "lm" || provider == "local" {
+        return resolve_lm_chat_client(model);
+    }
+
+    let connection = model.connection.as_ref();
     let (api_key, base_url) = match connection {
         Some(conn) => extract_credentials(conn, connections, 0)?,
         None => {
@@ -62,7 +66,7 @@ pub fn resolve_chat_client_with_registry(
         },
         other => {
             return Err(DeclError::Unsupported(format!(
-                "Unknown provider '{}'. Supported: openai, deepseek, agnes, anthropic, custom",
+                "Unknown provider '{}'. Supported: openai, deepseek, agnes, anthropic, custom, lm, local",
                 other
             )));
         }
@@ -103,6 +107,74 @@ pub fn resolve_chat_client_with_registry(
             other
         ))),
     }
+}
+
+#[cfg(feature = "lm")]
+fn resolve_lm_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>> {
+    use rust_agent_lm::{default_model_metadata, LmChatClient, LmChatClientOptions};
+
+    let connection = model.connection.as_ref().ok_or_else(|| {
+        DeclError::Missing("connection is required for lm provider (model path)".into())
+    })?;
+
+    let model_path = connection
+        .details
+        .endpoint
+        .clone()
+        .or_else(|| {
+            connection
+                .details
+                .extra
+                .get("model_path")
+                .and_then(|v| v.as_str().map(String::from))
+        })
+        .ok_or_else(|| {
+            DeclError::Missing(
+                "lm provider requires connection.endpoint or connection.model_path".into(),
+            )
+        })?;
+
+    let tokenizer_path = model
+        .options
+        .as_ref()
+        .and_then(|o| o.extra.get("tokenizer_path"))
+        .and_then(|v| v.as_str().map(String::from))
+        .or_else(|| {
+            connection
+                .details
+                .extra
+                .get("tokenizer_path")
+                .and_then(|v| v.as_str().map(String::from))
+        })
+        .unwrap_or_else(|| "tokenizer.bin".to_string());
+
+    let mut options =
+        LmChatClientOptions::new(model_path, tokenizer_path, model.id.clone());
+    options.model_metadata = Some(default_model_metadata(&model.id));
+
+    if let Some(opts) = &model.options {
+        if let Some(temp) = opts.temperature {
+            options.temperature = Some(temp as f32);
+        }
+        if let Some(mt) = opts.max_output_tokens {
+            options.max_tokens = Some(mt as u32);
+        }
+        if let Some(top_p) = opts.top_p {
+            options.top_p = Some(top_p as f32);
+        }
+        if let Some(seed) = opts.seed {
+            options.seed = Some(seed as u64);
+        }
+    }
+
+    Ok(Arc::new(LmChatClient::new(options)?))
+}
+
+#[cfg(not(feature = "lm"))]
+fn resolve_lm_chat_client(_model: &Model) -> crate::Result<Arc<dyn IChatClient>> {
+    Err(DeclError::Unsupported(
+        "lm/local provider requires the 'lm' feature on rust-agent-decl".into(),
+    ))
 }
 
 const MAX_REFERENCE_DEPTH: usize = 8;
