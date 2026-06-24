@@ -9,6 +9,7 @@ description = "Agent runtime framework for building LLM-powered agents with tool
 
 [dependencies]
 rust-agent-core = { workspace = true }
+rust-agent-client = { workspace = true }
 rust-agent-macros = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }

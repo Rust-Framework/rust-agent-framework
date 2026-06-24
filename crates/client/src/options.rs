@@ -85,4 +85,26 @@ impl ChatClientOptions {
             ..Default::default()
         }
     }
+
+    /// 创建 Agnes AI 选项（OpenAI 兼容，`/v1` 基础 URL）。
+    pub fn agnes(model: impl Into<String>, api_key: impl Into<String>) -> Self {
+        Self {
+            api_base: crate::agnes_client::AGNES_DEFAULT_API_BASE.into(),
+            api_key: api_key.into(),
+            model: model.into(),
+            stream_include_usage: true,
+            ..Default::default()
+        }
+    }
+
+    /// 创建 Anthropic Messages API 选项。
+    pub fn anthropic(model: impl Into<String>, api_key: impl Into<String>) -> Self {
+        Self {
+            api_base: crate::anthropic_client::ANTHROPIC_DEFAULT_API_BASE.into(),
+            api_key: api_key.into(),
+            model: model.into(),
+            stream_include_usage: false,
+            ..Default::default()
+        }
+    }
 }

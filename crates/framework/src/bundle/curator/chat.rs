@@ -15,9 +15,14 @@ pub(crate) struct CuratorChatClient {
 }
 
 impl CuratorChatClient {
-    pub fn new(inner: Arc<dyn IChatClient>) -> Self {
+    pub(crate) fn new(inner: Arc<dyn IChatClient>) -> Self {
         Self { inner }
     }
+}
+
+/// Wrap a leaf client with curator-specific run options (low temperature, no thinking).
+pub fn wrap_curator_client(inner: Arc<dyn IChatClient>) -> Arc<dyn IChatClient> {
+    Arc::new(CuratorChatClient::new(inner))
 }
 
 #[async_trait]

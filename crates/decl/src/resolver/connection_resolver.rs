@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use rust_agent_client::{ChatClientOptions, DeepSeekChatClient, OpenAiChatClient};
+use rust_agent_client::{
+    AgnesChatClient, AnthropicChatClient, ChatClientOptions, DeepSeekChatClient, OpenAiChatClient,
+};
 use rust_agent_core::IChatClient;
 
 use crate::connection::{Connection, ConnectionKind};
@@ -48,6 +50,8 @@ pub fn resolve_chat_client_with_registry(
     let mut options = match provider.as_str() {
         "openai" => ChatClientOptions::openai(&model.id, api_key),
         "deepseek" => ChatClientOptions::deepseek(&model.id, api_key),
+        "agnes" => ChatClientOptions::agnes(&model.id, api_key),
+        "anthropic" => ChatClientOptions::anthropic(&model.id, api_key),
         "custom" => ChatClientOptions {
             api_base: base_url
                 .clone()
@@ -58,7 +62,7 @@ pub fn resolve_chat_client_with_registry(
         },
         other => {
             return Err(DeclError::Unsupported(format!(
-                "Unknown provider '{}'. Supported: openai, deepseek, custom",
+                "Unknown provider '{}'. Supported: openai, deepseek, agnes, anthropic, custom",
                 other
             )));
         }
@@ -91,6 +95,8 @@ pub fn resolve_chat_client_with_registry(
     match provider.as_str() {
         "openai" => Ok(Arc::new(OpenAiChatClient::new(options)?)),
         "deepseek" => Ok(Arc::new(DeepSeekChatClient::new(options)?)),
+        "agnes" => Ok(Arc::new(AgnesChatClient::new(options)?)),
+        "anthropic" => Ok(Arc::new(AnthropicChatClient::new(options)?)),
         "custom" => Ok(Arc::new(OpenAiChatClient::new(options)?)),
         other => Err(DeclError::Unsupported(format!(
             "Unknown provider: {}",

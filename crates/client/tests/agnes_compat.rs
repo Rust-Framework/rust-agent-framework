@@ -1,21 +1,15 @@
 //! Manual integration probe for Agnes AI tool-loop compatibility.
 //! Run: AGNES_API_KEY=sk-... cargo test -p rust-agent-client agnes_tool_loop -- --ignored --nocapture
 
-use rust_agent_client::{ChatClient, ChatClientOptions};
-use rust_agent_core::{ChatClientRunOptions, ChatMessage, MessageRole, ToolCall};
+use rust_agent_client::{AgnesChatClient, ChatClientOptions};
+use rust_agent_core::{ChatClientRunOptions, ChatMessage, IChatClient, MessageRole, ToolCall};
 use futures_util::StreamExt;
 
 #[tokio::test]
 #[ignore]
 async fn agnes_tool_loop_round_trip() {
     let key = std::env::var("AGNES_API_KEY").expect("AGNES_API_KEY");
-    let client = ChatClient::new(ChatClientOptions {
-        api_base: "https://apihub.agnes-ai.com/v1".into(),
-        api_key: key,
-        model: "agnes-2.0-flash".into(),
-        ..Default::default()
-    })
-    .unwrap();
+    let client = AgnesChatClient::new(ChatClientOptions::agnes("agnes-2.0-flash", key)).unwrap();
 
     let messages = vec![
         ChatMessage::system("You are helpful."),
@@ -50,7 +44,7 @@ async fn agnes_tool_loop_round_trip() {
     })];
 
     let mut stream = client
-        .chat_stream(&messages, &opts, rust_agent_client::usage::UsageFormat::OpenAI)
+        .run(&messages, opts)
         .await
         .expect("round 2 should succeed");
 

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -106,7 +107,7 @@ impl ChatClientRunOptions {
 /// 对 LLM 提供商 API 的轻量封装。
 /// 仅支持流式输出。
 #[async_trait]
-pub trait IChatClient: Send + Sync {
+pub trait IChatClient: Send + Sync + Any {
     /// 执行聊天补全，产生更新增量的流式响应
     ///
     /// `options` 允许单次调用覆盖默认参数（温度、额外请求体等），

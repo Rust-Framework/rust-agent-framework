@@ -345,6 +345,7 @@ fn node_chunk_to_content(chunk: NodeChunk, node_id: &str) -> Content {
                     prompt_cache_hit_tokens: None,
                     prompt_cache_miss_tokens: None,
                     reasoning_tokens: None,
+                    raw: None,
                 },
                 meta: make_meta(node_id),
             })

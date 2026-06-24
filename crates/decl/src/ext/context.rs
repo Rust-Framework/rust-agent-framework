@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rust_agent_core::{IContextProvider, ITool, ScopePolicy, WorkspaceScope};
+use rust_agent_core::{IChatClient, IContextProvider, ITool, ScopePolicy, WorkspaceScope};
 use rust_agent_framework::WorkspaceContextProvider;
 
 use crate::context_provider_config::ContextProviderDecl;
@@ -12,6 +12,7 @@ use crate::context_provider_config::ContextProviderDecl;
 /// `mcp`, `rag`, `wiki`.
 pub fn build_provider_from_decl(
     decl: &ContextProviderDecl,
+    curator_client: Option<Arc<dyn IChatClient>>,
 ) -> Option<Arc<dyn IContextProvider>> {
     match decl {
         ContextProviderDecl::Bundle { name, config } if name == "knowledge-bundle" => {
@@ -34,6 +35,11 @@ pub fn build_provider_from_decl(
             let provider = rust_agent_framework::bundle::BundleProvider::new(&bundle_dir)
                 .with_enabled(enabled)
                 .with_consolidation_interval(interval);
+            let provider = if let Some(client) = curator_client {
+                provider.with_curator_client(client)
+            } else {
+                provider
+            };
             Some(Arc::new(provider))
         }
 
@@ -233,7 +239,7 @@ pub fn build_workspace_provider(
 ) -> Option<Arc<dyn IContextProvider>> {
     let (ws_name, config) = match decl {
         ContextProviderDecl::Workspace { name, config } => (name, config),
-        _ => return build_provider_from_decl(decl),
+        _ => return build_provider_from_decl(decl, None),
     };
 
     let root = config

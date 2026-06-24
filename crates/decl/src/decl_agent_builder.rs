@@ -354,7 +354,7 @@ impl DeclAgentBuilder {
                 }
             };
 
-            let provider = crate::ext::build_provider_from_decl(ctx_decl);
+            let provider = crate::ext::build_provider_from_decl(ctx_decl, None);
             if provider.is_some() {
                 report.resolved_providers.push(ctx_kind);
             } else {
@@ -584,6 +584,16 @@ impl DeclAgentBuilder {
         }
         let resolved_tools = tool_resolver.resolve_all(&tools_list).await?;
 
+        let curator_client = {
+            use rust_agent_client::{
+                clone_leaf_with_timeout, curator_timeout_secs, unwrap_chat_client_leaf,
+            };
+            use rust_agent_framework::bundle::wrap_curator_client;
+            let leaf = unwrap_chat_client_leaf(&chat_client);
+            let leaf = clone_leaf_with_timeout(leaf, curator_timeout_secs());
+            Some(wrap_curator_client(leaf))
+        };
+
         // 构建上下文提供器
         let mut all_context_providers: Vec<Arc<dyn IContextProvider>> = Vec::new();
         let remaining_tools: Vec<Arc<dyn ITool>>;
@@ -604,14 +614,18 @@ impl DeclAgentBuilder {
                     {
                         all_context_providers.push(ws_provider);
                     }
-                } else if let Some(provider) = crate::ext::build_provider_from_decl(decl) {
+                } else if let Some(provider) =
+                    crate::ext::build_provider_from_decl(decl, curator_client.clone())
+                {
                     all_context_providers.push(provider);
                 }
             }
         } else {
             remaining_tools = resolved_tools;
             for decl in &prompt_data.contexts {
-                if let Some(provider) = crate::ext::build_provider_from_decl(decl) {
+                if let Some(provider) =
+                    crate::ext::build_provider_from_decl(decl, curator_client.clone())
+                {
                     all_context_providers.push(provider);
                 }
             }

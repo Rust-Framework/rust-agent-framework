@@ -115,6 +115,9 @@ pub struct Usage {
     pub prompt_cache_hit_tokens: Option<u32>,
     pub prompt_cache_miss_tokens: Option<u32>,
     pub reasoning_tokens: Option<u32>,
+    /// 供应商返回的原始 `usage` JSON（调试用，不参与序列化）。
+    #[serde(skip)]
+    pub raw: Option<serde_json::Value>,
 }
 
 impl Usage {
@@ -140,6 +143,39 @@ impl Usage {
             hit / prompt
         } else {
             0.0
+        }
+    }
+
+    /// KV cache 命中 token 数（无数据时返回 0）。
+    pub fn cache_hit_tokens(&self) -> u32 {
+        self.prompt_cache_hit_tokens.unwrap_or(0)
+    }
+
+    /// KV cache 未命中 token 数（供应商未报告时按 `prompt - hit` 估算）。
+    pub fn cache_miss_tokens(&self) -> u32 {
+        self.prompt_cache_miss_tokens
+            .unwrap_or_else(|| self.prompt_tokens.saturating_sub(self.cache_hit_tokens()))
+    }
+
+    /// 供应商是否在用量中报告了 KV cache 统计（hit 或 miss 任一字段）。
+    pub fn cache_stats_available(&self) -> bool {
+        self.prompt_cache_hit_tokens.is_some() || self.prompt_cache_miss_tokens.is_some()
+    }
+
+    /// 合并供应商分片返回的 `usage` JSON（如 Anthropic message_start + message_delta）。
+    pub fn merge_raw_usage(&mut self, chunk: &serde_json::Value) {
+        match &mut self.raw {
+            None => self.raw = Some(chunk.clone()),
+            Some(existing) => {
+                if let (Some(obj), Some(chunk_obj)) = (existing.as_object_mut(), chunk.as_object())
+                {
+                    for (k, v) in chunk_obj {
+                        obj.insert(k.clone(), v.clone());
+                    }
+                } else {
+                    self.raw = Some(chunk.clone());
+                }
+            }
         }
     }
 }

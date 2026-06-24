@@ -176,6 +176,10 @@ impl IChatClient for ChatClientWrapper {
     > {
         self.0.run(messages, options).await
     }
+
+    fn inner_client(&self) -> Option<&Arc<dyn IChatClient>> {
+        Some(&self.0)
+    }
 }
 
 /// 包装 `Arc<dyn ITool>` 以实现 `ITool`，用于 `AgentBuilder::with_tool()`。

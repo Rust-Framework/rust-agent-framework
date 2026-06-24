@@ -1,12 +1,12 @@
 ﻿# MAF AgentSchema v1.0 — cli-agent declaration
-# LLM: Agnes AI (OpenAI-compatible) via OpenAiChatClient
+# LLM: Agnes AI via AgnesChatClient
 kind: prompt
 name: cli-agent
 displayName: CLI 助手
 description: 具备技能记忆、网页搜索和文件操作能力的交互式 CLI 智能助手。
 model:
   id: agnes-2.0-flash
-  provider: openai
+  provider: agnes
   connection:
     kind: key
     api_key: sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m

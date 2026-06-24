@@ -34,6 +34,10 @@ impl ChatClient {
         &self.options
     }
 
+    pub(crate) fn http(&self) -> &reqwest::Client {
+        &self.http
+    }
+
     /// 核心流式调用：向 `{api_base}/chat/completions` 发送 POST 请求，解析 SSE。
     pub async fn chat_stream(
         &self,
@@ -83,10 +87,8 @@ impl ChatClient {
         Ok(Box::pin(sse))
     }
 
-    /// Build the JSON request body for POST /chat/completions.
-    ///
-    /// Per-call `run_options` override the client's defaults.
-    fn build_request_body(
+    /// 构建 OpenAI 兼容 `/chat/completions` 请求体。
+    pub(crate) fn build_request_body(
         &self,
         messages: &[ChatMessage],
         run_options: &ChatClientRunOptions,

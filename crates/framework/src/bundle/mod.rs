@@ -21,8 +21,8 @@ pub use okf::{
 };
 pub use curator::{
     build_consolidation_context, build_turn_transcript, load_projection, project_messages,
-    save_projection, ConsolidationJob, ConsolidationStatus, ConsolidationWorker, WorkerStats,
-    PROJECTION_STATE_KEY,
+    save_projection, wrap_curator_client, ConsolidationJob, ConsolidationStatus,
+    ConsolidationWorker, WorkerStats, PROJECTION_STATE_KEY,
 };
 pub use provider::BundleProvider;
 pub use search::{

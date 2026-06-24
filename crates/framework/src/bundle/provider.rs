@@ -11,8 +11,11 @@ use crate::tools::{LoadSkillTool, ReadSkillResourceTool};
 
 use super::okf::{validate_bundle, BundleValidationReport};
 use super::curator::{
-    CuratorChatClient, load_projection, prepare_consolidation_messages,
-    save_projection, ConsolidationJob, ConsolidationWorker, WorkerStats,
+    load_projection, prepare_consolidation_messages, save_projection, wrap_curator_client,
+    ConsolidationJob, ConsolidationWorker, WorkerStats,
+};
+use rust_agent_client::{
+    clone_leaf_with_timeout, curator_timeout_secs, unwrap_chat_client_leaf,
 };
 use super::seed;
 
@@ -202,8 +205,9 @@ impl BundleProvider {
         }
 
         let main_client = agent.chat_client()?;
-        let raw = unwrap_to_raw(main_client);
-        let wrapped: Arc<dyn IChatClient> = Arc::new(CuratorChatClient::new(Arc::clone(raw)));
+        let leaf = unwrap_chat_client_leaf(main_client);
+        let leaf = clone_leaf_with_timeout(leaf, curator_timeout_secs());
+        let wrapped = wrap_curator_client(leaf);
 
         let mut guard = self.auto_client.lock().unwrap();
         if guard.is_none() {
@@ -211,14 +215,6 @@ impl BundleProvider {
         }
         Some(wrapped)
     }
-}
-
-fn unwrap_to_raw(client: &Arc<dyn IChatClient>) -> &Arc<dyn IChatClient> {
-    let mut current = client;
-    while let Some(inner) = current.inner_client() {
-        current = inner;
-    }
-    current
 }
 
 #[cfg(test)]

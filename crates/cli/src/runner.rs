@@ -422,39 +422,11 @@ impl ReplRunner {
                     println!("\x1b[0m");
                 }
 
-                // Token usage summary
+                // Token usage summary（独立换行，避免与流式正文粘连）
                 if let Some(ref usage) = accumulated_usage {
-                    let cache = if let Some(hit) = usage.prompt_cache_hit_tokens {
-                        let miss = usage.prompt_cache_miss_tokens.unwrap_or(0);
-                        let total_cache = hit + miss;
-                        if total_cache > 0 {
-                            let ratio = usage.cache_hit_ratio();
-                            format!(" cache:{}/{}({:.0}%)", hit, total_cache, ratio * 100.0)
-                        } else {
-                            format!(" cache:{}h", hit)
-                        }
-                    } else {
-                        String::new()
-                    };
-                    let reasoning = if let Some(rt) = usage.reasoning_tokens {
-                        if rt > 0 {
-                            format!(" reasoning:{}", rt)
-                        } else {
-                            String::new()
-                        }
-                    } else {
-                        String::new()
-                    };
-                    eprintln!(
-                        "\x1b[90m[用量] prompt={}{} completion={}{} total={}\x1b[0m",
-                        usage.prompt_tokens,
-                        cache,
-                        usage.completion_tokens,
-                        reasoning,
-                        usage.total_tokens,
-                    );
+                    print_usage_summary(usage);
                 }
-                println!("\n");
+                println!();
             }
             Err(e) => {
                 eprintln!("[错误] {}", e);
@@ -476,4 +448,34 @@ impl ReplRunner {
         }
         println!("  /quit|exit   Exit (also: quit, exit without slash)");
     }
+}
+
+/// 在流式正文之后单独打印用量块（保证换行，并展示 KV cache 命中/未命中）。
+fn print_usage_summary(usage: &Usage) {
+    let reasoning = usage.reasoning_tokens.unwrap_or(0);
+
+    // 流式输出用 print! 无尾换行，先补一行再打印用量
+    println!();
+    println!(
+        "\x1b[90m[用量] prompt={}  completion={}  total={}\x1b[0m",
+        usage.prompt_tokens, usage.completion_tokens, usage.total_tokens,
+    );
+    if usage.cache_stats_available() {
+        let hit = usage.cache_hit_tokens();
+        let miss = usage.cache_miss_tokens();
+        let cache_ratio = usage.cache_hit_ratio() * 100.0;
+        println!(
+            "\x1b[90m       cache hit={}  miss={}  ({:.1}%)\x1b[0m",
+            hit, miss, cache_ratio,
+        );
+    } else {
+        println!("\x1b[90m       cache: (供应商未上报)\x1b[0m");
+    }
+    if reasoning > 0 {
+        println!("\x1b[90m       reasoning={}\x1b[0m", reasoning);
+    }
+    if let Some(ref raw) = usage.raw {
+        println!("\x1b[90m       usage (raw): {}\x1b[0m", raw);
+    }
+    let _ = std::io::stdout().flush();
 }
