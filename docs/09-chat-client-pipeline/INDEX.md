@@ -8,12 +8,14 @@ ChatClient 管道是 RAF 的核心架构创新之一。通过将 LLM 客户端�
 | [9.2](function-invoking.md) | FunctionInvokingChatClient 工具调用循环 |
 | [9.3](llm-providers.md) | LLM 提供商（OpenAI / DeepSeek） |
 | [9.4](stream-processing.md) | 流式处理与中间件 |
+| [9.5](local-inference.md) | 本地模型推理（lm.rs / rust-agent-lm） |
 
 ## 快速导航
 
 - **为什么选用装饰器模式**：参见 [9.1 — 装饰器模式](decorator-pattern.md)。
 - **工具调用循环的完整实现**：参见 [9.2 — FunctionInvokingChatClient](function-invoking.md)。
 - **如何接入新的 LLM 提供商**：参见 [9.3 — LLM 提供商](llm-providers.md)。
+- **如何在本地 CPU 运行模型（离线推理）**：参见 [9.5 — 本地模型推理](local-inference.md)。
 - **从 SSE 字节到 AgentResponseResult 的完整链路**：参见 [9.4 — 流式处理](stream-processing.md)。
 
 ## 管道架构总览
@@ -57,6 +59,7 @@ graph TB
 | `ChatClient` | `rust_agent_client::chat_client` | 通用 HTTP/SSE 传输引擎 |
 | `DeepSeekChatClient` | `rust_agent_client::deepseek_client` | DeepSeek 提供商客户端 |
 | `OpenAiChatClient` | `rust_agent_client::openai_client` | OpenAI 提供商客户端 |
+| `LmChatClient` | `rust_agent_lm::chat_client` | 本地 CPU 推理客户端（lm.rs） |
 | `ChatClientOptions` | `rust_agent_client::options` | 客户端配置（api_base, api_key, model...） |
 | `AgentResponseConverter` | `rust_agent_framework::converter` | SSE 事件 → 公共 API 转换器 |
 | `SseStream` | `rust_agent_client::transport` | SSE 字节流解析器 |

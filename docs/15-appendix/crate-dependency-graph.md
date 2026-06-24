@@ -11,6 +11,7 @@ graph TD
 
     subgraph "客户端层"
         CLIENT[rust-agent-client]
+        LM[rust-agent-lm]
     end
 
     subgraph "框架层"
@@ -44,6 +45,7 @@ graph TD
 
     MACROS --> CORE
     CLIENT --> CORE
+    LM --> CORE
     FRAMEWORK --> CORE
     FRAMEWORK --> MACROS
     RAG --> CORE
@@ -65,6 +67,7 @@ graph TD
     DECL --> WIKI
     DECL --> OPENAPI
     DECL --> SANDBOX
+    DECL -.->|feature lm| LM
     HOST --> CORE
     HOST --> FRAMEWORK
     HOST --> CLIENT
@@ -82,10 +85,11 @@ graph TD
 | `rust-agent-core` | `crates/core/` | 无（基础层，不依赖其他 RAF Crate） |
 | `rust-agent-macros` | `crates/macros/` | `rust-agent-core` |
 | `rust-agent-client` | `crates/client/` | `rust-agent-core` |
+| `rust-agent-lm` | `crates/lm/` | `rust-agent-core` |
 | `rust-agent-framework` | `crates/framework/` | `rust-agent-core`, `rust-agent-macros` |
 | `rust-agent-workflow` | `crates/workflow/` | `rust-agent-core` |
 | `rust-agent-rhai` | `crates/rhai/` | `rust-agent-core`, `rust-agent-workflow` |
-| `rust-agent-decl` | `crates/decl/` | `rust-agent-core`, `rust-agent-client`, `rust-agent-framework`, `rust-agent-workflow`, `rust-agent-rhai`, `rust-agent-websearch`*, `rust-agent-rag`*, `rust-agent-wiki`*, `rust-agent-openapi`*, `rust-agent-sandbox`* |
+| `rust-agent-decl` | `crates/decl/` | `rust-agent-core`, `rust-agent-client`, `rust-agent-framework`, `rust-agent-workflow`, `rust-agent-rhai`, `rust-agent-websearch`*, `rust-agent-rag`*, `rust-agent-wiki`*, `rust-agent-openapi`*, `rust-agent-sandbox`*, `rust-agent-lm`* |
 | `rust-agent-openapi` | `crates/openapi/` | `rust-agent-core` |
 | `rust-agent-sandbox` | `crates/sandbox/` | `rust-agent-core` |
 
@@ -102,7 +106,8 @@ graph TD
 |-------|------|
 | **rust-agent-core** | 核心抽象：IAgent、ITool、IChatClient、ISession、消息类型、错误类型 |
 | **rust-agent-macros** | 过程宏：`#[tool]` 属性宏，自动生成 ITool 实现 |
-| **rust-agent-client** | LLM 客户端：OpenAI/DeepSeek 兼容的 IChatClient 实现 |
+| **rust-agent-client** | LLM 客户端：OpenAI/DeepSeek 等 HTTP API 的 IChatClient 实现 |
+| **rust-agent-lm** | 本地推理：基于 lm.rs 的 CPU IChatClient 实现（LMRS 格式权重） |
 | **rust-agent-framework** | Agent 运行时：AgentBuilder、ChatClientAgent、内置工具、上下文提供器、技能系统、记忆系统 |
 | **rust-agent-workflow** | 工作流引擎：图驱动编排、顺序/并发/交接模式、检查点、WorkflowBuilder |
 | **rust-agent-rhai** | Rhai 集成：RhaiRuntime、RhaiExecutor（工作流节点）、RhaiTool（Agent 工具） |
@@ -123,6 +128,8 @@ graph TD
 | `tokio` | 异步运行时（所有 RAF Crate） |
 | `async-trait` | 异步 trait（所有核心 Crate） |
 | `reqwest` | HTTP 客户端（rust-agent-client, rust-agent-websearch） |
+| `lmrs` | 本地 CPU 推理引擎（rust-agent-lm，git 依赖） |
+| `memmap2` | 模型权重内存映射（rust-agent-lm） |
 | `tantivy` | 全文搜索（rust-agent-wiki） |
 | `petgraph` | 图算法（rust-agent-wiki） |
 | `jsonschema` | OpenAPI 响应校验（rust-agent-openapi/validate） |

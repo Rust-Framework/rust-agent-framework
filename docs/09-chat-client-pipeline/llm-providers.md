@@ -550,3 +550,7 @@ RAF 的 LLM 提供商层通过分层设计实现了最大化的代码复用：
 | 流层 | `SseStream` | 底层的 SSE 字节流 → AgentResponseUpdate 转换 |
 
 添加新提供商只需实现薄包装类型 + 添加 `UsageFormat` 变体，无需重复 HTTP/SSE 传输逻辑。
+
+## 本地推理
+
+除 HTTP API 外，RAF 通过独立 crate **`rust-agent-lm`** 支持本机 CPU 推理（基于 [lm.rs](https://github.com/samuel-vitorino/lm.rs)）。无需 API Key，使用 LMRS 格式权重文件。详见 **[9.5 本地模型推理](local-inference.md)**。

@@ -86,6 +86,7 @@
 | [9.2](09-chat-client-pipeline/function-invoking.md) | FunctionInvokingChatClient 工具调用循环 |
 | [9.3](09-chat-client-pipeline/llm-providers.md) | LLM 提供商（OpenAI / DeepSeek） |
 | [9.4](09-chat-client-pipeline/stream-processing.md) | 流式处理与中间件 |
+| [9.5](09-chat-client-pipeline/local-inference.md) | 本地模型推理（lm.rs） |
 
 ## 第 10 章：宏与声明式配置
 

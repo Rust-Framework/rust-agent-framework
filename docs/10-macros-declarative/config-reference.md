@@ -38,7 +38,7 @@
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|:---:|--------|------|
 | `model.id` | string | **是** | — | 模型 ID，如 `"agnes-2.0-flash"`、`"gpt-4o"` |
-| `model.provider` | string | 否 | — | Provider 标识：`"openai"` / `"custom"` |
+| `model.provider` | string | 否 | — | Provider 标识：`"openai"` / `"deepseek"` / `"lm"` / `"local"` / `"custom"` |
 | `model.connection.kind` | string | 否 | — | 连接类型：`key` / `remote` / `reference` / `oauth` / `anonymous` |
 | `model.connection.api_key` | string | 否 | — | API 密钥。支持 `$ENV_VAR` / `=Env.VAR` |
 | `model.connection.name` | string | 否 | — | `reference` 连接的目标名称 |
@@ -56,6 +56,33 @@
 | `presencePenalty` / `presence_penalty` | number | 0 | 存在惩罚 |
 | `seed` | number | — | 随机种子（确定性输出） |
 | `stop` | string[] | — | 停止词列表 |
+| `tokenizer_path` | string | `tokenizer.bin` | **仅 `provider: lm`**：LMRS tokenizer 文件路径 |
+
+### 本地模型（`provider: lm` / `local`）
+
+需要 `rust-agent-decl` 启用 `lm` feature。无需 API Key，通过 `connection.endpoint` 指定 `.lmrs` 权重路径。
+
+完整指南参见 [9.5 本地模型推理](../09-chat-client-pipeline/local-inference.md)。
+
+```yaml
+model:
+  id: llama-3.2-1b-it
+  provider: lm
+  connection:
+    kind: anonymous
+    endpoint: /path/to/model.lmrs
+  options:
+    kind: chat
+    temperature: 0.7
+    max_output_tokens: 256
+    tokenizer_path: /path/to/tokenizer.bin
+```
+
+| 字段 | 必填 | 说明 |
+|------|:---:|------|
+| `connection.endpoint` | 是 | `.lmrs` 模型权重文件路径 |
+| `options.tokenizer_path` | 否 | tokenizer 路径，默认 `tokenizer.bin` |
+| `connection.api_key` | 否 | 本地推理不需要 |
 
 ### JSON 示例
 
