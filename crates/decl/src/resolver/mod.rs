@@ -13,6 +13,7 @@ pub mod code_sandbox_executor;
 pub mod connection_resolver;
 #[cfg(feature = "mcp")]
 pub mod mcp_executor;
+pub mod memory_model_resolver;
 pub mod tool_invoke_executor;
 pub mod tool_resolver;
 pub mod workflow_resolver;

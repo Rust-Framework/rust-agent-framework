@@ -5,7 +5,7 @@ use rust_agent_core::{
     MessageRole, Result, ToolCall,
 };
 
-use crate::bundle::build_turn_transcript;
+use crate::super_brain::build_turn_transcript;
 
 use super::chat_client::ChatClientAgent;
 use super::proxy::AgentProxy;

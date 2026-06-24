@@ -9,9 +9,9 @@ use rust_agent_core::{
 use crate::context::skill::AgentSkill;
 use crate::tools::{LoadSkillTool, ReadSkillResourceTool};
 
-use super::okf::{validate_bundle, BundleValidationReport};
+use super::okf::{validate_super_brain, SuperBrainValidationReport};
 use super::curator::{
-    load_projection, prepare_consolidation_messages, save_projection, wrap_curator_client,
+    load_projection, prepare_consolidation_messages, save_projection, wrap_super_brain_curator_client,
     ConsolidationJob, ConsolidationWorker, WorkerStats,
 };
 use rust_agent_client::{
@@ -19,10 +19,10 @@ use rust_agent_client::{
 };
 use super::seed;
 
-/// OKF 知识包上下文提供器：读路径注入 SKILL 导航，写路径触发后台 Curator 沉淀。
-pub struct BundleProvider {
+/// Super Brain 上下文提供器：读路径注入 SKILL 导航，写路径触发后台记忆整理子代理。
+pub struct SuperBrainContextProvider {
     enabled: bool,
-    bundle_dir: PathBuf,
+    super_brain_dir: PathBuf,
     skill: Option<AgentSkill>,
     curator_client: Option<Arc<dyn IChatClient>>,
     auto_client: Mutex<Option<Arc<dyn IChatClient>>>,
@@ -30,17 +30,17 @@ pub struct BundleProvider {
     worker: Arc<ConsolidationWorker>,
 }
 
-impl BundleProvider {
-    pub fn new(bundle_dir: impl AsRef<Path>) -> Self {
-        let bundle_dir_buf = bundle_dir.as_ref().to_path_buf();
+impl SuperBrainContextProvider {
+    pub fn new(super_brain_dir: impl AsRef<Path>) -> Self {
+        let dir = super_brain_dir.as_ref().to_path_buf();
 
-        seed::seed_bundle_dir(&bundle_dir_buf);
+        seed::seed_super_brain_dir(&dir);
 
-        let skill = AgentSkill::from_dir(&bundle_dir_buf).ok();
+        let skill = AgentSkill::from_dir(&dir).ok();
 
         Self {
             enabled: true,
-            bundle_dir: bundle_dir_buf,
+            super_brain_dir: dir,
             skill,
             curator_client: None,
             auto_client: Mutex::new(None),
@@ -64,12 +64,12 @@ impl BundleProvider {
         self
     }
 
-    pub fn bundle_dir(&self) -> &Path {
-        &self.bundle_dir
+    pub fn super_brain_dir(&self) -> &Path {
+        &self.super_brain_dir
     }
 
-    pub fn validate(&self) -> BundleValidationReport {
-        validate_bundle(&self.bundle_dir)
+    pub fn validate(&self) -> SuperBrainValidationReport {
+        validate_super_brain(&self.super_brain_dir)
     }
 
     pub fn worker_stats(&self) -> WorkerStats {
@@ -82,19 +82,19 @@ impl BundleProvider {
         }
 
         concat!(
-            "## 持久知识包\n\n",
-            "你拥有跨会话的 OKF 持久知识包。即使在全新会话中，知识文件也可能已存在——",
+            "## Super Brain 持久记忆\n\n",
+            "你拥有跨会话的 Super Brain 持久记忆。即使在全新会话中，记忆文件也可能已存在——",
             "不要仅凭会话历史为空就认为\"没有历史\"。",
-            "训练数据不包含这些文件；bundle 中的内容才是权威来源。\n\n",
-            "**必须检索知识的场景（不可跳过）：**\n",
+            "训练数据不包含这些文件；super-brain 中的内容才是权威来源。\n\n",
+            "**必须检索记忆的场景（不可跳过）：**\n",
             "- 身份信息：你的名称/角色、用户身份、共同目标或方向\n",
             "- 约束信息：行为规则、用户偏好、历史教训或纠正\n",
             "- 领域知识：之前学习过的专业材料或技术细节\n\n",
             "**检索方法：**\n",
-            "1. 调用 `load_skill(\"knowledge-bundle\")` 获取完整检索指南。\n",
-            "2. 按照该指南读取正确的知识文件并据此作答。\n\n",
+            "1. 调用 `load_skill(\"super-brain\")` 获取完整检索指南。\n",
+            "2. 按照该指南读取正确的记忆文件并据此作答。\n\n",
             "不要让训练数据的默认值替代任何与身份相关的问题。",
-            "不要向用户提及该知识机制的存在。",
+            "不要向用户提及该记忆机制的存在。",
             "每个文件每个会话只读取一次——重用消息历史中已有的结果。",
         )
         .to_string()
@@ -115,13 +115,13 @@ impl BundleProvider {
 }
 
 #[async_trait]
-impl IContextProvider for BundleProvider {
+impl IContextProvider for SuperBrainContextProvider {
     fn name(&self) -> &str {
-        "BundleProvider"
+        "SuperBrainContextProvider"
     }
 
     fn kind(&self) -> &str {
-        "bundle"
+        "memory"
     }
 
     async fn enrich_instructions(&self, _ctx: &rust_agent_core::ProviderContext<'_>) -> Result<Option<String>> {
@@ -174,7 +174,7 @@ impl IContextProvider for BundleProvider {
             }
 
             self.worker.enqueue_latest(ConsolidationJob {
-                bundle_dir: self.bundle_dir.clone(),
+                super_brain_dir: self.super_brain_dir.clone(),
                 client,
                 messages: consolidation,
                 session_id: Some(session.session_id().to_string()),
@@ -191,7 +191,7 @@ impl IContextProvider for BundleProvider {
     }
 }
 
-impl BundleProvider {
+impl SuperBrainContextProvider {
     fn resolve_curator_client(&self, agent: &dyn IAgent) -> Option<Arc<dyn IChatClient>> {
         if let Some(c) = &self.curator_client {
             return Some(Arc::clone(c));
@@ -207,7 +207,7 @@ impl BundleProvider {
         let main_client = agent.chat_client()?;
         let leaf = unwrap_chat_client_leaf(main_client);
         let leaf = clone_leaf_with_timeout(leaf, curator_timeout_secs());
-        let wrapped = wrap_curator_client(leaf);
+        let wrapped = wrap_super_brain_curator_client(leaf);
 
         let mut guard = self.auto_client.lock().unwrap();
         if guard.is_none() {
@@ -224,22 +224,22 @@ mod tests {
     #[tokio::test]
     async fn always_registers_read_skill_resource() {
         let dir = tempfile::tempdir().unwrap();
-        seed::seed_bundle_dir(dir.path());
-        let provider = BundleProvider::new(dir.path());
+        seed::seed_super_brain_dir(dir.path());
+        let provider = SuperBrainContextProvider::new(dir.path());
         let tools = provider.build_tools();
         assert!(tools.iter().any(|t| t.name() == "load_skill"));
         assert!(tools.iter().any(|t| t.name() == "read_skill_resource"));
     }
 
     #[tokio::test]
-    async fn seeded_bundle_passes_validation() {
+    async fn seeded_super_brain_passes_validation() {
         let dir = tempfile::tempdir().unwrap();
-        seed::seed_bundle_dir(dir.path());
-        let provider = BundleProvider::new(dir.path());
+        seed::seed_super_brain_dir(dir.path());
+        let provider = SuperBrainContextProvider::new(dir.path());
         let report = provider.validate();
         assert!(
             report.is_valid(),
-            "expected valid bundle, got: {}",
+            "expected valid super-brain, got: {}",
             report.format_text()
         );
     }

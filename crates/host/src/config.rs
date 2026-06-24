@@ -30,9 +30,9 @@ pub struct HostConfig {
     /// 会话持久化目录。设置后，会话将持久化到文件系统，服务重启后可恢复。
     #[serde(default)]
     pub session_store_dir: Option<String>,
-    /// OKF 知识包目录。设置后 Agent 拥有跨会话持久知识（BundleProvider）。
-    #[serde(default)]
-    pub bundle_dir: Option<String>,
+    /// Super Brain 记忆目录。设置后 Agent 拥有跨会话持久记忆（SuperBrainContextProvider）。
+    #[serde(default, alias = "bundle_dir")]
+    pub super_brain_dir: Option<String>,
     /// 工作区越界策略。可选值：allow_all（无限制）、approve_outside（越界审批，默认）、deny_outside（禁止越界）。
     #[serde(default = "default_scope_policy")]
     pub scope_policy: String,
@@ -212,10 +212,10 @@ pub struct CliArgs {
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_store_dir: Option<String>,
-    /// OKF 知识包目录（设置后启用跨会话持久知识）
-    #[arg(long)]
+    /// Super Brain 记忆目录（设置后启用跨会话持久记忆）
+    #[arg(long, alias = "bundle-dir")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub bundle_dir: Option<String>,
+    pub super_brain_dir: Option<String>,
     /// 工作区越界策略（allow_all/approve_outside/deny_outside）
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]

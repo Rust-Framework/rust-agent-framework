@@ -1,6 +1,6 @@
 pub mod agent;
 pub mod builder;
-pub mod bundle;
+pub mod super_brain;
 pub mod compression;
 pub mod context;
 pub mod converter;

@@ -8,7 +8,7 @@ ChatClient 管道是 RAF 的核心架构创新之一。通过将 LLM 客户端�
 | [9.2](function-invoking.md) | FunctionInvokingChatClient 工具调用循环 |
 | [9.3](llm-providers.md) | LLM 提供商（OpenAI / DeepSeek） |
 | [9.4](stream-processing.md) | 流式处理与中间件 |
-| [9.5](local-inference.md) | 本地模型推理（lm.rs / rust-agent-lm） |
+| [9.5](local-inference.md) | 本地模型推理（llama-gguf / rust-agent-llama） |
 
 ## 快速导航
 
@@ -59,7 +59,7 @@ graph TB
 | `ChatClient` | `rust_agent_client::chat_client` | 通用 HTTP/SSE 传输引擎 |
 | `DeepSeekChatClient` | `rust_agent_client::deepseek_client` | DeepSeek 提供商客户端 |
 | `OpenAiChatClient` | `rust_agent_client::openai_client` | OpenAI 提供商客户端 |
-| `LmChatClient` | `rust_agent_lm::chat_client` | 本地 CPU 推理客户端（lm.rs） |
+| `LlamaChatClient` | `rust_agent_llama::chat_client` | 本地 GGUF 推理客户端（llama-gguf） |
 | `ChatClientOptions` | `rust_agent_client::options` | 客户端配置（api_base, api_key, model...） |
 | `AgentResponseConverter` | `rust_agent_framework::converter` | SSE 事件 → 公共 API 转换器 |
 | `SseStream` | `rust_agent_client::transport` | SSE 字节流解析器 |

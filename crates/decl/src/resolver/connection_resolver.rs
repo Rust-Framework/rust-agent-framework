@@ -33,8 +33,8 @@ pub fn resolve_chat_client_with_registry(
         .unwrap_or("openai")
         .to_lowercase();
 
-    if provider == "lm" || provider == "local" {
-        return resolve_lm_chat_client(model);
+    if matches!(provider.as_str(), "llama" | "gguf" | "lm" | "local") {
+        return resolve_llama_chat_client(model);
     }
 
     let connection = model.connection.as_ref();
@@ -66,7 +66,7 @@ pub fn resolve_chat_client_with_registry(
         },
         other => {
             return Err(DeclError::Unsupported(format!(
-                "Unknown provider '{}'. Supported: openai, deepseek, agnes, anthropic, custom, lm, local",
+                "Unknown provider '{}'. Supported: openai, deepseek, agnes, anthropic, custom, llama, gguf, lm, local",
                 other
             )));
         }
@@ -109,12 +109,12 @@ pub fn resolve_chat_client_with_registry(
     }
 }
 
-#[cfg(feature = "lm")]
-fn resolve_lm_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>> {
-    use rust_agent_lm::{default_model_metadata, LmChatClient, LmChatClientOptions};
+#[cfg(feature = "llama")]
+fn resolve_llama_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>> {
+    use rust_agent_llama::{LlamaChatClient, LlamaChatClientOptions};
 
     let connection = model.connection.as_ref().ok_or_else(|| {
-        DeclError::Missing("connection is required for lm provider (model path)".into())
+        DeclError::Missing("connection is required for llama provider (model path)".into())
     })?;
 
     let model_path = connection
@@ -130,7 +130,7 @@ fn resolve_lm_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>> 
         })
         .ok_or_else(|| {
             DeclError::Missing(
-                "lm provider requires connection.endpoint or connection.model_path".into(),
+                "llama provider requires connection.endpoint or connection.model_path".into(),
             )
         })?;
 
@@ -145,12 +145,12 @@ fn resolve_lm_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>> 
                 .extra
                 .get("tokenizer_path")
                 .and_then(|v| v.as_str().map(String::from))
-        })
-        .unwrap_or_else(|| "tokenizer.bin".to_string());
+        });
 
-    let mut options =
-        LmChatClientOptions::new(model_path, tokenizer_path, model.id.clone());
-    options.model_metadata = Some(default_model_metadata(&model.id));
+    let mut options = LlamaChatClientOptions::new(model_path, model.id.clone());
+    if let Some(path) = tokenizer_path {
+        options = options.with_tokenizer_path(path);
+    }
 
     if let Some(opts) = &model.options {
         if let Some(temp) = opts.temperature {
@@ -165,15 +165,18 @@ fn resolve_lm_chat_client(model: &Model) -> crate::Result<Arc<dyn IChatClient>> 
         if let Some(seed) = opts.seed {
             options.seed = Some(seed as u64);
         }
+        if let Some(use_gpu) = opts.extra.get("use_gpu").and_then(|v| v.as_bool()) {
+            options.use_gpu = Some(use_gpu);
+        }
     }
 
-    Ok(Arc::new(LmChatClient::new(options)?))
+    Ok(Arc::new(LlamaChatClient::new(options)?))
 }
 
-#[cfg(not(feature = "lm"))]
-fn resolve_lm_chat_client(_model: &Model) -> crate::Result<Arc<dyn IChatClient>> {
+#[cfg(not(feature = "llama"))]
+fn resolve_llama_chat_client(_model: &Model) -> crate::Result<Arc<dyn IChatClient>> {
     Err(DeclError::Unsupported(
-        "lm/local provider requires the 'lm' feature on rust-agent-decl".into(),
+        "llama/local provider requires the 'llama' feature on rust-agent-decl".into(),
     ))
 }
 

@@ -15,7 +15,7 @@ use super::trace::{
 /// A single consolidation job in the worker queue.
 #[derive(Clone)]
 pub struct ConsolidationJob {
-    pub bundle_dir: PathBuf,
+    pub super_brain_dir: PathBuf,
     pub client: Arc<dyn IChatClient>,
     pub messages: Vec<ChatMessage>,
     pub session_id: Option<String>,
@@ -77,7 +77,7 @@ impl ConsolidationWorker {
                 emit_worker_started(&ctx);
 
                 let status = run_curator(
-                    job.bundle_dir,
+                    job.super_brain_dir,
                     job.client,
                     job.messages,
                     ctx.clone(),

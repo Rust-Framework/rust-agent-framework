@@ -19,7 +19,7 @@ rust-agent-rag = { workspace = true, optional = true }
 rust-agent-wiki = { workspace = true, optional = true }
 rust-agent-openapi = { workspace = true, optional = true }
 rust-agent-sandbox = { workspace = true, optional = true }
-rust-agent-lm = { workspace = true, optional = true }
+rust-agent-llama = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { version = "0.9", optional = true }
@@ -49,7 +49,7 @@ sandbox = ["dep:rust-agent-sandbox"]
 sandbox-docker = ["sandbox", "rust-agent-sandbox/docker"]
 sandbox-wasm = ["sandbox", "rust-agent-sandbox/wasm"]
 mustache = ["dep:mustache"]
-lm = ["dep:rust-agent-lm"]
+llama = ["dep:rust-agent-llama"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

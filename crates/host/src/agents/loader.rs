@@ -7,7 +7,7 @@ use tracing::{info, warn, debug};
 
 use rust_agent_core::{IAgent, IContextProvider, ScopePolicy, WorkspaceScope};
 use rust_agent_decl::DeclAgentBuilder;
-use rust_agent_framework::{bundle::BundleProvider, WorkspaceContextProvider};
+use rust_agent_framework::{super_brain::SuperBrainContextProvider, WorkspaceContextProvider};
 
 use crate::config::HostConfig;
 
@@ -38,13 +38,13 @@ impl<'a> DeclLoader<'a> {
             Some(Arc::new(WorkspaceContextProvider::new(scope)))
         };
 
-        let bundle_provider: Option<Arc<dyn IContextProvider>> = self
+        let super_brain_provider: Option<Arc<dyn IContextProvider>> = self
             .config
-            .bundle_dir
+            .super_brain_dir
             .as_ref()
             .map(|dir| {
-                debug!(bundle_dir = %dir, "Creating knowledge bundle provider for declarative agents");
-                Arc::new(BundleProvider::new(dir)) as Arc<dyn IContextProvider>
+                debug!(super_brain_dir = %dir, "Creating Super Brain provider for declarative agents");
+                Arc::new(SuperBrainContextProvider::new(dir)) as Arc<dyn IContextProvider>
             });
 
         let mut agents = Vec::new();
@@ -64,8 +64,8 @@ impl<'a> DeclLoader<'a> {
                 builder = builder.with_context(ws.clone());
             }
 
-            if let Some(ref bundle) = bundle_provider {
-                builder = builder.with_context(bundle.clone());
+            if let Some(ref super_brain) = super_brain_provider {
+                builder = builder.with_context(super_brain.clone());
             }
 
             match builder.build().await {

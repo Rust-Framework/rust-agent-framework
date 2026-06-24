@@ -56,32 +56,32 @@
 | `presencePenalty` / `presence_penalty` | number | 0 | 存在惩罚 |
 | `seed` | number | — | 随机种子（确定性输出） |
 | `stop` | string[] | — | 停止词列表 |
-| `tokenizer_path` | string | `tokenizer.bin` | **仅 `provider: lm`**：LMRS tokenizer 文件路径 |
+| `tokenizer_path` | string | — | **仅本地 provider**：可选外部 tokenizer 路径（GGUF 内嵌时省略） |
 
-### 本地模型（`provider: lm` / `local`）
+### 本地模型（`provider: llama` / `gguf` / `lm` / `local`）
 
-需要 `rust-agent-decl` 启用 `lm` feature。无需 API Key，通过 `connection.endpoint` 指定 `.lmrs` 权重路径。
+需要 `rust-agent-decl` 启用 `llama` feature。无需 API Key，通过 `connection.endpoint` 指定 `.gguf` 模型路径。
 
 完整指南参见 [9.5 本地模型推理](../09-chat-client-pipeline/local-inference.md)。
 
 ```yaml
 model:
   id: llama-3.2-1b-it
-  provider: lm
+  provider: llama
   connection:
     kind: anonymous
-    endpoint: /path/to/model.lmrs
+    endpoint: /path/to/model.gguf
   options:
     kind: chat
     temperature: 0.7
     max_output_tokens: 256
-    tokenizer_path: /path/to/tokenizer.bin
 ```
 
 | 字段 | 必填 | 说明 |
 |------|:---:|------|
-| `connection.endpoint` | 是 | `.lmrs` 模型权重文件路径 |
-| `options.tokenizer_path` | 否 | tokenizer 路径，默认 `tokenizer.bin` |
+| `connection.endpoint` | 是 | `.gguf` 模型文件路径 |
+| `options.tokenizer_path` | 否 | 外部 tokenizer（通常不需要） |
+| `options.extra.use_gpu` | 否 | 是否启用 GPU 后端 |
 | `connection.api_key` | 否 | 本地推理不需要 |
 
 ### JSON 示例

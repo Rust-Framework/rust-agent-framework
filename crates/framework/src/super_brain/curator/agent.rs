@@ -11,8 +11,8 @@ use crate::tools::{ReadFile, WriteFile};
 use crate::decorators::FunctionInvokingChatClient;
 use crate::agent::ChatClientAgent;
 
-use crate::bundle::okf::{
-    append_consolidation_entry, format_index_gaps, scan_index_gaps, validate_bundle,
+use crate::super_brain::okf::{
+    append_consolidation_entry, format_index_gaps, scan_index_gaps, validate_super_brain,
 };
 use super::context::build_consolidation_context;
 use super::trace::{
@@ -23,16 +23,16 @@ use super::trace::{
 const OUTPUT_FORMAT_REMINDER: &str =
     "FINAL RESPONSE MUST be exactly OK or UPDATED: list or INDEX_GAP: list. No other text.";
 
-/// Run the bundle curator agent to consolidate conversation into OKF files.
+/// Run the super-brain memory curator sub-agent to consolidate conversation into OKF files.
 pub(crate) async fn run_curator(
-    bundle_dir: PathBuf,
+    super_brain_dir: PathBuf,
     client: Arc<dyn IChatClient>,
     consolidation_messages: Vec<ChatMessage>,
     ctx: ConsolidationRunContext,
 ) -> ConsolidationStatus {
     let obs_level = ConsolidationObsLevel::from_env();
 
-    let agent_md_path = bundle_dir.join("AGENT.md");
+    let agent_md_path = super_brain_dir.join("AGENT.md");
     let agent_md = match std::fs::read_to_string(&agent_md_path) {
         Ok(c) => c,
         Err(e) => {
@@ -60,7 +60,7 @@ pub(crate) async fn run_curator(
         return ConsolidationStatus::Skipped;
     }
 
-    let scope = Arc::new(WorkspaceScope::new(&bundle_dir, "knowledge-bundle"));
+    let scope = Arc::new(WorkspaceScope::new(&super_brain_dir, "super-brain"));
     let read_file = ReadFile::default().create_scoped(Arc::clone(&scope));
     let write_file = WriteFile::default().create_scoped(Arc::clone(&scope));
 
@@ -82,7 +82,7 @@ pub(crate) async fn run_curator(
 
     let instructions = format!("{agent_md}\n\n{OUTPUT_FORMAT_REMINDER}");
 
-    let agent = ChatClientAgent::new("bundle-curator", pipeline_client)
+    let agent = ChatClientAgent::new("super-brain-curator", pipeline_client)
         .with_instructions(instructions)
         .with_tools(registry);
 
@@ -94,7 +94,7 @@ pub(crate) async fn run_curator(
         Ok(s) => s,
         Err(e) => {
             emit_consolidation_error(&ctx, "start_failed", &e.to_string());
-            tracing::warn!(error = %e, "Bundle curator failed to start");
+            tracing::warn!(error = %e, "Super Brain curator failed to start");
             return ConsolidationStatus::Error;
         }
     };
@@ -113,14 +113,14 @@ pub(crate) async fn run_curator(
                 }
                 Err(e) => {
                     emit_consolidation_error(&ctx, "stream_error", &e.to_string());
-                    tracing::warn!(error = %e, "Bundle curator stream error");
+                    tracing::warn!(error = %e, "Super Brain curator stream error");
                     return ConsolidationStatus::Error;
                 }
             }
         }
     }
 
-    let gaps = scan_index_gaps(&bundle_dir);
+    let gaps = scan_index_gaps(&super_brain_dir);
     let gap_text = format_index_gaps(&gaps);
     if !gap_text.is_empty() {
         tracing::debug!(gaps = %gap_text, "Index gaps detected after consolidation");
@@ -130,7 +130,7 @@ pub(crate) async fn run_curator(
     let status = result.status.clone();
 
     if let Err(e) = append_consolidation_entry(
-        &bundle_dir,
+        &super_brain_dir,
         status.as_str(),
         &result.updated_files,
         ctx.session_id.as_deref(),
@@ -138,12 +138,12 @@ pub(crate) async fn run_curator(
         tracing::warn!(error = %e, "Failed to append log.md entry");
     }
 
-    let report = validate_bundle(&bundle_dir);
+    let report = validate_super_brain(&super_brain_dir);
     if !report.is_valid() {
         tracing::warn!(
             issues = report.issues.len(),
             detail = %report.format_text(),
-            "Knowledge bundle validation issues after consolidation"
+            "Super Brain validation issues after consolidation"
         );
     }
 

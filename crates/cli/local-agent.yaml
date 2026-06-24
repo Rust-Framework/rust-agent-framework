@@ -1,0 +1,23 @@
+# 本地 GGUF 对话验证 — Granite 4.0-H 350M
+#
+# 运行:
+#   cargo run -p rust-agent-cli -- --config local-agent.yaml
+kind: prompt
+name: local-agent
+displayName: 本地 Granite 助手
+description: 使用 gemma-3-270m-it Q8_0 GGUF 进行本地对话验证（270M 小模型，回复质量有限）。
+model:
+  id: gemma-3-270m-it-Q8_0
+  provider: llama
+  connection:
+    kind: anonymous
+    endpoint: D:/AIModels/gguf/gemma-3-270m-it-Q8_0.gguf
+  options:
+    kind: chat
+    temperature: 0.5
+    max_output_tokens: 256
+    top_p: 0.9
+instructions: |
+  你是一个简洁、准确的中文助手。直接回答问题，避免冗长铺垫。
+
+max_tool_rounds: 50

@@ -5,14 +5,14 @@
 //!
 //! ## 分类说明
 //!
-//! | kind       | name 示例         | 说明                        |
-//! |------------|-------------------|-----------------------------|
-//! | `bundle` | `knowledge-bundle` | OKF 持久知识包（跨会话）   |
-//! | `skills`   | `antd-skill`      | 按需加载的技能文件（SKILL.md）|
-//! | `mcp`      | `mymcp-server`    | MCP 远程工具服务器           |
-//! | `workspace`| `default`         | 工作区根目录 + 策略配置      |
-//! | `knowledge`| `my-rag`          | RAG 知识库检索              |
-//! | `wiki`     | `my-wiki`         | Wiki 知识库                 |
+//! | kind           | name 示例         | 说明                        |
+//! |----------------|-------------------|-----------------------------|
+//! | `memory`       | `super-brain`     | Super Brain 持久记忆（跨会话） |
+//! | `skills`       | `antd-skill`      | 按需加载的技能文件（SKILL.md）|
+//! | `mcp`          | `mymcp-server`    | MCP 远程工具服务器           |
+//! | `workspace`    | `default`         | 工作区根目录 + 策略配置      |
+//! | `knowledge`    | `my-rag`          | RAG 知识库检索              |
+//! | `wiki`         | `my-wiki`         | Wiki 知识库                 |
 //!
 //! websearch 属于工具（tools → kind: web），history 属于内置默认（InMemoryHistoryProvider），
 //! 均不在此处声明。
@@ -27,11 +27,15 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```yaml
 /// contexts:
-///   - kind: bundle
-///     name: knowledge-bundle
+///   - kind: memory
+///     name: super-brain
 ///     config:
-///       directory: logs/knowledge-bundle
+///       directory: logs/super-brain
 ///       consolidationInterval: 1
+///       memoryModel:
+///         provider: llama
+///         modelPath: /path/to/model.gguf
+///         id: granite-4.0-h-350m
 ///   - kind: skills
 ///     name: antd-skill
 ///     config:
@@ -45,9 +49,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum ContextProviderDecl {
-    /// OKF 知识包 — name 须为 `knowledge-bundle`
-    #[serde(rename = "bundle")]
-    Bundle {
+    /// Super Brain 持久记忆 — kind 为 `memory`，name 须为 `super-brain`
+    #[serde(rename = "memory", alias = "super-brain")]
+    Memory {
         name: String,
         #[serde(default)]
         config: HashMap<String, serde_json::Value>,
@@ -93,7 +97,7 @@ impl ContextProviderDecl {
     /// 获取提供器名称。
     pub fn name(&self) -> &str {
         match self {
-            ContextProviderDecl::Bundle { name, .. } => name,
+            ContextProviderDecl::Memory { name, .. } => name,
             ContextProviderDecl::Skills { name, .. } => name,
             ContextProviderDecl::Mcp { name, .. } => name,
             ContextProviderDecl::Workspace { name, .. } => name,
@@ -104,7 +108,7 @@ impl ContextProviderDecl {
 
     fn config_map(&self) -> &HashMap<String, serde_json::Value> {
         match self {
-            ContextProviderDecl::Bundle { config, .. } => config,
+            ContextProviderDecl::Memory { config, .. } => config,
             ContextProviderDecl::Skills { config, .. } => config,
             ContextProviderDecl::Mcp { config, .. } => config,
             ContextProviderDecl::Workspace { config, .. } => config,
@@ -116,7 +120,7 @@ impl ContextProviderDecl {
     /// 获取提供器 kind 字符串（与 `IContextProvider::kind()` 对齐）。
     pub fn kind_str(&self) -> &'static str {
         match self {
-            ContextProviderDecl::Bundle { .. } => "bundle",
+            ContextProviderDecl::Memory { .. } => "memory",
             ContextProviderDecl::Skills { .. } => "skills",
             ContextProviderDecl::Mcp { .. } => "mcp",
             ContextProviderDecl::Workspace { .. } => "workspace",

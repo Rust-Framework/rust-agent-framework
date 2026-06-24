@@ -62,7 +62,7 @@ pub trait IAgent: Send + Sync {
     ///
     /// `ChatClientAgent` 返回其内部客户端。代理/存根 Agent（如 `AgentProxy`）
     /// 返回 `None`。上下文提供器通过此方法获取客户端以生成子 Agent，
-    /// 例如 `BundleProvider` 自动发现主 Agent 的客户端来运行 Curator。
+    /// 例如 `SuperBrainContextProvider` 自动发现主 Agent 的客户端来运行记忆整理子代理。
     /// `MemoryAgent` 进行后台记忆整合。
     fn chat_client(&self) -> Option<&Arc<dyn IChatClient>> {
         None

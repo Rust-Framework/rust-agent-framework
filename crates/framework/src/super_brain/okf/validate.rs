@@ -1,29 +1,29 @@
 ﻿use std::path::{Path, PathBuf};
 
 use super::audit::{scan_index_gaps, IndexGap};
-use super::model::KnowledgeBundle;
+use super::model::SuperBrain;
 
 /// A single bundle validation issue.
 #[derive(Debug, Clone)]
-pub struct BundleIssue {
+pub struct SuperBrainIssue {
     pub path: PathBuf,
     pub reason: String,
 }
 
 /// Full validation report for an on-disk OKF knowledge bundle.
 #[derive(Debug, Clone, Default)]
-pub struct BundleValidationReport {
-    pub issues: Vec<BundleIssue>,
+pub struct SuperBrainValidationReport {
+    pub issues: Vec<SuperBrainIssue>,
 }
 
-impl BundleValidationReport {
+impl SuperBrainValidationReport {
     pub fn is_valid(&self) -> bool {
         self.issues.is_empty()
     }
 
     pub fn format_text(&self) -> String {
         if self.issues.is_empty() {
-            return "Knowledge bundle: valid".into();
+            return "Super Brain: valid".into();
         }
         let lines: Vec<String> = self
             .issues
@@ -35,32 +35,32 @@ impl BundleValidationReport {
 }
 
 /// Validate an on-disk bundle for OKF conformance and internal consistency.
-pub fn validate_bundle(root: impl AsRef<Path>) -> BundleValidationReport {
+pub fn validate_super_brain(root: impl AsRef<Path>) -> SuperBrainValidationReport {
     let root = root.as_ref();
     let mut issues = Vec::new();
 
     if !root.join("index.md").exists() {
-        issues.push(BundleIssue {
+        issues.push(SuperBrainIssue {
             path: root.join("index.md"),
             reason: "bundle entry index.md missing".into(),
         });
     }
 
     if !root.join("log.md").exists() {
-        issues.push(BundleIssue {
+        issues.push(SuperBrainIssue {
             path: root.join("log.md"),
             reason: "bundle changelog log.md missing".into(),
         });
     }
 
-    match KnowledgeBundle::load(root) {
+    match SuperBrain::load(root) {
         Ok(bundle) => {
             // Concepts that failed to parse (missing frontmatter) are reported separately.
             collect_unparsed_concepts(root, &bundle, &mut issues);
 
             for (rel, concept) in &bundle.concepts {
                 if concept.frontmatter.concept_type.trim().is_empty() {
-                    issues.push(BundleIssue {
+                    issues.push(SuperBrainIssue {
                         path: rel.clone(),
                         reason: "OKF frontmatter.type is empty".into(),
                     });
@@ -72,7 +72,7 @@ pub fn validate_bundle(root: impl AsRef<Path>) -> BundleValidationReport {
                 }
             }
         }
-        Err(e) => issues.push(BundleIssue {
+        Err(e) => issues.push(SuperBrainIssue {
             path: root.to_path_buf(),
             reason: format!("failed to load bundle: {e}"),
         }),
@@ -82,18 +82,18 @@ pub fn validate_bundle(root: impl AsRef<Path>) -> BundleValidationReport {
         issues.push(index_gap_to_issue(gap));
     }
 
-    BundleValidationReport { issues }
+    SuperBrainValidationReport { issues }
 }
 
-fn index_gap_to_issue(gap: IndexGap) -> BundleIssue {
-    BundleIssue {
+fn index_gap_to_issue(gap: IndexGap) -> SuperBrainIssue {
+    SuperBrainIssue {
         path: gap.path,
         reason: gap.reason,
     }
 }
 
 /// Report markdown files that should be OKF concepts but lack valid frontmatter.
-fn collect_unparsed_concepts(root: &Path, bundle: &KnowledgeBundle, issues: &mut Vec<BundleIssue>) {
+fn collect_unparsed_concepts(root: &Path, bundle: &SuperBrain, issues: &mut Vec<SuperBrainIssue>) {
     use walkdir::WalkDir;
 
     for entry in WalkDir::new(root)
@@ -110,7 +110,7 @@ fn collect_unparsed_concepts(root: &Path, bundle: &KnowledgeBundle, issues: &mut
             continue;
         }
         if !bundle.concepts.contains_key(&rel) {
-            issues.push(BundleIssue {
+            issues.push(SuperBrainIssue {
                 path: rel,
                 reason: "missing or invalid OKF frontmatter (type required)".into(),
             });
@@ -118,7 +118,7 @@ fn collect_unparsed_concepts(root: &Path, bundle: &KnowledgeBundle, issues: &mut
     }
 }
 
-fn check_link(root: &Path, from: &Path, link: &str) -> Option<BundleIssue> {
+fn check_link(root: &Path, from: &Path, link: &str) -> Option<SuperBrainIssue> {
     let link = link.trim();
     if link.is_empty() || link.starts_with('#') {
         return None;
@@ -129,7 +129,7 @@ fn check_link(root: &Path, from: &Path, link: &str) -> Option<BundleIssue> {
     if target.exists() {
         return None;
     }
-    Some(BundleIssue {
+    Some(SuperBrainIssue {
         path: from.to_path_buf(),
         reason: format!("broken link to '{link}' (resolved: {})", target.display()),
     })
@@ -181,7 +181,7 @@ mod tests {
         )
         .unwrap();
 
-        let report = validate_bundle(dir.path());
+        let report = validate_super_brain(dir.path());
         assert!(!report.is_valid());
         assert!(
             report

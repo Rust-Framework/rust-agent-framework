@@ -553,4 +553,4 @@ RAF 的 LLM 提供商层通过分层设计实现了最大化的代码复用：
 
 ## 本地推理
 
-除 HTTP API 外，RAF 通过独立 crate **`rust-agent-lm`** 支持本机 CPU 推理（基于 [lm.rs](https://github.com/samuel-vitorino/lm.rs)）。无需 API Key，使用 LMRS 格式权重文件。详见 **[9.5 本地模型推理](local-inference.md)**。
+除 HTTP API 外，RAF 通过独立 crate **`rust-agent-llama`** 支持本机 GGUF 推理（基于 [llama-gguf](https://crates.io/crates/llama-gguf)）。无需 API Key。详见 **[9.5 本地模型推理](local-inference.md)**。

@@ -5,7 +5,7 @@
 use rust_agent_core::{ChatMessage, MessageRole, ToolCall, AgentResponseResult, Content, FinishReason};
 
 /// Session state key for accumulated consolidation projection.
-pub const PROJECTION_STATE_KEY: &str = "BundleProvider_projection";
+pub const PROJECTION_STATE_KEY: &str = "SuperBrainContextProvider_projection";
 
 const KNOWLEDGE_TOOLS: &[&str] = &[
     "web_fetch",

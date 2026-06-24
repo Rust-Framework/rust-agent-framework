@@ -150,7 +150,7 @@ graph TB
 | `InMemoryHistoryProvider` | `context/` | 默认会话历史注入器 |
 | `WorkspaceContextProvider` | `context/` | 工作区工具和路径管理 |
 | `AgentSkillsProvider` | `context/` | Agent Skills 加载器 |
-| `BundleProvider` | `bundle/` | OKF 持久知识包 |
+| `SuperBrainContextProvider` | `super_brain/` | OKF 持久记忆（Super Brain） |
 | `SlidingWindowStrategy` | `compression/` | 滑动窗口压缩 |
 | `TokenBudgetStrategy` | `compression/` | Token 预算压缩（含工具结果淘汰） |
 | `CompressionPipeline` | `compression/` | 压缩策略链式组合 |

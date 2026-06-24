@@ -27,7 +27,7 @@ rust-agent-decl = { path = "../decl", features = ["yaml", "web", "mcp", "sandbox
 | `kind: knowledge` | `rag` | `ext::context::build_provider_from_decl` |
 | `kind: wiki` | `wiki` | `ext::context::build_provider_from_decl` |
 | `kind: code` | `sandbox` | `sandbox_factory` |
-| `kind: bundle` / `skills` / `workspace` | （内置） | `ext::context` |
+| `kind: memory` / `skills` / `workspace` | （内置） | `ext::context` |
 
 代码注入扩展使用 `DeclAgentBuilder::with_context()` 或 `AgentBuilderMcpExt`（需 `mcp` feature），无需修改 decl 核心。
 
@@ -207,17 +207,21 @@ context_providers: vec![
 ]
 ```
 
-### OKF 知识包（bundle）是独立组件
+### Super Brain（super-brain）是独立组件
 
-`BundleProvider`（`kind: bundle`, `name: knowledge-bundle`）**需要显式声明**，负责跨会话的 OKF 持久知识包存储与 Curator 整理。
+`SuperBrainContextProvider`（`kind: memory`, `name: super-brain`）**需要显式声明**，负责跨会话的 OKF 持久记忆存储与记忆整理子代理。
 
 ```yaml
 contexts:
-  - kind: bundle
-    name: knowledge-bundle
+  - kind: memory
+    name: super-brain
     config:
-      directory: logs/knowledge-bundle
+      directory: logs/super-brain
       consolidationInterval: 3
+      memoryModel:
+        provider: llama
+        modelPath: /path/to/model.gguf
+        id: granite-4.0-h-350m
   # history 由框架自动注入，无需声明
 ```
 
@@ -227,7 +231,7 @@ contexts:
 sequenceDiagram
     participant Engine as Agent 引擎
     participant H as HistoryProvider<br/>(框架内置)
-    participant B as BundleProvider<br/>(YAML 声明)
+    participant B as SuperBrainContextProvider<br/>(YAML 声明)
     participant W as WorkspaceProvider<br/>(YAML 声明)
     participant S as SkillsProvider<br/>(YAML 声明)
 
@@ -401,8 +405,8 @@ async fn on_invoking(&self, agent: &dyn IAgent, session: &dyn ISession, ...) -> 
 
 ```yaml
 contexts:
-  - kind: bundle          # 1. 先注入知识包摘要
-    name: knowledge-bundle
+  - kind: memory           # 1. 先注入 Super Brain 记忆摘要
+    name: super-brain
   - kind: workspace       # 2. 注入工作区边界
   - kind: skills          # 3. 注入技能工具
     # 若要压缩，应将 CompressionProvider 放在靠后位置
@@ -421,7 +425,7 @@ contexts:
 | **name-expansion** | `tools` 中某 `kind` 无 `name` | `ToolResolver` 展开为全部同类工具 | 一行注册多个工具 |
 | **压缩替换** | Provider 设 `replace_messages = true` | 丢弃前面的消息 | 控制 token 预算 |
 | **Provider 顺序** | `contexts` 数组顺序 | 即 on_invoking() 执行顺序 | 后执行的 Provider 可覆盖前面 |
-| **Bundle 持久化** | `contexts` 含 `bundle` | `BundleProvider` + Curator 在对话后整理知识包 | `consolidationInterval` 次对话触发一次 |
+| **Super Brain 持久化** | `contexts` 含 `memory` + `name: super-brain` | `SuperBrainContextProvider` + 记忆子代理在对话后整理 | `consolidationInterval` 次对话触发一次 |
 
 ---
 

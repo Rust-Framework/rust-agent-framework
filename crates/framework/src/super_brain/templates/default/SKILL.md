@@ -1,6 +1,6 @@
 
 ---
-name: knowledge-bundle
+name: super-brain
 description: >
   你拥有 OKF 持久知识包（跨会话保存）。需要回忆用户身份、偏好、过往决策、行为规则、
   经验教训或专业领域知识时加载本技能。知识在对话开始前就已存在——不要假设新会话就是空白。

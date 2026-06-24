@@ -50,10 +50,10 @@ instructions: |
   - **对用户透明**：不向用户暴露子 Agent 名称或内部编排机制，直接呈现结果。
 
 contexts:
-  - kind: bundle
-    name: knowledge-bundle
+  - kind: memory
+    name: super-brain
     config:
-      directory: logs/knowledge-bundle
+      directory: logs/super-brain
       consolidationInterval: 1
   - kind: workspace
     name: project

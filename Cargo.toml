@@ -18,7 +18,7 @@ members = [
     "crates/coding",
     "crates/sandbox",
     "crates/openapi",
-    "crates/lm",
+    "crates/llama",
 ]
 default-members = [
     "crates/core",
@@ -64,7 +64,8 @@ rust-agent-workflow-pro = { path = "crates/workflow-pro", version = "0.1.1" }
 rust-agent-coding = { path = "crates/coding", version = "0.1.1" }
 rust-agent-sandbox = { path = "crates/sandbox", version = "0.1.1" }
 rust-agent-openapi = { path = "crates/openapi", version = "0.1.1" }
-rust-agent-lm = { path = "crates/lm", version = "0.1.1" }
+rust-agent-llama = { path = "crates/llama", version = "0.1.1" }
+llama-gguf = { version = "0.14", default-features = false, features = ["cpu"] }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

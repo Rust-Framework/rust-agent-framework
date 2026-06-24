@@ -8,7 +8,7 @@ RAF workspace 包含 18+ 个 crate，按职责分为三层：核心层（必选�
 |-----------|------|------|------|
 | `rust-agent-core` | `crates/core` | 核心 trait 和类型定义 | **核心层** |
 | `rust-agent-client` | `crates/client` | LLM 客户端实现（DeepSeek/OpenAI 等） | **核心层** |
-| `rust-agent-lm` | `crates/lm` | 本地 CPU 推理客户端（lm.rs） | 扩展层 |
+| `rust-agent-llama` | `crates/llama` | 本地 GGUF 推理客户端（llama-gguf） | 扩展层 |
 | `rust-agent-framework` | `crates/framework` | Agent 运行时、工具集、压缩策略 | **核心层** |
 | `rust-agent-macros` | `crates/macros` | `#[tool]` 过程宏 | **运行时层** |
 | `rust-agent-workflow` | `crates/workflow` | 工作流编排引擎 | 扩展层 |
@@ -142,23 +142,23 @@ pub use options::ChatClientOptions;
 pub use types::ModelListEntry;
 ```
 
-### rust-agent-lm
+### rust-agent-llama
 
 ```toml
 [dependencies]
-rust-agent-lm = { path = "crates/lm" }
+rust-agent-llama = { path = "crates/llama" }
 ```
 
-**外部依赖**：`lmrs`（git）、`memmap2`、`parking_lot`
+**外部依赖**：`llama-gguf`（crates.io，`cpu` feature）
 
 **导出**：
 
 ```rust
-pub use chat_client::{LmChatClient, default_model_metadata, model_family_name};
-pub use options::LmChatClientOptions;
+pub use chat_client::{LlamaChatClient, default_model_metadata};
+pub use options::LlamaChatClientOptions;
 ```
 
-本地 CPU 推理，无需 `reqwest`。详见 [9.5 本地模型推理](../09-chat-client-pipeline/local-inference.md)。
+本地 GGUF 推理，无需 `reqwest`。详见 [9.5 本地模型推理](../09-chat-client-pipeline/local-inference.md)。
 
 ### rust-agent-framework
 
@@ -185,7 +185,7 @@ pub use context::skill::{AgentSkill, SkillMetadata};
 pub use context::skills::AgentSkillsProvider;
 
 // OKF knowledge bundle
-pub use bundle::{BundleProvider, KnowledgeBundle, validate_bundle, ...};
+pub use super_brain::{SuperBrainContextProvider, SuperBrain, validate_super_brain, ...};
 
 // Compression
 pub use compression::{SlidingWindowStrategy, TokenBudgetStrategy, CompressionPipeline};

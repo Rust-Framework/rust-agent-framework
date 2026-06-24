@@ -5,10 +5,10 @@ use std::path::Path;
 
 /// Built-in default bundle template (SKILL.md, AGENT.md, references/, assets/, index.md, log.md).
 pub const TEMPLATE_DIR: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/src/bundle/templates/default");
+    concat!(env!("CARGO_MANIFEST_DIR"), "/src/super_brain/templates/default");
 
 /// Seed `target` from the built-in template. Idempotent — user-written files are preserved.
-pub fn seed_bundle_dir(target: &Path) {
+pub fn seed_super_brain_dir(target: &Path) {
     let template = Path::new(TEMPLATE_DIR);
     if !template.exists() {
         tracing::warn!("Bundle template not found: {}", template.display());
@@ -16,10 +16,10 @@ pub fn seed_bundle_dir(target: &Path) {
     }
     match sync_dir(template, target) {
         Ok(()) => tracing::info!(
-            "Synchronized knowledge bundle from template: {}",
+            "Synchronized super-brain from template: {}",
             target.display()
         ),
-        Err(e) => tracing::warn!("Failed to sync knowledge bundle: {}", e),
+        Err(e) => tracing::warn!("Failed to sync super-brain: {}", e),
     }
 }
 

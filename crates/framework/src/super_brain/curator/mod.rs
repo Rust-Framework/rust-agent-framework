@@ -5,7 +5,7 @@ mod trace;
 mod worker;
 
 pub(crate) use agent::prepare_consolidation_messages;
-pub use chat::wrap_curator_client;
+pub use chat::wrap_super_brain_curator_client;
 pub use context::{
     build_consolidation_context, build_turn_transcript, load_projection, project_messages,
     save_projection, PROJECTION_STATE_KEY,

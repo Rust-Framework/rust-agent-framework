@@ -22,11 +22,17 @@ instructions: |
   6. 身份、偏好、目标类问题优先从持久记忆中检索，不用训练数据默认值；已读取的文件不重复读取。
 
 contexts:
-  - kind: bundle
-    name: knowledge-bundle
+  - kind: memory
+    name: super-brain
     config:
-      directory: logs/knowledge-bundle
+      directory: logs/super-brain
       consolidationInterval: 1
+      memoryModel:
+        provider: llama
+        modelPath: D:/AIModels/gguf/granite-4.0-h-350m-Q8_0.gguf
+        id: granite-4.0-h-350m-Q8_0
+        maxTokens: 512
+        temperature: 0.1
 
 tools:
   - kind: web

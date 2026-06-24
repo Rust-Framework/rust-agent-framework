@@ -1,21 +1,17 @@
 [package]
-name = "rust-agent-lm"
+name = "rust-agent-llama"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Local LLM inference via lm.rs for rust-agent-framework"
+description = "Local GGUF inference via llama-gguf for rust-agent-framework"
 
 [dependencies]
 rust-agent-core = { workspace = true }
-lmrs = { git = "https://github.com/samuel-vitorino/lm.rs" }
-memmap2 = "0.9"
-parking_lot = { workspace = true }
+llama-gguf = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
-futures-util = { workspace = true }
 tracing = { workspace = true }
-chrono = { workspace = true }
 serde = { workspace = true }

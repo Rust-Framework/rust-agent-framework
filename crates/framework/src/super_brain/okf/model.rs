@@ -6,9 +6,9 @@ use walkdir::WalkDir;
 
 use super::validate::is_special_md_file;
 
-/// A loaded OKF knowledge bundle (directory of concept markdown files).
+/// A loaded OKF super-brain knowledge store (directory of concept markdown files).
 #[derive(Debug, Clone)]
-pub struct KnowledgeBundle {
+pub struct SuperBrain {
     pub root: PathBuf,
     pub concepts: HashMap<PathBuf, Concept>,
 }
@@ -33,7 +33,7 @@ pub struct Frontmatter {
     pub extra: HashMap<String, serde_yaml::Value>,
 }
 
-impl KnowledgeBundle {
+impl SuperBrain {
     /// Load all markdown concepts under `root`, skipping agent/special files.
     pub fn load(root: impl AsRef<Path>) -> std::io::Result<Self> {
         let root = root.as_ref().to_path_buf();

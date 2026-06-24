@@ -5,28 +5,28 @@ use rust_agent_core::{
     AgentResponseUpdate, BoxStream, ChatClientRunOptions, ChatMessage, IChatClient, Result,
 };
 
-/// Forces deterministic LLM parameters for bundle curation file writes.
+/// Forces deterministic LLM parameters for super-brain memory consolidation.
 ///
 /// - temperature → 0.1
 /// - thinking disabled
 /// - parallel_tool_calls → false
-pub(crate) struct CuratorChatClient {
+pub(crate) struct SuperBrainCuratorClient {
     inner: Arc<dyn IChatClient>,
 }
 
-impl CuratorChatClient {
+impl SuperBrainCuratorClient {
     pub(crate) fn new(inner: Arc<dyn IChatClient>) -> Self {
         Self { inner }
     }
 }
 
-/// Wrap a leaf client with curator-specific run options (low temperature, no thinking).
-pub fn wrap_curator_client(inner: Arc<dyn IChatClient>) -> Arc<dyn IChatClient> {
-    Arc::new(CuratorChatClient::new(inner))
+/// Wrap a leaf client with super-brain curator-specific run options.
+pub fn wrap_super_brain_curator_client(inner: Arc<dyn IChatClient>) -> Arc<dyn IChatClient> {
+    Arc::new(SuperBrainCuratorClient::new(inner))
 }
 
 #[async_trait]
-impl IChatClient for CuratorChatClient {
+impl IChatClient for SuperBrainCuratorClient {
     async fn run(
         &self,
         messages: &[ChatMessage],

@@ -7,19 +7,19 @@ use crate::context_provider_config::ContextProviderDecl;
 
 /// Build a context provider from a declarative `(kind, name, config)` tuple.
 ///
-/// Framework builtins (`bundle`, `skills`, `workspace`) are always available.
+/// Framework builtins (`super-brain`, `skills`, `workspace`) are always available.
 /// Optional integrations require the matching Cargo feature:
 /// `mcp`, `rag`, `wiki`.
 pub fn build_provider_from_decl(
     decl: &ContextProviderDecl,
     curator_client: Option<Arc<dyn IChatClient>>,
-) -> Option<Arc<dyn IContextProvider>> {
+) -> crate::Result<Option<Arc<dyn IContextProvider>>> {
     match decl {
-        ContextProviderDecl::Bundle { name, config } if name == "knowledge-bundle" => {
+        ContextProviderDecl::Memory { name, config } if name == "super-brain" => {
             let dir = config
                 .get("directory")
                 .and_then(|v| v.as_str())
-                .unwrap_or("logs/knowledge-bundle");
+                .unwrap_or("logs/super-brain");
             let enabled = config
                 .get("enabled")
                 .and_then(|v| v.as_bool())
@@ -29,18 +29,27 @@ pub fn build_provider_from_decl(
                 .and_then(|v| v.as_u64())
                 .unwrap_or(3) as usize;
 
-            let bundle_dir = std::path::PathBuf::from(dir);
-            std::fs::create_dir_all(&bundle_dir).ok();
+            let super_brain_dir = std::path::PathBuf::from(dir);
+            std::fs::create_dir_all(&super_brain_dir).ok();
 
-            let provider = rust_agent_framework::bundle::BundleProvider::new(&bundle_dir)
+            let memory_client = match crate::resolver::memory_model_resolver::resolve_super_brain_memory_client(config) {
+                Ok(dedicated) => dedicated.or(curator_client),
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "super-brain memoryModel failed to load; falling back to main agent client for memory consolidation"
+                    );
+                    curator_client
+                }
+            };
+
+            let mut provider = rust_agent_framework::super_brain::SuperBrainContextProvider::new(&super_brain_dir)
                 .with_enabled(enabled)
                 .with_consolidation_interval(interval);
-            let provider = if let Some(client) = curator_client {
-                provider.with_curator_client(client)
-            } else {
-                provider
-            };
-            Some(Arc::new(provider))
+            if let Some(client) = memory_client {
+                provider = provider.with_curator_client(client);
+            }
+            Ok(Some(Arc::new(provider)))
         }
 
         ContextProviderDecl::Skills { name: skill_name, config } => {
@@ -63,7 +72,7 @@ pub fn build_provider_from_decl(
                             skill_name
                         );
                     }
-                    Some(Arc::new(provider))
+                    Ok(Some(Arc::new(provider)))
                 }
                 Err(e) => {
                     tracing::error!(
@@ -72,7 +81,7 @@ pub fn build_provider_from_decl(
                         skill_name,
                         e
                     );
-                    None
+                    Ok(None)
                 }
             }
         }
@@ -123,7 +132,7 @@ pub fn build_provider_from_decl(
                     }
                 );
             }
-            None
+            Ok(None)
         }
 
         ContextProviderDecl::Workspace { name: ws_name, config } => {
@@ -151,7 +160,7 @@ pub fn build_provider_from_decl(
 
             let scope = WorkspaceScope::new(root, ws_name.as_str()).with_policy(policy);
             let provider = WorkspaceContextProvider::new(Arc::new(scope));
-            Some(Arc::new(provider))
+            Ok(Some(Arc::new(provider)))
         }
 
         ContextProviderDecl::Knowledge { name: kb_name, config } => {
@@ -166,12 +175,12 @@ pub fn build_provider_from_decl(
                         "Knowledge provider '{}' missing config.source — skipped",
                         kb_name
                     );
-                    return None;
+                    return Ok(None);
                 }
-                return Some(Arc::new(rust_agent_rag::RagContextProvider::new(
+                return Ok(Some(Arc::new(rust_agent_rag::RagContextProvider::new(
                     kb_name.clone(),
                     source,
-                )));
+                ))));
             }
             #[cfg(not(feature = "rag"))]
             {
@@ -185,7 +194,7 @@ pub fn build_provider_from_decl(
                         source
                     }
                 );
-                None
+                Ok(None)
             }
         }
 
@@ -201,12 +210,12 @@ pub fn build_provider_from_decl(
                         "Wiki provider '{}' missing config.source — skipped",
                         wiki_name
                     );
-                    return None;
+                    return Ok(None);
                 }
-                return Some(Arc::new(rust_agent_wiki::WikiContextProvider::new(
+                return Ok(Some(Arc::new(rust_agent_wiki::WikiContextProvider::new(
                     wiki_name.clone(),
                     source,
-                )));
+                ))));
             }
             #[cfg(not(feature = "wiki"))]
             {
@@ -219,15 +228,15 @@ pub fn build_provider_from_decl(
                         source
                     }
                 );
-                None
+                Ok(None)
             }
         }
 
-        ContextProviderDecl::Bundle { .. } => {
+        ContextProviderDecl::Memory { .. } => {
             tracing::debug!(
-                "Unknown knowledge bundle provider name (expected 'knowledge-bundle')"
+                "Unknown memory provider name (expected 'super-brain')"
             );
-            None
+            Ok(None)
         }
     }
 }
@@ -236,7 +245,7 @@ pub fn build_provider_from_decl(
 pub fn build_workspace_provider(
     decl: &ContextProviderDecl,
     scope_tools: &[Arc<dyn ITool>],
-) -> Option<Arc<dyn IContextProvider>> {
+) -> crate::Result<Option<Arc<dyn IContextProvider>>> {
     let (ws_name, config) = match decl {
         ContextProviderDecl::Workspace { name, config } => (name, config),
         _ => return build_provider_from_decl(decl, None),
@@ -283,5 +292,5 @@ pub fn build_workspace_provider(
         );
     }
 
-    Some(Arc::new(provider))
+    Ok(Some(Arc::new(provider)))
 }

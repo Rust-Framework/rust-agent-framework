@@ -330,8 +330,8 @@ impl DeclAgentBuilder {
         // 验证 context providers
         for ctx_decl in &prompt_data.contexts {
             let ctx_kind = match ctx_decl {
-                crate::context_provider_config::ContextProviderDecl::Bundle { name, .. } => {
-                    format!("bundle({})", name)
+                crate::context_provider_config::ContextProviderDecl::Memory { name, .. } => {
+                    format!("memory({})", name)
                 }
                 crate::context_provider_config::ContextProviderDecl::Skills { name, .. } => {
                     format!("skills({})", name)
@@ -354,15 +354,18 @@ impl DeclAgentBuilder {
                 }
             };
 
-            let provider = crate::ext::build_provider_from_decl(ctx_decl, None);
-            if provider.is_some() {
-                report.resolved_providers.push(ctx_kind);
-            } else {
-                report.warnings.push(format!(
-                    "Context provider '{}' was declared but could not be constructed. \
-                     Check that dependencies are available (e.g., SKILL.md exists, MCP server is connected).",
-                    ctx_kind
-                ));
+            match crate::ext::build_provider_from_decl(ctx_decl, None) {
+                Ok(Some(_)) => report.resolved_providers.push(ctx_kind),
+                Ok(None) => {
+                    report.warnings.push(format!(
+                        "Context provider '{}' was declared but could not be constructed. \
+                         Check that dependencies are available (e.g., SKILL.md exists, MCP server is connected).",
+                        ctx_kind
+                    ));
+                }
+                Err(e) => {
+                    report.warnings.push(format!("Context provider '{}': {}", ctx_kind, e));
+                }
             }
         }
 
@@ -588,10 +591,10 @@ impl DeclAgentBuilder {
             use rust_agent_client::{
                 clone_leaf_with_timeout, curator_timeout_secs, unwrap_chat_client_leaf,
             };
-            use rust_agent_framework::bundle::wrap_curator_client;
+            use rust_agent_framework::super_brain::wrap_super_brain_curator_client;
             let leaf = unwrap_chat_client_leaf(&chat_client);
             let leaf = clone_leaf_with_timeout(leaf, curator_timeout_secs());
-            Some(wrap_curator_client(leaf))
+            Some(wrap_super_brain_curator_client(leaf))
         };
 
         // 构建上下文提供器
@@ -610,12 +613,12 @@ impl DeclAgentBuilder {
             for decl in &prompt_data.contexts {
                 if matches!(decl, crate::context_provider_config::ContextProviderDecl::Workspace { .. }) {
                     if let Some(ws_provider) =
-                        crate::ext::build_workspace_provider(decl, &scope_tools)
+                        crate::ext::build_workspace_provider(decl, &scope_tools)?
                     {
                         all_context_providers.push(ws_provider);
                     }
                 } else if let Some(provider) =
-                    crate::ext::build_provider_from_decl(decl, curator_client.clone())
+                    crate::ext::build_provider_from_decl(decl, curator_client.clone())?
                 {
                     all_context_providers.push(provider);
                 }
@@ -624,7 +627,7 @@ impl DeclAgentBuilder {
             remaining_tools = resolved_tools;
             for decl in &prompt_data.contexts {
                 if let Some(provider) =
-                    crate::ext::build_provider_from_decl(decl, curator_client.clone())
+                    crate::ext::build_provider_from_decl(decl, curator_client.clone())?
                 {
                     all_context_providers.push(provider);
                 }
