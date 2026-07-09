@@ -69,6 +69,6 @@ pub use agents::{
     create_architect, create_coder, create_regression_tester, create_requirements_analyst,
     create_reviewer, create_task_planner, create_test_designer,
 };
-pub use executors::{artifact_persist, code_merger, context_inject, review_gateway};
+pub use executors::{artifact_persist, code_merger, context_inject, loop_reset, review_gateway};
 pub use pipeline::build_dev_pipeline;
 pub use state::{state_keys, ReviewVerdict};

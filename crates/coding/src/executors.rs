@@ -3,8 +3,9 @@
 //! 提供以下执行器：
 //! - `artifact_persist` — 产物持久化器，将 Agent 输出写入工作流状态 + 文件
 //! - `context_inject` — 上下文注入器，从状态读取产物构建富 prompt
-//! - `code_merger` — 代码合并器，FanIn 聚合并行 coder 输出
+//! - `code_merger` — FanIn 栅栏，等待并行 coder 完成后向下游放行
 //! - `review_gateway` — 审查网关，驱动反馈循环决策
+//! - `loop_reset` — 循环重置器，在反馈循环回边入口清理上一轮副作用
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -127,16 +128,15 @@ pub fn context_inject(
     ))
 }
 
-/// 代码合并器 — FanIn 聚合器，合并并行 coder 的输出。
+/// 代码合并器 — FanIn 栅栏，等待所有并行 coder 完成后向下游放行。
 ///
-/// FanIn 边将多个源消息逐条投递到此节点。使用状态计数器确保只在收到
-/// 全部消息后产出合并结果：
-/// - 前 `expected_sources - 1` 条消息：递增计数器，返回 `None`（等待其余源）
-/// - 第 `expected_sources` 条消息：从状态读取各 coder 产物，合并输出，重置计数器
+/// coder 通过受限的 `WriteFile`/`EditFile` 工具直接在工作区写真实代码文件，
+/// 因此本节点不再做文本拼接——它仅作为同步点：等待 `expected_sources` 条
+/// 消息全部到达后，产出一条"并行编码完成"的汇总消息（包含各 coder 自述的
+/// 变更清单，从状态读取），供回归测试器参考。
 ///
-/// `expected_sources` 必须与 FanIn 边的源节点数量一致，否则会过早触发合并
-/// 或永久阻塞。依赖上游 `artifact_persist` 节点已将产物写入
-/// `CODE_CHANGES_ALPHA` / `CODE_CHANGES_BETA`。
+/// `expected_sources` 必须与 FanIn 边的源节点数量一致，否则会过早放行
+/// 或永久阻塞。
 pub fn code_merger(
     node_id: impl Into<String>,
     expected_sources: usize,
@@ -171,7 +171,8 @@ pub fn code_merger(
             )
             .await?;
 
-            // 从状态读取两个 coder 的产物并合并（状态读取错误向上传播，缺失键视为空）
+            // 代码已由 coder 工具直接写入工作区文件，此处仅汇总各 coder 自述的
+            // 变更清单（状态读取错误向上传播，缺失键视为空）。
             let alpha = read_state_text(&ctx, crate::state::state_keys::CODE_CHANGES_ALPHA)
                 .await?
                 .unwrap_or_default();
@@ -179,11 +180,12 @@ pub fn code_merger(
                 .await?
                 .unwrap_or_default();
 
-            let merged = format!(
-                "## coder-alpha 变更\n{}\n\n---\n\n## coder-beta 变更\n{}",
+            let summary = format!(
+                "## coder-alpha 变更清单\n{}\n\n---\n\n## coder-beta 变更清单\n{}\n\n---\n\n\
+                 上述两路代码已直接写入工作区。请回归测试器扫描工作区并对真实落盘的代码执行测试。",
                 alpha, beta
             );
-            let message = ChatMessage::assistant(&merged);
+            let message = ChatMessage::assistant(&summary);
             Ok(HandlerResult::Messages(vec![Arc::new(message)]))
         },
     ))
@@ -199,6 +201,73 @@ async fn read_state_text(
         Some(other) => Ok(Some(other.to_string())),
         None => Ok(None),
     }
+}
+
+/// 循环重置器 — 在反馈循环回边入口清理上一轮的副作用。
+///
+/// 当 `review_gateway` 判定未通过、消息沿回边回到 p4a_inject 时，本节点
+/// 负责重置循环相关的 workflow 状态键（`code_merger_count`、
+/// `CODE_CHANGES_ALPHA/BETA`、`REGRESSION_RESULTS`、`REVIEW_FEEDBACK`），
+/// 并尝试 `git restore` 回滚上一轮 coder 写入工作区的未提交代码变更。
+///
+/// `git restore` 失败不阻断工作流（非 git 工作区或无变更时静默跳过），
+/// 仅记录警告。状态重置是权威清理路径，确保下一轮 coder 从干净状态开始。
+///
+/// 透传输入消息给下游。
+pub fn loop_reset(
+    node_id: impl Into<String>,
+    workspace_root: PathBuf,
+) -> Arc<dyn IExecutor> {
+    let node_id = node_id.into();
+    Arc::new(ContextFunctionExecutor::new(
+        node_id,
+        move |msg, ctx, _progress| {
+            let workspace_root = workspace_root.clone();
+            async move {
+                const RESET_KEYS: &[&str] = &[
+                    "code_merger_count",
+                    crate::state::state_keys::CODE_CHANGES_ALPHA,
+                    crate::state::state_keys::CODE_CHANGES_BETA,
+                    crate::state::state_keys::REGRESSION_RESULTS,
+                    crate::state::state_keys::REVIEW_FEEDBACK,
+                ];
+
+                for key in RESET_KEYS {
+                    ctx.write_state(*key, serde_json::Value::Null).await?;
+                }
+
+                ctx.emit_event(WorkflowEvent::Custom {
+                    key: "loop_reset".into(),
+                    data: serde_json::json!({ "workspace": workspace_root.display().to_string() }),
+                })
+                .await;
+
+                // 尝试 git restore 回滚未提交的代码变更（非 git 工作区静默跳过）
+                match std::process::Command::new("git")
+                    .arg("restore")
+                    .arg(":/:")
+                    .current_dir(&workspace_root)
+                    .output()
+                {
+                    Ok(out) if !out.status.success() => {
+                        tracing::warn!(
+                            "loop_reset: git restore 未成功（可能是非 git 工作区或无变更）: {}",
+                            String::from_utf8_lossy(&out.stderr).trim()
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!("loop_reset: git 不可用，跳过磁盘回滚: {}", e);
+                    }
+                    _ => {
+                        tracing::info!("loop_reset: 已回滚工作区未提交变更");
+                    }
+                }
+
+                // 透传消息给下游（p4a_inject）
+                Ok(HandlerResult::Messages(vec![msg]))
+            }
+        },
+    ))
 }
 
 /// 审查网关 — 反馈循环的核心决策节点。

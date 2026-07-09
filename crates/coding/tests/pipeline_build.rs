@@ -46,7 +46,8 @@ fn test_pipeline_has_all_stage_nodes() {
     assert!(nodes.contains_key("p3_architect"), "缺少 p3_architect");
     assert!(nodes.contains_key("p3_persist"), "缺少 p3_persist");
 
-    // 阶段 4a: 任务分解
+    // 阶段 4a: 任务分解（含循环重置节点）
+    assert!(nodes.contains_key("p4a_loop_reset"), "缺少 p4a_loop_reset");
     assert!(nodes.contains_key("p4a_inject"), "缺少 p4a_inject");
     assert!(nodes.contains_key("p4a_planner"), "缺少 p4a_planner");
     assert!(nodes.contains_key("p4a_persist"), "缺少 p4a_persist");

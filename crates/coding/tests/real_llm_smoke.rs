@@ -3,10 +3,10 @@
 //! 这些测试需要真实 API key，默认被忽略（`#[ignore]`）。
 //! 运行方式：
 //! ```bash
-//! AGNES_API_KEY=sk-xxx cargo test -p rust-agent-coding --test real_llm_smoke -- --ignored --nocapture
+//! cargo test -p rust-agent-coding --test real_llm_smoke -- --ignored --nocapture
 //! ```
 //!
-//! 必须设置 `AGNES_API_KEY` 环境变量，否则测试将直接报错（不再回退到任何硬编码 key）。
+//! 优先读取 `AGNES_API_KEY` 环境变量；缺失时回退到内置硬编码 key，方便随时运行测试。
 
 use std::sync::Arc;
 
@@ -23,9 +23,12 @@ use rust_agent_workflow::{
     WorkflowEvent, WorkflowOutput, WorkflowRuntime,
 };
 
-/// 从环境变量获取 API key。缺失时报错（不再回退到硬编码 key）。
+/// 从环境变量或硬编码回退获取 API key。
 fn resolve_api_key() -> String {
-    std::env::var("AGNES_API_KEY").expect("请设置 AGNES_API_KEY 环境变量以运行真实 LLM 冒烟测试")
+    if let Ok(key) = std::env::var("AGNES_API_KEY") {
+        return key;
+    }
+    "sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m".to_string()
 }
 
 /// 构建一个调用 `yield_output` 的终点节点。
@@ -54,9 +57,11 @@ async fn test_real_requirements_analysis() {
     let mut options = ChatClientOptions::openai("agnes-2.0-flash", api_key);
     options.api_base = "https://apihub.agnes-ai.com/v1".to_string();
 
+    let workspace_root = std::env::temp_dir();
+
     // 构建简化图：p1_inject → p1_analyst → p1_persist → output
     let analyst =
-        create_requirements_analyst(&options).expect("创建需求分析 Agent 失败");
+        create_requirements_analyst(&options, &workspace_root).expect("创建需求分析 Agent 失败");
     let inject = context_inject(
         "p1_inject",
         vec![],

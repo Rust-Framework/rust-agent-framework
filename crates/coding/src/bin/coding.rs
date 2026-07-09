@@ -2,9 +2,13 @@
 //!
 //! 用法：
 //! ```bash
-//! export AGNES_API_KEY=your_key
 //! cargo run -p rust-agent-coding -- "实现一个 TODO 应用"
+//! cargo run -p rust-agent-coding -- "实现一个 TODO 应用" --workspace ./my-project
 //! ```
+//!
+//! API key 优先读取 `AGNES_API_KEY` 环境变量；缺失时回退到内置硬编码 key，
+//! 与测试同源，方便随时运行。`--workspace` 未指定时使用独立临时目录，
+//! 避免 agent 写入当前目录（可能是框架源码树）。
 
 use std::io::{self, BufRead, Write};
 use std::sync::Arc;
@@ -15,39 +19,34 @@ use rust_agent_coding::build_dev_pipeline;
 use rust_agent_core::ChatMessage;
 use rust_agent_workflow::{ResumeCommand, WorkflowEvent, WorkflowRuntime};
 
+/// 从环境变量或硬编码回退获取 API key（与 real_llm_smoke 测试同源）。
+fn resolve_api_key() -> String {
+    if let Ok(key) = std::env::var("AGNES_API_KEY") {
+        return key;
+    }
+    "sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m".to_string()
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // ── 解析参数 ──
-    let api_key = std::env::var("AGNES_API_KEY")
-        .map_err(|_| anyhow::anyhow!("请设置 AGNES_API_KEY 环境变量"))?;
-    let initial_requirement = std::env::args().nth(1).unwrap_or_else(|| {
-        eprintln!("用法: coding <需求描述>");
-        eprintln!("请输入需求描述:");
-        let mut input = String::new();
-        io::stdin().lock().read_line(&mut input).ok();
-        input.trim().to_string()
-    });
-
-    if initial_requirement.is_empty() {
-        anyhow::bail!("需求描述不能为空");
-    }
-
-    let mut options = ChatClientOptions::openai("agnes-2.0-flash", api_key);
-    options.api_base = "https://apihub.agnes-ai.com/v1".to_string();
-    let workspace_root = std::env::current_dir()?;
+    let api_key = resolve_api_key();
+    let (requirement, workspace_root) = parse_args()?;
 
     println!("=== 6 阶段开发流水线启动 ===");
-    println!("需求: {}", initial_requirement);
+    println!("需求: {}", requirement);
     println!("工作区: {}", workspace_root.display());
     println!();
 
     // ── 构建工作流图 ──
+    let mut options = ChatClientOptions::openai("agnes-2.0-flash", api_key);
+    options.api_base = "https://apihub.agnes-ai.com/v1".to_string();
     let graph = build_dev_pipeline(&options, &workspace_root)?;
 
     // ── 启动 runtime ──
     let runtime = WorkflowRuntime::start(
         graph,
-        Arc::new(ChatMessage::user(&initial_requirement)),
+        Arc::new(ChatMessage::user(&requirement)),
         None,
     )
     .await?;
@@ -115,8 +114,54 @@ async fn main() -> anyhow::Result<()> {
     }
 
     runtime.wait().await?;
-    println!("流水线执行结束。");
+    println!("流水线执行结束。工作区位于: {}", workspace_root.display());
     Ok(())
+}
+
+/// 解析 CLI 参数：`<需求描述> [--workspace <path>]`
+fn parse_args() -> anyhow::Result<(String, std::path::PathBuf)> {
+    let mut args = std::env::args().skip(1);
+    let mut workspace: Option<std::path::PathBuf> = None;
+    let mut requirement: Option<String> = None;
+
+    while let Some(arg) = args.next() {
+        if arg == "--workspace" {
+            workspace = Some(
+                args.next()
+                    .ok_or_else(|| anyhow::anyhow!("--workspace 需要一个路径参数"))?
+                    .into(),
+            );
+        } else if requirement.is_none() {
+            requirement = Some(arg);
+        } else {
+            anyhow::bail!("未识别的参数: {}", arg);
+        }
+    }
+
+    let requirement = requirement.ok_or_else(|| {
+        anyhow::anyhow!("用法: coding <需求描述> [--workspace <path>]")
+    })?;
+
+    if requirement.is_empty() {
+        anyhow::bail!("需求描述不能为空");
+    }
+
+    let workspace_root = match workspace {
+        Some(p) => p,
+        None => {
+            let dir = std::env::temp_dir().join(format!(
+                "coding-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis()
+            ));
+            std::fs::create_dir_all(&dir)?;
+            eprintln!("[工作区] 未指定 --workspace，使用临时目录: {}", dir.display());
+            dir
+        }
+    };
+
+    Ok((requirement, workspace_root))
 }
 
 /// 读取用户输入

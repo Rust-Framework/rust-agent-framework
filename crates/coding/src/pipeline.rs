@@ -20,7 +20,7 @@ use crate::agents::{
     create_architect, create_coder, create_regression_tester, create_requirements_analyst,
     create_reviewer, create_task_planner, create_test_designer,
 };
-use crate::executors::{artifact_persist, code_merger, context_inject, review_gateway};
+use crate::executors::{artifact_persist, code_merger, context_inject, loop_reset, review_gateway};
 use crate::state::state_keys;
 
 /// 构建完整的 6 阶段开发流水线工作流图。
@@ -37,19 +37,19 @@ use crate::state::state_keys;
 /// p1_inject → p1_analyst → p1_persist → p1_confirm (HITL)
 ///   → p2_inject → p2_designer → p2_persist
 ///   → p3_inject → p3_architect → p3_persist
-///   → p4a_inject [LoopOptions:3] → p4a_planner → p4a_persist
+///   → p4a_loop_reset → p4a_inject [LoopOptions:3] → p4a_planner → p4a_persist
 ///     → FanOut(p4b_alpha_*, p4b_beta_*) → FanIn(p4b_merger)
 ///   → p5_inject → p5_tester → p5_persist
 ///   → p6_inject → p6_reviewer → p6_persist → p6_gateway (review_gateway)
 ///     ├── 审查通过 → yield_output (工作流完成)
-///     └── 审查未通过 → 回边 → p4a_inject (继续循环)
+///     └── 审查未通过 → 回边 → p4a_loop_reset → p4a_inject (清理后继续循环)
 /// ```
 pub fn build_dev_pipeline(
     options: &ChatClientOptions,
     workspace_root: &Path,
 ) -> Result<WorkflowGraph> {
     // ── 阶段 1: 需求分析 + HITL 确认 ──────────────────────────────
-    let p1_analyst = create_requirements_analyst(options)?;
+    let p1_analyst = create_requirements_analyst(options, workspace_root)?;
     let p1_inject = context_inject(
         "p1_inject",
         vec![],
@@ -72,7 +72,7 @@ pub fn build_dev_pipeline(
     ));
 
     // ── 阶段 2: 测试驱动设计 ──────────────────────────────────────
-    let p2_designer = create_test_designer(options)?;
+    let p2_designer = create_test_designer(options, workspace_root)?;
     let p2_inject = context_inject(
         "p2_inject",
         vec![state_keys::REQUIREMENTS_DOC],
@@ -85,7 +85,7 @@ pub fn build_dev_pipeline(
     );
 
     // ── 阶段 3: 架构设计 ──────────────────────────────────────────
-    let p3_architect = create_architect(options)?;
+    let p3_architect = create_architect(options, workspace_root)?;
     let p3_inject = context_inject(
         "p3_inject",
         vec![state_keys::REQUIREMENTS_DOC, state_keys::TEST_CASES],
@@ -98,7 +98,8 @@ pub fn build_dev_pipeline(
     );
 
     // ── 阶段 4a: 任务分解（回环入口，LoopOptions 限制 3 次迭代）─────
-    let p4a_planner = create_task_planner(options)?;
+    let p4a_planner = create_task_planner(options, workspace_root)?;
+    let p4a_loop_reset = loop_reset("p4a_loop_reset", workspace_root.to_path_buf());
     let p4a_inject = context_inject(
         "p4a_inject",
         vec![
@@ -116,8 +117,8 @@ pub fn build_dev_pipeline(
     );
 
     // ── 阶段 4b: 并行编码（FanOut → alpha/beta coder → FanIn 合并）──
-    let p4b_alpha_coder = create_coder(options, "coder-alpha")?;
-    let p4b_beta_coder = create_coder(options, "coder-beta")?;
+    let p4b_alpha_coder = create_coder(options, workspace_root, "coder-alpha")?;
+    let p4b_beta_coder = create_coder(options, workspace_root, "coder-beta")?;
     let p4b_alpha_inject = context_inject(
         "p4b_alpha_inject",
         vec![state_keys::TASK_PLAN, state_keys::ARCHITECTURE_DOC],
@@ -135,7 +136,7 @@ pub fn build_dev_pipeline(
     let p4b_merger = code_merger("p4b_merger", 2);
 
     // ── 阶段 5: 回归测试 ──────────────────────────────────────────
-    let p5_tester = create_regression_tester(options)?;
+    let p5_tester = create_regression_tester(options, workspace_root)?;
     let p5_inject = context_inject(
         "p5_inject",
         vec![
@@ -153,7 +154,7 @@ pub fn build_dev_pipeline(
     );
 
     // ── 阶段 6: 审查与反馈循环 ────────────────────────────────────
-    let p6_reviewer = create_reviewer(options)?;
+    let p6_reviewer = create_reviewer(options, workspace_root)?;
     let p6_inject = context_inject(
         "p6_inject",
         vec![
@@ -197,6 +198,7 @@ pub fn build_dev_pipeline(
         )
         .add_node("p3_persist", p3_persist)
         // 阶段 4a
+        .add_node("p4a_loop_reset", p4a_loop_reset)
         .add_node("p4a_inject", p4a_inject)
         .add_node(
             "p4a_planner",
@@ -248,8 +250,9 @@ pub fn build_dev_pipeline(
         // 阶段 3 边
         .add_edge("p3_inject", "p3_architect")
         .add_edge("p3_architect", "p3_persist")
-        .add_edge("p3_persist", "p4a_inject")
+        .add_edge("p3_persist", "p4a_loop_reset")
         // 阶段 4a 边
+        .add_edge("p4a_loop_reset", "p4a_inject")
         .add_edge("p4a_inject", "p4a_planner")
         .add_edge("p4a_planner", "p4a_persist")
         // FanOut: p4a_persist → alpha/beta 并行
@@ -269,8 +272,8 @@ pub fn build_dev_pipeline(
         .add_edge("p6_inject", "p6_reviewer")
         .add_edge("p6_reviewer", "p6_persist")
         .add_edge("p6_persist", "p6_gateway")
-        // 反馈循环：审查未通过时消息沿回边回到 p4a_inject
-        .add_loopback_edge("p6_gateway", "p4a_inject");
+        // 反馈循环：审查未通过时消息沿回边回到 p4a_loop_reset（清理后进入 p4a_inject）
+        .add_loopback_edge("p6_gateway", "p4a_loop_reset");
 
     builder.build()
 }
