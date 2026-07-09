@@ -88,15 +88,15 @@ fn test_pipeline_has_all_stage_nodes() {
 }
 
 #[test]
-fn test_pipeline_has_loop_config_on_p4a_inject() {
+fn test_pipeline_has_loop_options_on_p4a_inject() {
     let options = mock_options();
     let workspace = tempfile::tempdir().expect("tempdir");
     let graph = build_dev_pipeline(&options, workspace.path()).expect("build pipeline");
 
     let node = graph.get_node("p4a_inject").expect("p4a_inject exists");
-    let loop_config = node
-        .loop_config
+    let loop_options = node
+        .loop_options
         .as_ref()
-        .expect("p4a_inject 应有 LoopConfig");
-    assert_eq!(loop_config.max_iterations, 3, "p4a_inject 最多迭代 3 次");
+        .expect("p4a_inject 应有 LoopOptions");
+    assert_eq!(loop_options.max_iterations, 3, "p4a_inject 最多迭代 3 次");
 }

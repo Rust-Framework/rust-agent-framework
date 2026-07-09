@@ -13,7 +13,7 @@ use std::sync::Arc;
 use rust_agent_client::ChatClientOptions;
 use rust_agent_core::Result;
 use rust_agent_workflow::{
-    AgentExecutor, HumanTaskExecutor, LoopConfig, WorkflowBuilder, WorkflowGraph,
+    AgentExecutor, HumanTaskExecutor, LoopOptions, WorkflowBuilder, WorkflowGraph,
 };
 
 use crate::agents::{
@@ -37,7 +37,7 @@ use crate::state::state_keys;
 /// p1_inject → p1_analyst → p1_persist → p1_confirm (HITL)
 ///   → p2_inject → p2_designer → p2_persist
 ///   → p3_inject → p3_architect → p3_persist
-///   → p4a_inject [LoopConfig:3] → p4a_planner → p4a_persist
+///   → p4a_inject [LoopOptions:3] → p4a_planner → p4a_persist
 ///     → FanOut(p4b_alpha_*, p4b_beta_*) → FanIn(p4b_merger)
 ///   → p5_inject → p5_tester → p5_persist
 ///   → p6_inject → p6_reviewer → p6_persist → p6_gateway (review_gateway)
@@ -49,7 +49,7 @@ pub fn build_dev_pipeline(
     workspace_root: &Path,
 ) -> Result<WorkflowGraph> {
     // ── 阶段 1: 需求分析 + HITL 确认 ──────────────────────────────
-    let p1_analyst = create_requirements_analyst(options, workspace_root)?;
+    let p1_analyst = create_requirements_analyst(options)?;
     let p1_inject = context_inject(
         "p1_inject",
         vec![],
@@ -72,7 +72,7 @@ pub fn build_dev_pipeline(
     ));
 
     // ── 阶段 2: 测试驱动设计 ──────────────────────────────────────
-    let p2_designer = create_test_designer(options, workspace_root)?;
+    let p2_designer = create_test_designer(options)?;
     let p2_inject = context_inject(
         "p2_inject",
         vec![state_keys::REQUIREMENTS_DOC],
@@ -85,7 +85,7 @@ pub fn build_dev_pipeline(
     );
 
     // ── 阶段 3: 架构设计 ──────────────────────────────────────────
-    let p3_architect = create_architect(options, workspace_root)?;
+    let p3_architect = create_architect(options)?;
     let p3_inject = context_inject(
         "p3_inject",
         vec![state_keys::REQUIREMENTS_DOC, state_keys::TEST_CASES],
@@ -97,8 +97,8 @@ pub fn build_dev_pipeline(
         Some(workspace_root.join(".coding").join("architecture.md")),
     );
 
-    // ── 阶段 4a: 任务分解（回环入口，LoopConfig 限制 3 次迭代）─────
-    let p4a_planner = create_task_planner(options, workspace_root)?;
+    // ── 阶段 4a: 任务分解（回环入口，LoopOptions 限制 3 次迭代）─────
+    let p4a_planner = create_task_planner(options)?;
     let p4a_inject = context_inject(
         "p4a_inject",
         vec![
@@ -116,8 +116,8 @@ pub fn build_dev_pipeline(
     );
 
     // ── 阶段 4b: 并行编码（FanOut → alpha/beta coder → FanIn 合并）──
-    let p4b_alpha_coder = create_coder(options, workspace_root, "coder-alpha")?;
-    let p4b_beta_coder = create_coder(options, workspace_root, "coder-beta")?;
+    let p4b_alpha_coder = create_coder(options, "coder-alpha")?;
+    let p4b_beta_coder = create_coder(options, "coder-beta")?;
     let p4b_alpha_inject = context_inject(
         "p4b_alpha_inject",
         vec![state_keys::TASK_PLAN, state_keys::ARCHITECTURE_DOC],
@@ -132,10 +132,10 @@ pub fn build_dev_pipeline(
         artifact_persist("p4b_alpha_persist", state_keys::CODE_CHANGES_ALPHA, None);
     let p4b_beta_persist =
         artifact_persist("p4b_beta_persist", state_keys::CODE_CHANGES_BETA, None);
-    let p4b_merger = code_merger("p4b_merger");
+    let p4b_merger = code_merger("p4b_merger", 2);
 
     // ── 阶段 5: 回归测试 ──────────────────────────────────────────
-    let p5_tester = create_regression_tester(options, workspace_root)?;
+    let p5_tester = create_regression_tester(options)?;
     let p5_inject = context_inject(
         "p5_inject",
         vec![
@@ -153,7 +153,7 @@ pub fn build_dev_pipeline(
     );
 
     // ── 阶段 6: 审查与反馈循环 ────────────────────────────────────
-    let p6_reviewer = create_reviewer(options, workspace_root)?;
+    let p6_reviewer = create_reviewer(options)?;
     let p6_inject = context_inject(
         "p6_inject",
         vec![
@@ -235,7 +235,7 @@ pub fn build_dev_pipeline(
         // 入口（output 由 review_gateway 通过 yield_output 产生）
         .set_start("p1_inject")
         // 循环限制：p4a_inject 最多迭代 3 次
-        .with_loop_on("p4a_inject", LoopConfig::new(3))
+        .with_loop_on("p4a_inject", LoopOptions::new(3))
         // 阶段 1 边
         .add_edge("p1_inject", "p1_analyst")
         .add_edge("p1_analyst", "p1_persist")

@@ -53,7 +53,7 @@ builder = builder.add_node("flaky", executor).with_retry(RetryOptions {
 builder = builder.add_node("slow", executor).with_node_timeout(Duration::from_secs(60));
 
 // 带循环配置
-builder = builder.add_node("loop_node", executor).with_loop(LoopConfig::new(10));
+builder = builder.add_node("loop_node", executor).with_loop(LoopOptions::new(10));
 ```
 
 ### Edge（边）
@@ -112,21 +112,21 @@ let cond_contains = VariableCondition::new("output", ComparisonOp::Contains, jso
 let combined = ExpressionCondition::all_of(vec![cond_eq, cond_gt]);
 ```
 
-### LoopConfig（循环）
+### LoopOptions（循环）
 
 支持显式标记循环回边，引擎管理迭代和终止：
 
 ```rust
-pub struct LoopConfig {
+pub struct LoopOptions {
     pub max_iterations: usize,        // 最大迭代次数（0 表示无限制）
     pub loop_variable: Option<String>, // 循环变量名，自动递增
 }
 
 // 审批驳回重审循环
-let approval_loop = LoopConfig::new(5).with_variable("approval_round");
+let approval_loop = LoopOptions::new(5).with_variable("approval_round");
 
 // 推理循环（由 ITerminationCondition 控制）
-let reasoning_loop = LoopConfig::unlimited();
+let reasoning_loop = LoopOptions::unlimited();
 ```
 
 循环迭代状态可序列化到 checkpoint，支持恢复后继续迭代。
@@ -209,7 +209,7 @@ let executor = CompensableExecutor::new(
 use rust_agent_workflow::{
     WorkflowBuilder, WorkflowEngine,
     AgentExecutor, FunctionExecutor,
-    VariableCondition, ExpressionCondition, ComparisonOp, LoopConfig,
+    VariableCondition, ExpressionCondition, ComparisonOp, LoopOptions,
     ExhaustedAction, RetryBackoff, RetryOptions,
 };
 use std::sync::Arc;
@@ -288,5 +288,5 @@ async fn build_analysis_workflow(
 | 复杂业务流程 | 条件路由、排他网关、多级审核 |
 | 人机协同 | HumanTaskExecutor + WorkflowRuntime |
 | Saga 事务 | CompensableExecutor + 补偿 |
-| 迭代推理 | LoopConfig + 循环边 |
+| 迭代推理 | LoopOptions + 循环边 |
 | 嵌套编排 | SubFlowExecutor 子图 |

@@ -1,17 +1,17 @@
 //! 自定义执行器工厂函数。
 //!
-//! 提供三类执行器：
+//! 提供以下执行器：
 //! - `artifact_persist` — 产物持久化器，将 Agent 输出写入工作流状态 + 文件
 //! - `context_inject` — 上下文注入器，从状态读取产物构建富 prompt
 //! - `code_merger` — 代码合并器，FanIn 聚合并行 coder 输出
-//! - `pass_through` — 透传节点，用于入口/网关等辅助节点
+//! - `review_gateway` — 审查网关，驱动反馈循环决策
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use rust_agent_core::ChatMessage;
 use rust_agent_workflow::{
-    ContextFunctionExecutor, FunctionExecutor, HandlerResult, IExecutor, IWorkflowContext,
+    ContextFunctionExecutor, HandlerResult, IExecutor, IWorkflowContext, WorkflowEvent,
 };
 
 /// 从 `Arc<dyn Any>` 消息中提取 `ChatMessage` 的 assistant 文本。
@@ -113,8 +113,12 @@ pub fn context_inject(
                 let prompt = template.replace("{artifacts}", &artifacts);
                 let message = ChatMessage::user(&prompt);
 
-                // yield_output 供可观测性
-                ctx.yield_output(Arc::new(message.clone())).await?;
+                // 发出可观测性事件（不污染 runtime.outputs()，最终输出仅由 review_gateway 产生）
+                ctx.emit_event(WorkflowEvent::Custom {
+                    key: "context_prompt".into(),
+                    data: serde_json::Value::String(prompt),
+                })
+                .await;
 
                 // 传递给下游 AgentExecutor
                 Ok(HandlerResult::Messages(vec![Arc::new(message)]))
@@ -123,15 +127,20 @@ pub fn context_inject(
     ))
 }
 
-/// 代码合并器 — FanIn 聚合器，合并两个并行 coder 的输出。
+/// 代码合并器 — FanIn 聚合器，合并并行 coder 的输出。
 ///
 /// FanIn 边将多个源消息逐条投递到此节点。使用状态计数器确保只在收到
 /// 全部消息后产出合并结果：
-/// - 第 1 条消息：计数器 0→1，返回 `None`（等待另一条）
-/// - 第 2 条消息：计数器 1→2，从状态读取两个 coder 的产物，合并输出，重置计数器
+/// - 前 `expected_sources - 1` 条消息：递增计数器，返回 `None`（等待其余源）
+/// - 第 `expected_sources` 条消息：从状态读取各 coder 产物，合并输出，重置计数器
 ///
-/// 依赖上游 `artifact_persist` 节点已将产物写入 `CODE_CHANGES_ALPHA` / `CODE_CHANGES_BETA`。
-pub fn code_merger(node_id: impl Into<String>) -> Arc<dyn IExecutor> {
+/// `expected_sources` 必须与 FanIn 边的源节点数量一致，否则会过早触发合并
+/// 或永久阻塞。依赖上游 `artifact_persist` 节点已将产物写入
+/// `CODE_CHANGES_ALPHA` / `CODE_CHANGES_BETA`。
+pub fn code_merger(
+    node_id: impl Into<String>,
+    expected_sources: usize,
+) -> Arc<dyn IExecutor> {
     let node_id = node_id.into();
     Arc::new(ContextFunctionExecutor::new(
         node_id,
@@ -150,26 +159,24 @@ pub fn code_merger(node_id: impl Into<String>) -> Arc<dyn IExecutor> {
             )
             .await?;
 
-            if next < 2 {
-                // 等待另一条消息
+            if (next as usize) < expected_sources {
+                // 等待其余源消息
                 return Ok(HandlerResult::None);
             }
 
-            // 两条消息都已到达，重置计数器
+            // 全部源消息已到达，重置计数器
             ctx.write_state(
                 MERGER_COUNT,
                 serde_json::Value::Number(serde_json::Number::from(0)),
             )
             .await?;
 
-            // 从状态读取两个 coder 的产物并合并
+            // 从状态读取两个 coder 的产物并合并（状态读取错误向上传播，缺失键视为空）
             let alpha = read_state_text(&ctx, crate::state::state_keys::CODE_CHANGES_ALPHA)
-                .await
-                .unwrap_or_default()
+                .await?
                 .unwrap_or_default();
             let beta = read_state_text(&ctx, crate::state::state_keys::CODE_CHANGES_BETA)
-                .await
-                .unwrap_or_default()
+                .await?
                 .unwrap_or_default();
 
             let merged = format!(
@@ -203,7 +210,7 @@ async fn read_state_text(
 ///   （消息沿 `add_loopback_edge` 回到 p4a_inject 继续循环）
 ///
 /// 此设计避免了框架不支持"条件回边"的限制：网关本身根据审查结果决定是
-/// 产生输出（终止循环）还是沿回边继续循环。配合 `LoopConfig::new(3)`
+/// 产生输出（终止循环）还是沿回边继续循环。配合 `LoopOptions::new(3)`
 /// 限制最大迭代次数，形成双重保护。
 pub fn review_gateway(node_id: impl Into<String>) -> Arc<dyn IExecutor> {
     let node_id = node_id.into();
@@ -246,18 +253,4 @@ pub fn review_gateway(node_id: impl Into<String>) -> Arc<dyn IExecutor> {
             }
         },
     ))
-}
-
-/// 透传节点 — 接收消息原样传递，用于入口/网关等辅助节点。
-pub fn pass_through(node_id: impl Into<String>) -> Arc<dyn IExecutor> {
-    let node_id = node_id.into();
-    Arc::new(FunctionExecutor::new(node_id, |msg: ChatMessage| vec![msg]))
-}
-
-/// 透传节点（字符串类型版本）— 用于初始入口消息为 `String` 的场景。
-pub fn pass_through_string(node_id: impl Into<String>) -> Arc<dyn IExecutor> {
-    let node_id = node_id.into();
-    Arc::new(FunctionExecutor::new(node_id, |msg: String| {
-        vec![ChatMessage::user(&msg)]
-    }))
 }

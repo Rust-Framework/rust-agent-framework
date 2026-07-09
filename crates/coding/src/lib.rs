@@ -21,12 +21,11 @@
 //! use futures_util::StreamExt;
 //!
 //! # async fn run() -> anyhow::Result<()> {
-//! let options = ChatClientOptions {
-//!     api_base: "https://api.deepseek.com/v1".into(),
-//!     api_key: std::env::var("DEEPSEEK_API_KEY")?,
-//!     model: "deepseek-chat".into(),
-//!     ..Default::default()
-//! };
+//! let mut options = ChatClientOptions::openai(
+//!     "agnes-2.0-flash",
+//!     std::env::var("AGNES_API_KEY")?,
+//! );
+//! options.api_base = "https://apihub.agnes-ai.com/v1".to_string();
 //! let workspace_root = std::env::current_dir()?;
 //! let graph = build_dev_pipeline(&options, &workspace_root)?;
 //!
@@ -61,7 +60,6 @@
 //! ```
 
 pub mod agents;
-pub mod conditions;
 pub mod executors;
 pub mod pipeline;
 pub mod state;
@@ -71,10 +69,6 @@ pub use agents::{
     create_architect, create_coder, create_regression_tester, create_requirements_analyst,
     create_reviewer, create_task_planner, create_test_designer,
 };
-pub use conditions::ReviewPassedCondition;
-pub use executors::{
-    artifact_persist, code_merger, context_inject, pass_through, pass_through_string,
-    review_gateway,
-};
+pub use executors::{artifact_persist, code_merger, context_inject, review_gateway};
 pub use pipeline::build_dev_pipeline;
 pub use state::{state_keys, ReviewVerdict};

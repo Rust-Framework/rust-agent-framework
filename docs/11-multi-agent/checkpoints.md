@@ -131,11 +131,11 @@ let cp = Arc::new(CheckpointManager::with_default_config(store));
 
 ## 循环状态的持久化
 
-循环配置（`LoopConfig`）中的迭代计数作为流程变量存储在 `state_map` 中，自动序列化到 checkpoint。恢复后从断点继续迭代。
+循环配置（`LoopOptions`）中的迭代计数作为流程变量存储在 `state_map` 中，自动序列化到 checkpoint。恢复后从断点继续迭代。
 
 ```rust
 // 循环迭代变量格式
-let loop_var = loop_config.loop_variable
+let loop_var = loop_options.loop_variable
     .unwrap_or_else(|| format!("__loop_{}", node_id));
 
 // 在 state_map 中以 JSON 值存储：json!(current_iteration)

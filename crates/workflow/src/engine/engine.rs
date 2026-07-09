@@ -376,7 +376,7 @@ impl WorkflowEngine {
                 execution_log.lock().await.push(node_id.clone());
 
                 // ── 循环迭代管理 ──
-                if let Some(ref loop_cfg) = node.loop_config {
+                if let Some(ref loop_cfg) = node.loop_options {
                     let loop_var = loop_cfg
                         .loop_variable
                         .clone()

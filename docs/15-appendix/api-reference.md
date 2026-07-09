@@ -166,9 +166,9 @@ pub struct AgentBuilder<C: IChatClient> {
 | 类型 | 字段/描述 |
 |------|---------|
 | `WorkflowGraph` | `nodes`, `edges`, `ports`, `output_node_ids`, `start_node_id` |
-| `Node` | `id`, `executor`, `is_output`, `retry`, `timeout`, `loop_config` |
+| `Node` | `id`, `executor`, `is_output`, `retry`, `timeout`, `loop_options` |
 | `Edge` | 枚举 `Direct / FanOut / FanIn` |
-| `LoopConfig` | `max_iterations`, `loop_variable` |
+| `LoopOptions` | `max_iterations`, `loop_variable` |
 | `AgentExecutor` | 包装 `IAgent` 为 `IExecutor` |
 | `FunctionExecutor<F, I, O>` | 纯函数节点，泛型参数 |
 | `HumanTaskExecutor` | 暂停工作流等待外部输入 |

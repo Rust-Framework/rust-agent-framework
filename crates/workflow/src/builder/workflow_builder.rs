@@ -6,7 +6,7 @@ use rust_agent_core::{IAgent, Result};
 use crate::engine::retry::RetryOptions;
 use crate::executor::{AgentExecutor, IExecutor};
 use crate::graph::edge::{DirectEdgeData, Edge, EdgeId, FanInEdgeData, FanOutEdgeData, IEdgeCondition, IFanOutAssigner};
-use crate::graph::node::{LoopConfig, Node};
+use crate::graph::node::{LoopOptions, Node};
 use crate::graph::port::RequestPort;
 use crate::graph::WorkflowGraph;
 use std::time::Duration;
@@ -73,17 +73,17 @@ impl WorkflowBuilder {
     }
 
     /// 为指定节点设置循环配置
-    pub fn with_loop_on(mut self, node_id: &str, config: LoopConfig) -> Self {
+    pub fn with_loop_on(mut self, node_id: &str, config: LoopOptions) -> Self {
         if let Some(node) = self.nodes.get_mut(node_id) {
-            node.loop_config = Some(config);
+            node.loop_options = Some(config);
         }
         self
     }
 
     /// 为最后一次 add_node 添加的节点设置循环配置
-    pub fn with_loop(mut self, config: LoopConfig) -> Self {
+    pub fn with_loop(mut self, config: LoopOptions) -> Self {
         if let Some((_, node)) = self.nodes.iter_mut().last() {
-            node.loop_config = Some(config);
+            node.loop_options = Some(config);
         }
         self
     }
@@ -194,7 +194,7 @@ impl WorkflowBuilder {
     /// 添加循环回边 — source → target，标记 is_loopback=true。
     ///
     /// 循环回边在图校验时不视为环错误。引擎在运行时
-    /// 管理迭代计数和终止条件（参见 Node.loop_config）。
+    /// 管理迭代计数和终止条件（参见 Node.loop_options）。
     pub fn add_loopback_edge(
         mut self,
         source: impl Into<String>,

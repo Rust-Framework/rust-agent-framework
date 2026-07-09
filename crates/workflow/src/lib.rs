@@ -71,7 +71,7 @@ pub use executor::{
 
 // ── 图 ──
 pub use graph::{ComparisonOp, ExpressionCondition, VariableCondition, VariableEdgeCondition};
-pub use graph::{Edge, LoopConfig, Node, RequestPort, WorkflowGraph};
+pub use graph::{Edge, LoopOptions, Node, RequestPort, WorkflowGraph};
 pub use graph::{ComplexGatewayCondition, EventBasedGatewayCondition, SubCondition, ComparisonOperator};
 
 // ── WorkflowAgent ──

@@ -1,4 +1,4 @@
-﻿//! Host configuration — multi-layered config via figment + clap.
+//! Host configuration — multi-layered config via figment + clap.
 
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
@@ -150,7 +150,7 @@ pub struct DevPipelineConfig {
     /// Agent ID（注册到 Registry 中的标识）。
     #[serde(default = "default_dev_pipeline_id")]
     pub agent_id: String,
-    /// 反馈循环最大迭代次数（对应 `LoopConfig`）。
+    /// 反馈循环最大迭代次数（对应 `LoopOptions`）。
     #[serde(default = "default_max_iterations")]
     pub max_iterations: u32,
 }

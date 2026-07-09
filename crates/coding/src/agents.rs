@@ -3,11 +3,10 @@
 //! 每个 Agent 用 `AgentBuilder` 构建，配置专属指令、工具集、工具轮次上限。
 //! 所有 Agent 从同一份 `ChatClientOptions` 创建独立的 `DeepSeekChatClient`。
 
-use std::path::Path;
 use std::sync::Arc;
 
 use rust_agent_client::{ChatClientOptions, DeepSeekChatClient};
-use rust_agent_core::{IAgent, IChatClient, Result};
+use rust_agent_core::{IAgent, Result};
 use rust_agent_framework::tools::{
     EditFile, FindFiles, ListFiles, ReadFile, RunCommand, SearchFile, WriteFile,
 };
@@ -200,17 +199,11 @@ pub fn create_client(options: &ChatClientOptions) -> Result<DeepSeekChatClient> 
     DeepSeekChatClient::new(options.clone())
 }
 
-/// 创建客户端的 trait 对象（用于需要 `Arc<dyn IChatClient>` 的场景）。
-pub fn create_client_arc(options: &ChatClientOptions) -> Result<Arc<dyn IChatClient>> {
-    Ok(Arc::new(DeepSeekChatClient::new(options.clone())?))
-}
-
 // ── Agent 工厂函数 ────────────────────────────────────────────────
 
 /// 阶段 1: 需求分析智能体
 pub fn create_requirements_analyst(
     options: &ChatClientOptions,
-    _workspace_root: &Path,
 ) -> Result<Arc<dyn IAgent>> {
     let client = create_client(options)?;
     AgentBuilder::new("requirements-analyst")
@@ -227,7 +220,6 @@ pub fn create_requirements_analyst(
 /// 阶段 2: 测试驱动设计智能体
 pub fn create_test_designer(
     options: &ChatClientOptions,
-    _workspace_root: &Path,
 ) -> Result<Arc<dyn IAgent>> {
     let client = create_client(options)?;
     AgentBuilder::new("test-designer")
@@ -245,7 +237,6 @@ pub fn create_test_designer(
 /// 阶段 3: 架构设计智能体
 pub fn create_architect(
     options: &ChatClientOptions,
-    _workspace_root: &Path,
 ) -> Result<Arc<dyn IAgent>> {
     let client = create_client(options)?;
     AgentBuilder::new("architect")
@@ -264,7 +255,6 @@ pub fn create_architect(
 /// 阶段 4a: 开发任务分解智能体
 pub fn create_task_planner(
     options: &ChatClientOptions,
-    _workspace_root: &Path,
 ) -> Result<Arc<dyn IAgent>> {
     let client = create_client(options)?;
     AgentBuilder::new("task-planner")
@@ -281,7 +271,6 @@ pub fn create_task_planner(
 /// 阶段 4b: 并行开发者（模板函数，生成 alpha/beta）
 pub fn create_coder(
     options: &ChatClientOptions,
-    _workspace_root: &Path,
     agent_id: &str,
 ) -> Result<Arc<dyn IAgent>> {
     let client = create_client(options)?;
@@ -302,7 +291,6 @@ pub fn create_coder(
 /// 阶段 5: 回归测试智能体
 pub fn create_regression_tester(
     options: &ChatClientOptions,
-    _workspace_root: &Path,
 ) -> Result<Arc<dyn IAgent>> {
     let client = create_client(options)?;
     AgentBuilder::new("regression-tester")
@@ -320,7 +308,6 @@ pub fn create_regression_tester(
 /// 阶段 6: 反馈审查智能体
 pub fn create_reviewer(
     options: &ChatClientOptions,
-    _workspace_root: &Path,
 ) -> Result<Arc<dyn IAgent>> {
     let client = create_client(options)?;
     AgentBuilder::new("reviewer")

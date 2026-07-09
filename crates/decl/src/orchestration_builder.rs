@@ -9,7 +9,7 @@ use rust_agent_core::{
     ISession, Result,
 };
 use rust_agent_workflow::executor::{AgentExecutor, FunctionExecutor};
-use rust_agent_workflow::graph::LoopConfig;
+use rust_agent_workflow::graph::LoopOptions;
 use rust_agent_workflow::orchestrations::vote::{
     MajorityAggregator, UnanimousAggregator, WeightedAggregator,
 };
@@ -309,7 +309,7 @@ fn build_magentic_iterative_agent(
     }
 
     if max_iterations > 1 {
-        builder = builder.with_loop_on(&orch_id, LoopConfig::new(max_iterations));
+        builder = builder.with_loop_on(&orch_id, LoopOptions::new(max_iterations));
         builder = builder.add_loopback_edge(&last_exit, &orch_id);
     }
 
@@ -371,7 +371,7 @@ fn build_pipeline_agent(
 
     if max_iterations > 0 {
         if let (Some(entry), true) = (loop_entry, !last_exit.is_empty()) {
-            builder = builder.with_loop_on(&entry, LoopConfig::new(max_iterations));
+            builder = builder.with_loop_on(&entry, LoopOptions::new(max_iterations));
             builder = builder.add_loopback_edge(&last_exit, &entry);
         }
     }

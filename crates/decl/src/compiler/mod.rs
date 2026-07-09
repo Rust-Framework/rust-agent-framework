@@ -23,7 +23,7 @@ use rust_agent_workflow::builder::WorkflowBuilder;
 use rust_agent_workflow::executor::{
     ContextFunctionExecutor, FunctionExecutor, HandlerResult, HumanTaskExecutor, IExecutor,
 };
-use rust_agent_workflow::graph::{ComparisonOp, LoopConfig, VariableEdgeCondition};
+use rust_agent_workflow::graph::{ComparisonOp, LoopOptions, VariableEdgeCondition};
 use rust_agent_workflow::WorkflowGraph;
 
 use crate::actions::ActionDecl;
@@ -431,10 +431,10 @@ fn emit_node(
         }
 
         CompileNode::Loop { entry_node_id, source: _, item_name: _, index_name: _, body, max_iterations } => {
-            let loop_config = LoopConfig::new(*max_iterations).with_variable(format!("__loop_{}", entry_node_id));
+            let loop_options = LoopOptions::new(*max_iterations).with_variable(format!("__loop_{}", entry_node_id));
             let loop_exec = build_loop_entry_executor(entry_node_id);
 
-            *builder = builder.clone().add_node(entry_node_id.clone(), loop_exec).with_loop(loop_config);
+            *builder = builder.clone().add_node(entry_node_id.clone(), loop_exec).with_loop(loop_options);
 
             let (body_first, body_last) = emit_node(body, builder, ctx, registry, Some(entry_node_id.clone()))?;
             if let Some(bf) = body_first { *builder = builder.clone().add_edge(entry_node_id.clone(), bf); }
