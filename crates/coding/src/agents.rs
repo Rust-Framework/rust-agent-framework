@@ -136,18 +136,18 @@ const ARCHITECT_INSTRUCTIONS: &str = "\
 - 列出核心依赖与版本
 
 ### 2. 项目结构（具体到文件，用代码块输出完整文件树）
-每个文件标注职责：
+每个文件标注职责。以下为示例格式，按测试设计师声明的实际技术栈调整（不要照搬）：
 ```
 <workspace_root>/
-├── src/
-│   ├── lib.rs          # 库入口，仅 re-export
-│   ├── core/           # 核心逻辑层 → [alpha]
+├── <源码目录>/            # 按技术栈命名（src/ 或 lib/ 或 app/）
+│   ├── <入口文件>          # 库/应用入口，仅 re-export
+│   ├── <core 模块>/        # 核心逻辑层 → [alpha]
 │   │   └── ...
-│   └── api/            # 接口 / 适配层 → [beta]
+│   └── <api 模块>/         # 接口 / 适配层 → [beta]
 │       └── ...
-├── tests/
-│   └── integration_test.rs  # 已由测试设计师创建
-└── Cargo.toml
+├── <测试目录>/             # 按技术栈命名（tests/ 或 __tests__/）
+│   └── <集成测试文件>       # 已由测试设计师创建
+└── <构建清单>              # 按技术栈命名（Cargo.toml / package.json / pyproject.toml）
 ```
 
 ### 3. 模块归属标注（关键——任务分解师与两个开发者依赖此划分）
@@ -263,7 +263,7 @@ const CODER_INSTRUCTIONS: &str = "\
 - 仅编辑分配给你的 [alpha] / [beta] 文件——发现需要跨边界修改时，在回复中报告冲突，不要擅自修改对方文件
 - 遵循项目既有风格，最小必要改动
 - 禁止降级产出：若某功能点无法实现，明确报告而非绕过
-- 测试失败时禁止用 `#[ignore]` / `#[cfg(skip)]` / `it.skip` 等方式跳过——必须修复实现
+- 测试失败时禁止用 `#[ignore]`（Rust）、`it.skip` / `test.skip`（JS）、`@pytest.mark.skip`（Python）等方式跳过——必须修复实现
 
 ## 错误处理策略
 - 编译错误：逐个修复，不要堆砌一次性大改动
@@ -299,9 +299,12 @@ const REGRESSION_TESTER_INSTRUCTIONS: &str = "\
 不要基于代码阅读推断结果——必须实际运行。
 
 ## 工作流程
-1. **识别测试命令**：用 ListFiles / ReadFile 检查工作区，确认测试文件位置与项目类型
+1. **识别测试命令**：用 ListFiles 检查工作区根目录的构建清单判断项目类型
+   - 存在 `Cargo.toml` → Rust 项目，命令 `cargo test`
+   - 存在 `package.json` → Node 项目，命令 `npm test`（或读 package.json 的 scripts.test）
+   - 存在 `pyproject.toml` / `pytest.ini` → Python 项目，命令 `pytest`
    - 优先使用测试设计师在 `.coding/test_cases.md` 中声明的运行命令
-   - 若未声明：Rust 项目用 `cargo test`，Node 项目用 `npm test` 或 `npx <framework>`，Python 用 `pytest`
+   - 用 ReadFile 确认测试代码文件实际存在
 2. **运行测试**：用 RunCommand（工作目录为工作区根）执行测试命令
    - 若首次运行失败，检查是否需要先 build / install（如 `cargo build` / `npm install`）
    - 完整记录命令、exit code、stdout、stderr
@@ -456,10 +459,10 @@ fn search_file(scope: &Arc<WorkspaceScope>) -> SearchFile {
 }
 
 /// 在 scope 下创建受限的 `RunCommand`（工作目录限定为 workspace_root）。
-fn run_command(scope: &Arc<WorkspaceScope>) -> RunCommand {
+fn run_command(scope: &Arc<WorkspaceScope>, timeout_secs: u64) -> RunCommand {
     RunCommand {
         scope: Some(scope.clone()),
-        timeout_secs: None,
+        timeout_secs: Some(timeout_secs),
     }
 }
 
@@ -476,7 +479,6 @@ pub fn create_requirements_analyst(
         .chat_client(client)
         .instructions(REQUIREMENTS_ANALYST_INSTRUCTIONS)
         .with_description("需求分析专家 — 全面分解需求，分析表现形态")
-        .with_tool(write_file(&scope))
         .with_tool(read_file(&scope))
         .with_tool(list_files(&scope))
         .max_tool_rounds(10)
@@ -513,7 +515,6 @@ pub fn create_architect(
         .chat_client(client)
         .instructions(ARCHITECT_INSTRUCTIONS)
         .with_description("架构设计专家 — 围绕需求设计最佳软件架构")
-        .with_tool(write_file(&scope))
         .with_tool(read_file(&scope))
         .with_tool(list_files(&scope))
         .with_tool(find_files(&scope))
@@ -533,7 +534,6 @@ pub fn create_task_planner(
         .chat_client(client)
         .instructions(TASK_PLANNER_INSTRUCTIONS)
         .with_description("任务分解专家 — 拆分可并行编码工作包")
-        .with_tool(write_file(&scope))
         .with_tool(read_file(&scope))
         .with_tool(list_files(&scope))
         .max_tool_rounds(8)
@@ -555,7 +555,7 @@ pub fn create_coder(
         .with_tool(read_file(&scope))
         .with_tool(write_file(&scope))
         .with_tool(edit_file(&scope))
-        .with_tool(run_command(&scope))
+        .with_tool(run_command(&scope, 300))
         .with_tool(search_file(&scope))
         .with_tool(list_files(&scope))
         .max_tool_rounds(20)
@@ -573,7 +573,7 @@ pub fn create_regression_tester(
         .chat_client(client)
         .instructions(REGRESSION_TESTER_INSTRUCTIONS)
         .with_description("回归测试工程师 — 全链路回归验证")
-        .with_tool(run_command(&scope))
+        .with_tool(run_command(&scope, 600))
         .with_tool(read_file(&scope))
         .with_tool(list_files(&scope))
         .with_tool(search_file(&scope))
@@ -593,7 +593,6 @@ pub fn create_reviewer(
         .instructions(REVIEWER_INSTRUCTIONS)
         .with_description("质量审查专家 — 审查差异，驱动反馈循环")
         .with_tool(read_file(&scope))
-        .with_tool(run_command(&scope))
         .with_tool(list_files(&scope))
         .with_tool(search_file(&scope))
         .max_tool_rounds(12)
