@@ -21,7 +21,7 @@ use rust_agent_framework::AgentBuilder;
 
 // ── 指令常量 ──────────────────────────────────────────────────────
 
-const REQUIREMENTS_ANALYST_INSTRUCTIONS: &str = "\
+pub const REQUIREMENTS_ANALYST_INSTRUCTIONS: &str = "\
 你是 6 阶段开发流水线的【阶段 1：需求分析】agent。
 - 上游：用户初始需求消息
 - 下游：测试设计师（阶段 2）、架构师（阶段 3）
@@ -70,7 +70,7 @@ const REQUIREMENTS_ANALYST_INSTRUCTIONS: &str = "\
 
 用中文回复。";
 
-const TEST_DESIGNER_INSTRUCTIONS: &str = "\
+pub const TEST_DESIGNER_INSTRUCTIONS: &str = "\
 你是 6 阶段开发流水线的【阶段 2：测试驱动设计】agent。
 - 上游：需求文档（`.coding/requirements.md`，含验收标准）
 - 下游：架构师（阶段 3）、回归测试师（阶段 5）
@@ -114,7 +114,7 @@ const TEST_DESIGNER_INSTRUCTIONS: &str = "\
 
 用中文回复。";
 
-const ARCHITECT_INSTRUCTIONS: &str = "\
+pub const ARCHITECT_INSTRUCTIONS: &str = "\
 你是 6 阶段开发流水线的【阶段 3：架构设计】agent。
 - 上游：需求文档、测试用例（含已声明技术栈与测试框架）
 - 下游：任务分解师（阶段 4a）、并行开发者 coder-alpha / coder-beta（阶段 4b）
@@ -185,7 +185,7 @@ const ARCHITECT_INSTRUCTIONS: &str = "\
 
 用中文回复。";
 
-const TASK_PLANNER_INSTRUCTIONS: &str = "\
+pub const TASK_PLANNER_INSTRUCTIONS: &str = "\
 你是 6 阶段开发流水线的【阶段 4a：任务分解】agent。
 - 上游：需求文档、测试用例、架构设计（含 alpha / beta 模块归属标注）
 - 下游：coder-alpha（核心逻辑层）、coder-beta（接口 / 适配层）
@@ -238,7 +238,7 @@ const TASK_PLANNER_INSTRUCTIONS: &str = "\
 
 用中文回复。";
 
-const CODER_INSTRUCTIONS: &str = "\
+pub const CODER_INSTRUCTIONS: &str = "\
 你是 6 阶段开发流水线的【阶段 4b：并行编码】agent。
 - 上游：任务分解计划（`.coding/task_plan.md`）、架构设计（`.coding/architecture.md`，已标注你的角色归属）
 - 下游：code_merger（合并变更清单）→ 回归测试师
@@ -287,7 +287,7 @@ const CODER_INSTRUCTIONS: &str = "\
 
 用中文回复。";
 
-const REGRESSION_TESTER_INSTRUCTIONS: &str = "\
+pub const REGRESSION_TESTER_INSTRUCTIONS: &str = "\
 你是 6 阶段开发流水线的【阶段 5：回归测试】agent。
 - 上游：任务计划、两个开发者的代码变更、测试设计师的测试用例（`.coding/test_cases.md`，含测试代码文件与运行命令）
 - 下游：审查专家（阶段 6）
@@ -341,7 +341,7 @@ const REGRESSION_TESTER_INSTRUCTIONS: &str = "\
 
 用中文回复。";
 
-const REVIEWER_INSTRUCTIONS: &str = "\
+pub const REVIEWER_INSTRUCTIONS: &str = "\
 你是 6 阶段开发流水线的【阶段 6：审查与反馈循环】agent。
 - 上游：需求文档、测试用例、回归测试报告（`.coding/regression.md`）
 - 下游：review_gateway 网关（解析你的 JSON 结论决定终止或回边循环）

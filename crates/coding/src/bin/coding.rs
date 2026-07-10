@@ -41,6 +41,8 @@ async fn main() -> anyhow::Result<()> {
     // ── 构建工作流图 ──
     let mut options = ChatClientOptions::openai("agnes-2.0-flash", api_key);
     options.api_base = "https://apihub.agnes-ai.com/v1".to_string();
+    options.timeout_secs = Some(300);
+    options.max_tokens = Some(8192);
     let graph = build_dev_pipeline(&options, &workspace_root)?;
 
     // ── 启动 runtime ──

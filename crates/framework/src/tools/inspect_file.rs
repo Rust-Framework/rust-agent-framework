@@ -34,7 +34,7 @@ fn format_system_time(t: Option<std::time::SystemTime>) -> String {
 impl InspectFile {
     async fn call(
         &self,
-        #[param(desc = "文件或目录的绝对路径")] path: String,
+        #[param(desc = "文件或目录路径（相对于工作区根目录）")] path: String,
     ) -> rust_agent_core::Result<ToolResult> {
         let base_dir = self
             .scope

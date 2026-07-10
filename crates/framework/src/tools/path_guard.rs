@@ -106,7 +106,16 @@ pub(crate) fn resolve_safe_new(
                 if !canon.starts_with(&canon_base) {
                     return Err(AgentError::ToolError("Path traversal denied".into()));
                 }
-                let s = scope_status(&normalized, scope_root);
+                // 重构规范路径用于 scope 检查：
+                // cur 可能是 normalized 的祖先目录，需将剩余路径组件拼接到 canonical 祖先上。
+                // 否则 Windows 下 canonicalize 添加的 \\?\ 前缀会导致 starts_with 失败。
+                let canonical_resolved = if normalized == cur {
+                    canon.clone()
+                } else {
+                    let remaining = normalized.strip_prefix(cur).unwrap_or_else(|_| Path::new(""));
+                    canon.join(remaining)
+                };
+                let s = scope_status(&canonical_resolved, scope_root);
                 return Ok((normalized, s));
             }
             Err(_) => match cur.parent() {

@@ -26,7 +26,7 @@ impl IScopeTool for EditFile {
 impl EditFile {
     async fn call(
         &self,
-        #[param(desc = "要编辑的文件的绝对路径")] path: String,
+        #[param(desc = "文件路径（相对于工作区根目录，如 src/main.rs）")] path: String,
         #[param(desc = "文件中待替换的原文本（须唯一且连续，含空白和换行）")] old_str: String,
         #[param(desc = "替换后的新文本")] new_str: String,
     ) -> rust_agent_core::Result<ToolResult> {

@@ -1,0 +1,2 @@
+﻿[1m[91merror[0m: process didn't exit successfully: `target\debug\coding.exe "实现一个字符串工具库 crate，提供三个函数：反转字符串 reverse、去
+除重复字符 dedup、统计字符出现次数 count_chars" --workspace ./test-workspace` (exit code: 1)

@@ -28,7 +28,7 @@ impl IScopeTool for WriteFile {
 impl WriteFile {
     async fn call(
         &self,
-        #[param(desc = "文件的绝对路径")] path: String,
+        #[param(desc = "文件路径（相对于工作区根目录，如 src/main.rs）")] path: String,
         #[param(desc = "要写入文件的内容")] content: String,
     ) -> rust_agent_core::Result<ToolResult> {
         if content.len() > MAX_CONTENT_SIZE {

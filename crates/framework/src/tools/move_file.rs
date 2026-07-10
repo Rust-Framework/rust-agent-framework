@@ -26,8 +26,8 @@ impl IScopeTool for MoveFile {
 impl MoveFile {
     async fn call(
         &self,
-        #[param(desc = "源文件的绝对路径")] from: String,
-        #[param(desc = "目标文件的绝对路径")] to: String,
+        #[param(desc = "源文件路径（相对于工作区根目录）")] from: String,
+        #[param(desc = "目标文件路径（相对于工作区根目录）")] to: String,
     ) -> rust_agent_core::Result<ToolResult> {
         let base_dir = self
             .scope

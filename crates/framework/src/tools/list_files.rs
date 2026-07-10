@@ -26,7 +26,7 @@ impl IScopeTool for ListFiles {
 impl ListFiles {
     async fn call(
         &self,
-        #[param(desc = "目录的绝对路径")] path: String,
+        #[param(desc = "目录路径（相对于工作区根目录，如 src 或 .）")] path: String,
     ) -> rust_agent_core::Result<ToolResult> {
         let base_dir = self
             .scope

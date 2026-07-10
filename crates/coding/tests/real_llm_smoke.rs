@@ -56,6 +56,8 @@ async fn test_real_requirements_analysis() {
     let api_key = resolve_api_key();
     let mut options = ChatClientOptions::openai("agnes-2.0-flash", api_key);
     options.api_base = "https://apihub.agnes-ai.com/v1".to_string();
+    options.timeout_secs = Some(300);
+    options.max_tokens = Some(8192);
 
     let workspace_root = std::env::temp_dir();
 

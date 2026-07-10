@@ -29,7 +29,7 @@ impl IScopeTool for ReadFile {
 impl ReadFile {
     async fn call(
         &self,
-        #[param(desc = "文件的绝对路径")] path: String,
+        #[param(desc = "文件路径（相对于工作区根目录，如 src/main.rs）")] path: String,
         #[param(desc = "起始行号（从 1 开始计数，可选）")] offset: Option<i64>,
         #[param(desc = "最多读取行数（可选）")] limit: Option<i64>,
     ) -> rust_agent_core::Result<ToolResult> {
