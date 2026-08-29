@@ -4,6 +4,9 @@
 
 A modular, async-native Rust framework for building LLM-powered AI agents with streaming, tool-calling, human-in-the-loop approval, and multi-agent orchestration — inspired by [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) (MAF).
 
+[![Crates.io Version](https://img.shields.io/crates/v/rust-agent-framework)](https://crates.io/crates/rust-agent-framework)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 ## Table of Contents
 
 - [Architecture](#architecture)
