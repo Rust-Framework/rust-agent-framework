@@ -1,5 +1,7 @@
 # rust-agent-framework
 
+**English** | [简体中文](README.zh-CN.md)
+
 A modular, async-native Rust framework for building LLM-powered AI agents with streaming, tool-calling, human-in-the-loop approval, and multi-agent orchestration — inspired by [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) (MAF).
 
 ## Table of Contents

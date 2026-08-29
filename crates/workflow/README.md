@@ -33,7 +33,7 @@ let stream = agent.run(messages, session, options).await?;
 
 ## 内置编排 (`orchestrations`)
 
-对齐 MAF `agent_framework.orchestrations`，《已内置大模型集成测试验证》](https://gitcode.com/rf2026/rust-agent-framework/)。
+对齐 MAF `agent_framework.orchestrations`，《已内置大模型集成测试验证》](https://github.com/Rust-Framework/rust-agent-framework/)。
 
 ### SequentialWorkflow — 顺序编排
 

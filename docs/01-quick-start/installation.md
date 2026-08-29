@@ -31,8 +31,8 @@ RAF 包含 15 个 crate，按依赖关系分为核心层、运行时层和扩展
 ```toml
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-rust-agent-core = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-core" }
-rust-agent-client = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-client" }
+rust-agent-core = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-core" }
+rust-agent-client = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-client" }
 ```
 
 ### 标准配置（构建智能体）
@@ -46,13 +46,13 @@ futures-util = "0.3"
 serde_json = "1"
 
 # 核心抽象层
-rust-agent-core = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-core" }
+rust-agent-core = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-core" }
 # LLM 客户端（DeepSeek / OpenAI 兼容）
-rust-agent-client = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-client" }
+rust-agent-client = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-client" }
 # 智能体框架运行时（AgentBuilder、ChatClientAgent、内置工具、压缩策略）
-rust-agent-framework = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-framework" }
+rust-agent-framework = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-framework" }
 # 工具宏支持
-rust-agent-macros = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-macros" }
+rust-agent-macros = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-macros" }
 ```
 
 ### 本地开发（直接引用 workspace）
@@ -70,22 +70,22 @@ rust-agent-framework = { path = "../rust-agent-framework/crates/framework" }
 
 ```toml
 # Web 搜索支持
-rust-agent-websearch = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-websearch" }
+rust-agent-websearch = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-websearch" }
 
 # RAG（检索增强生成）
-rust-agent-rag = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-rag" }
+rust-agent-rag = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-rag" }
 
 # Wiki 知识检索
-rust-agent-wiki = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-wiki" }
+rust-agent-wiki = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-wiki" }
 
 # Rhai 脚本引擎
-rust-agent-rhai = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-rhai" }
+rust-agent-rhai = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-rhai" }
 
 # 工作流引擎
-rust-agent-workflow = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-workflow" }
+rust-agent-workflow = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-workflow" }
 
 # 声明式 Agent DSL
-rust-agent-decl = { git = "https://gitcode.com/rf2026/rust-agent-framework.git", package = "rust-agent-decl" }
+rust-agent-decl = { git = "https://github.com/Rust-Framework/rust-agent-framework.git", package = "rust-agent-decl" }
 ```
 
 ## 可选功能（Feature Flags）

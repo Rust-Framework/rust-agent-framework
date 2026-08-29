@@ -1,6 +1,6 @@
 {
     "$schema": "https://json-schema.org/draft-07/schema",
-    "$id": "https://gitcode.com/rf2026/rust-agent-framework/agent-decl-1.0.json",
+    "$id": "https://github.com/Rust-Framework/rust-agent-framework/agent-decl-1.0.json",
     "title": "RAF Agent Declaration Schema",
     "description": "JSON Schema for declarative Agent configuration in Rust Agent Framework (MAF AgentSchema v1.0 compatible).",
     "type": "object",

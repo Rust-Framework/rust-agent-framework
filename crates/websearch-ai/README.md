@@ -1,6 +1,6 @@
 # rust-agent-websearch
 
-`rust-agent-websearch` 是 [Rust Agent Framework (RAF)](https://gitcode.com/rf2026/rust-agent-framework) 的 **Web 搜索与网页抓取 Agent 工具集成** crate，提供开箱即用的 `web_search` 和 `web_fetch` 工具，以及配套的 `WebSearchContextProvider` 上下文提供器，支持零配置快速集成到任意 RAF Agent 中。
+`rust-agent-websearch` 是 [Rust Agent Framework (RAF)](https://github.com/Rust-Framework/rust-agent-framework) 的 **Web 搜索与网页抓取 Agent 工具集成** crate，提供开箱即用的 `web_search` 和 `web_fetch` 工具，以及配套的 `WebSearchContextProvider` 上下文提供器，支持零配置快速集成到任意 RAF Agent 中。
 
 ## 目录
 

@@ -1,6 +1,6 @@
 # rust-agent-host
 
-基于官方 [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) v0.14 Rust SDK 实现的智能体主机服务端。桥接 [Rust Agent Framework (RAF)](https://gitcode.com/rf2026/rust-agent-framework) 多智能体框架，通过 JSON-RPC 2.0 向 ACP 兼容客户端（如基于 Rust + GPUI 开发的 AI 产品）提供智能体服务。
+基于官方 [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) v0.14 Rust SDK 实现的智能体主机服务端。桥接 [Rust Agent Framework (RAF)](https://github.com/Rust-Framework/rust-agent-framework) 多智能体框架，通过 JSON-RPC 2.0 向 ACP 兼容客户端（如基于 Rust + GPUI 开发的 AI 产品）提供智能体服务。
 
 ## 目录
 
@@ -1063,4 +1063,4 @@ crates/host/
 - [Agent Client Protocol 官方文档](https://agentclientprotocol.com/)
 - [ACP Rust SDK (agent-client-protocol)](https://docs.rs/agent-client-protocol)
 - [ACP Cookbook](https://docs.rs/agent-client-protocol-cookbook)
-- [Rust Agent Framework](https://gitcode.com/rf2026/rust-agent-framework)
+- [Rust Agent Framework](https://github.com/Rust-Framework/rust-agent-framework)
