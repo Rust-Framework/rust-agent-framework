@@ -1,0 +1,924 @@
+{
+  "meta": {
+    "title": "rust-agent-framework Agent Framework",
+    "subtitle": "异步·流式·多智能体编排平台",
+    "docTitle": "rust-agent-framework 开发者手册：Rust 实现的 AI 智能体框架",
+    "description": "对标 Microsoft Agent Framework (MAF) 设计理念的 Rust 企业级 AI 智能体框架。支持装饰器管道、流式输出、工具系统、上下文提供器、会话管理、人机协同审批、多智能体编排、业务流程编排与声明式配置。",
+    "category": "library",
+    "tags": ["rust", "agent", "llm", "multi-agent", "workflow", "ai", "streaming"],
+    "repoUrl": "https://github.com/Rust-Framework/rust-agent-framework",
+    "demoUrl": "",
+    "featured": true,
+    "sortOrder": 1,
+    "version": "0.1.1",
+    "language": "zh-CN",
+    "author": "Start",
+    "logo": "logo.svg",
+    "foreword": "FOREWORD.md",
+    "pathRules": {
+      "chapterIndex": "{chapterId}/INDEX.md",
+      "sectionFile": "{chapterId}/{sectionId}.md"
+    }
+  },
+  "parts": [
+    {
+      "id": "part-0-foreword",
+      "title": "开篇",
+      "chapters": [
+        {
+          "id": "foreword",
+          "title": "前言",
+          "subtitle": "编写背景、目标读者与阅读建议",
+          "sections": []
+        }
+      ]
+    },
+    {
+      "id": "part-1-guide",
+      "title": "入门指南",
+      "chapters": [
+        {
+          "id": "01-quick-start",
+          "title": "快速入门",
+          "subtitle": "环境搭建、第一个 Agent 与核心概念",
+          "sections": [
+            {
+              "id": "installation",
+              "title": "环境安装与项目创建",
+              "summary": "环境要求、Cargo.toml 配置与项目脚手架",
+              "readingTime": 6,
+              "difficulty": "beginner"
+            },
+            {
+              "id": "first-agent",
+              "title": "你的第一个 Agent",
+              "summary": "用 AgentBuilder 构建并运行第一个 Agent",
+              "readingTime": 10,
+              "difficulty": "beginner"
+            },
+            {
+              "id": "core-concepts",
+              "title": "核心概念概览",
+              "summary": "Agent、Tool、Message、Session 与 Workflow 基础",
+              "readingTime": 12,
+              "difficulty": "beginner"
+            },
+            {
+              "id": "builtin-tools-intro",
+              "title": "内置工具快速体验",
+              "summary": "开箱即用的文件系统工具与命令执行工具",
+              "readingTime": 8,
+              "difficulty": "beginner"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-2-core",
+      "title": "核心架构",
+      "chapters": [
+        {
+          "id": "02-core-architecture",
+          "title": "核心架构",
+          "subtitle": "框架分层、类型系统与消息模型",
+          "sections": [
+            {
+              "id": "layered-design",
+              "title": "框架分层设计",
+              "summary": "core / client / framework 分层与依赖方向",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "type-system",
+              "title": "核心类型系统",
+              "summary": "Agent、角色、元数据与 trait 体系",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "message-model",
+              "title": "消息与流式模型",
+              "summary": "ChatMessage 与 AgentResponseUpdate 更新流",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "error-handling",
+              "title": "错误处理体系",
+              "summary": "AgentError、异常转译与工具前置错误机制",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "crate-map",
+              "title": "Workspace 与 Crate 地图",
+              "summary": "各 crate 职责与依赖关系总览",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-3-engine",
+      "title": "Agent 引擎",
+      "chapters": [
+        {
+          "id": "03-agent-engine",
+          "title": "Agent 引擎",
+          "subtitle": "ChatClientAgent、AgentBuilder 与运行生命周期",
+          "sections": [
+            {
+              "id": "chat-client-agent",
+              "title": "ChatClientAgent 详解",
+              "summary": "核心 Agent 实现：结构字段与 run 循环",
+              "readingTime": 14,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "agent-builder",
+              "title": "AgentBuilder 流式构建器",
+              "summary": "链式配置指令、上下文提供器与工具注册",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "run-lifecycle",
+              "title": "Agent 运行生命周期",
+              "summary": "初始化、执行与迭代三阶段的完整链路",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "streaming",
+              "title": "流式输出处理",
+              "summary": "AgentResponseUpdate 事件序列与增量解析",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "compression-strategies",
+              "title": "上下文压缩策略",
+              "summary": "压缩时机与策略链设计",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-4-tools",
+      "title": "工具系统",
+      "chapters": [
+        {
+          "id": "04-tool-system",
+          "title": "工具系统",
+          "subtitle": "ITool、ToolRegistry、审批包装与内置工具",
+          "sections": [
+            {
+              "id": "itool-trait",
+              "title": "ITool trait 与 ToolResult",
+              "summary": "工具接口完整定义与两层错误模型",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "tool-registry",
+              "title": "ToolRegistry 工具注册表",
+              "summary": "按名注册、ARC 存储与批量加载",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "approval-required-tool",
+              "title": "ApprovalRequiredTool 审批包装",
+              "summary": "危险操作的人机审批包装器",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "builtin-filesystem-tools",
+              "title": "内置文件系统工具",
+              "summary": "读写、创建、删除与路径操作工具",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "run-command-tool",
+              "title": "RunCommand 命令执行工具",
+              "summary": "命令工具封装与输出捕获",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "custom-tools",
+              "title": "自定义工具开发指南",
+              "summary": "#[tool] 宏、手动实现 ITool 与 JSON Schema",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "scope-tool",
+              "title": "IScopeTool 工作区感知",
+              "summary": "具备工作区上下文的工具接口",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "mcp-tools",
+              "title": "MCP 工具集成",
+              "summary": "McpTool / McpServerClient 与 MCP 协议",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-5-providers",
+      "title": "上下文提供器",
+      "chapters": [
+        {
+          "id": "05-context-providers",
+          "title": "上下文提供器",
+          "subtitle": "IContextProvider、历史管理与技能注入",
+          "sections": [
+            {
+              "id": "overview",
+              "title": "IContextProvider 概述",
+              "summary": "上下文注入接口与运行时机",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "history-provider",
+              "title": "InMemoryHistoryProvider 历史管理",
+              "summary": "内存历史、格式化与工具响应注入",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "skills-provider",
+              "title": "AgentSkillsProvider 技能注入",
+              "summary": "通过上下文注入 Agent 技能描述",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "custom-provider",
+              "title": "自定义上下文提供器",
+              "summary": "实现 IContextProvider 与注册顺序",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-6-sessions",
+      "title": "会话管理",
+      "chapters": [
+        {
+          "id": "06-sessions",
+          "title": "会话管理",
+          "subtitle": "ISession、AgentSession 与会话存储",
+          "sections": [
+            {
+              "id": "isession",
+              "title": "ISession 会话接口",
+              "summary": "会话生命周期、内存与历史接口",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "agent-session",
+              "title": "AgentSession 默认实现",
+              "summary": "默认会话实现与内部队列模型",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "session-stores",
+              "title": "会话存储",
+              "summary": "内存 / 文件 / 隔离三种存储选择",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "provider-state",
+              "title": "ProviderState 状态持久化",
+              "summary": "上下文提供器状态的保存、恢复与写入",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-7-hitl",
+      "title": "人机协同与审批",
+      "chapters": [
+        {
+          "id": "07-hitl-approval",
+          "title": "人机协同与审批",
+          "subtitle": "ApprovalRequiredTool、审批流与中断恢复",
+          "sections": [
+            {
+              "id": "hitl-overview",
+              "title": "人机协同（HITL）概述",
+              "summary": "为什么需要人机协同与适用场景",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "approval-flow",
+              "title": "审批流完整链路",
+              "summary": "拦截、收集、批准与反馈的完整流程",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "tool-approval-api",
+              "title": "ToolApprovalRequest/Response API",
+              "summary": "审批请求与响应的 API 定义",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "resume-cancel",
+              "title": "中断恢复与取消机制",
+              "summary": "审批中断后的恢复与取消语义",
+              "readingTime": 10,
+              "difficulty": "advanced"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-8-workspace",
+      "title": "工作区管理",
+      "chapters": [
+        {
+          "id": "08-workspace-management",
+          "title": "工作区管理",
+          "subtitle": "WorkspaceScope、路径守卫与跨范围检测",
+          "sections": [
+            {
+              "id": "scope-overview",
+              "title": "WorkspaceScope 工作区范围",
+              "summary": "工作区范围定义与用途",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "workspace-context-provider",
+              "title": "WorkspaceContextProvider",
+              "summary": "向 Agent 注入工作区上下文",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "path-guard",
+              "title": "路径守卫与跨范围检测",
+              "summary": "文件操作白名单与越界拦截",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "cross-scope-approval",
+              "title": "跨范围审批集成",
+              "summary": "越界操作触发审批的集成方式",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-9-pipeline",
+      "title": "ChatClient 管道",
+      "chapters": [
+        {
+          "id": "09-chat-client-pipeline",
+          "title": "ChatClient 管道",
+          "subtitle": "装饰器模式、工具调用循环与 LLM 提供商",
+          "sections": [
+            {
+              "id": "decorator-pattern",
+              "title": "装饰器模式与管道架构",
+              "summary": "IAgent 装饰器如何组成管道",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "function-invoking",
+              "title": "FunctionInvokingChatClient 工具调用循环",
+              "summary": "工具调用循环与迭代次数控制",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "llm-providers",
+              "title": "LLM 提供商",
+              "summary": "OpenAI / DeepSeek 客户端与配置",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "stream-processing",
+              "title": "流式处理与中间件",
+              "summary": "在管道中拦截、转换与聚合流",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "local-inference",
+              "title": "本地模型推理",
+              "summary": "基于 lm.rs 的本地推理集成",
+              "readingTime": 10,
+              "difficulty": "advanced"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-10-macros",
+      "title": "宏与声明式配置",
+      "chapters": [
+        {
+          "id": "10-macros-declarative",
+          "title": "宏与声明式配置",
+          "subtitle": "#[tool] 宏与 AgentSchema v1.0 配置",
+          "sections": [
+            {
+              "id": "tool-macro",
+              "title": "#[tool] 属性宏详解",
+              "summary": "把一个函数变成 ITool 的过程宏",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "macro-type-mapping",
+              "title": "Rust 类型到 JSON Schema 映射",
+              "summary": "参数类型到 JSON Schema 的生成规则",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "declarative-config",
+              "title": "声明式 Agent/Workflow 配置",
+              "summary": "用 JSON / YAML / TOML 声明 Agent",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "agent-schema",
+              "title": "AgentSchema v1.0 规范",
+              "summary": "声明式配置的完整 Schema 定义",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "config-reference",
+              "title": "声明式配置完整字段参考",
+              "summary": "全部字段、默认值与校验规则",
+              "readingTime": 14,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "declarative-tutorial",
+              "title": "声明式 Agent 配置实战教程",
+              "summary": "从零编写一个声明式 Agent",
+              "readingTime": 14,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "migration-guide",
+              "title": "AgentBuilder → 声明式迁移指南",
+              "summary": "程序化配置到声明式配置的映射",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "integration-patterns",
+              "title": "组件联动规则",
+              "summary": "workspace + tools 路由等组合规则",
+              "readingTime": 10,
+              "difficulty": "advanced"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-11-multi-agent",
+      "title": "多智能体编排",
+      "chapters": [
+        {
+          "id": "11-multi-agent",
+          "title": "多智能体编排技术",
+          "subtitle": "六种编排模式、WorkflowBuilder 与检查点",
+          "sections": [
+            {
+              "id": "overview",
+              "title": "编排引擎概述",
+              "summary": "编排模式分类与选择框架",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "sequential-workflow",
+              "title": "SequentialWorkflow 顺序编排",
+              "summary": "顺序执行与名称解析",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "concurrent-workflow",
+              "title": "ConcurrentWorkflow 并发编排",
+              "summary": "Join / Race 两种并发语义",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "handoff-workflow",
+              "title": "HandoffWorkflow 交接编排",
+              "summary": "Agent 间意图交接与会活物传递",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "group-chat-workflow",
+              "title": "GroupChatWorkflow 群聊编排",
+              "summary": "多 Agent 群聊与引导者机制",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "vote-workflow",
+              "title": "VoteWorkflow 投票聚合",
+              "summary": "多 Agent 投票与器名聚合",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "magentic-workflow",
+              "title": "MagenticWorkflow 自主编排",
+              "summary": "图驱动自主编排引擎",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "custom-orchestrations",
+              "title": "自定义编排（WorkflowBuilder）",
+              "summary": "用 WorkflowBuilder 组装自有编排",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "checkpoints",
+              "title": "检查点与断点续传",
+              "summary": "编排中途崩溃的恢复与续传",
+              "readingTime": 10,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "workflow-as-agent",
+              "title": "IAgent 统一门面",
+              "summary": "Workflow 实现 IAgent 对外不可分",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-12-process-engine",
+      "title": "业务流程编排引擎",
+      "chapters": [
+        {
+          "id": "12-process-engine",
+          "title": "业务流程编排引擎",
+          "subtitle": "流程定义 DSL、标准活动节点与 SAGA 补偿",
+          "sections": [
+            {
+              "id": "overview",
+              "title": "业务流程引擎概述",
+              "summary": "与多智能体编排的区别与定位",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "process-definition",
+              "title": "流程定义与编译",
+              "summary": "ProcessDefinition DSL 与编译为 Beam",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "standard-activities",
+              "title": "标准活动节点",
+              "summary": "8 种 IExecutor 活动节点",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "process-instance",
+              "title": "流程实例与状态管理",
+              "summary": "实例状态机与暂停、重试、终止",
+              "readingTime": 10,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "advanced-gateways-events",
+              "title": "增强网关、事件与定时调度",
+              "summary": "网关分支、事件发布与定时触发",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "saga-compensation",
+              "title": "SAGA 事务与补偿链",
+              "summary": "跨服务一致性与补偿执行",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "agent-team-pool",
+              "title": "Agent 团队与池化管理",
+              "summary": "Agent 团队创建与池化任务调度",
+              "readingTime": 10,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "observability",
+              "title": "消息关联、审计与 SLA",
+              "summary": "追踪、审计与长流程监控",
+              "readingTime": 10,
+              "difficulty": "advanced"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-13-extensions",
+      "title": "扩展能力",
+      "chapters": [
+        {
+          "id": "13-extensions",
+          "title": "扩展能力",
+          "subtitle": "网络搜索、RAG、Wiki、沙箱与 OpenAPI 工具",
+          "sections": [
+            {
+              "id": "overview",
+              "title": "扩展体系概述",
+              "summary": "扩展分类与各扩展定位",
+              "readingTime": 6,
+              "difficulty": "beginner"
+            },
+            {
+              "id": "websearch",
+              "title": "网络搜索",
+              "summary": "WebSearch / WebFetch 工具与聚合",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "rag",
+              "title": "检索增强生成（RAG）",
+              "summary": "索引导航、嵌入与检索增强工具",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "wiki",
+              "title": "Wiki 知识引擎",
+              "summary": "知识分层、生成与搜索工具",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "skills",
+              "title": "Agent 技能系统",
+              "summary": "技能定义、结构化操作与提示组合",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "rhai-scripts",
+              "title": "Rhai 脚本引擎",
+              "summary": "脚本工具、变量注入与安全封装",
+              "readingTime": 10,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "memory",
+              "title": "SkillMemory 记忆系统",
+              "summary": "记忆存储、窗口与技能相关记忆",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "mcp",
+              "title": "MCP 协议集成",
+              "summary": "MCP 客户端、服务器与协议转换",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "sandbox",
+              "title": "代码沙箱",
+              "summary": "ICodeSandbox / code_interpreter 隔离执行",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "openapi",
+              "title": "OpenAPI HTTP 工具",
+              "summary": "从 OpenAPI 规范生成 HTTP 工具",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-14-host",
+      "title": "宿主服务",
+      "chapters": [
+        {
+          "id": "14-host-service",
+          "title": "宿主服务",
+          "subtitle": "ACP 协议、传输层与多智能体编排模型",
+          "sections": [
+            {
+              "id": "overview",
+              "title": "Host Service 概述",
+              "summary": "宿主服务定位与能力矩阵",
+              "readingTime": 8,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "acp-protocol",
+              "title": "ACP 协议与消息格式",
+              "summary": "Agent Client Protocol 消息定义",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "transports",
+              "title": "传输层",
+              "summary": "Stdio / WebSocket 传输协议",
+              "readingTime": 10,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "agent-registry",
+              "title": "Agent 注册与发现",
+              "summary": "注册或秘 Agent 与动态发现",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "multi-agent-orchestration",
+              "title": "三层多智能体编排模型",
+              "summary": "会话路由器、编排器与调度器",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            },
+            {
+              "id": "tagged-streaming",
+              "title": "标签化流式输出",
+              "summary": "按内容类型标记的事件流",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-15-appendix",
+      "title": "附录",
+      "chapters": [
+        {
+          "id": "15-appendix",
+          "title": "附录",
+          "subtitle": "API 速查、依赖图、术语表与常见问题",
+          "sections": [
+            {
+              "id": "api-reference",
+              "title": "API 速查表",
+              "summary": "所有公共 trait、方法与类型总览",
+              "readingTime": 8,
+              "difficulty": "beginner"
+            },
+            {
+              "id": "crate-dependency-graph",
+              "title": "Crate 依赖关系图",
+              "summary": "各 Crate 依赖关系与分层",
+              "readingTime": 8,
+              "difficulty": "beginner"
+            },
+            {
+              "id": "glossary",
+              "title": "术语表",
+              "summary": "Agent、Tool、Session、Workflow 等术语",
+              "readingTime": 6,
+              "difficulty": "beginner"
+            },
+            {
+              "id": "faq",
+              "title": "常见问题",
+              "summary": "添加提供商、工具错误、生产部署等",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "migration-from-maf",
+              "title": "从 MAF 迁移指南",
+              "summary": "MAF → RAF 的概念映射与差异",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "performance-tuning",
+              "title": "性能调优指南",
+              "summary": "会话存储、并行工具与 token 优化",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-16-best-practices",
+      "title": "最佳实践",
+      "chapters": [
+        {
+          "id": "16-best-practices",
+          "title": "最佳实践",
+          "subtitle": "项目组织、Agent 设计、常见陷阱与性能调优",
+          "sections": [
+            {
+              "id": "project-structure",
+              "title": "项目组织与 Crates",
+              "summary": "workspace 依赖、crate 顺序与 feature 选择",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "agent-design",
+              "title": "Agent 设计指南",
+              "summary": "单 Agent vs 多 Agent、记忆与工具设计",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "common-pitfalls",
+              "title": "常见陷阱与排查",
+              "summary": "流式、工具注册、会话生命周期的坑",
+              "readingTime": 12,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "performance-tuning",
+              "title": "性能调优",
+              "summary": "流式、缓存与 Provider 复用",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "declarative-vs-builder",
+              "title": "声明式 vs AgentBuilder",
+              "summary": "何时用声明式配置、何时用构建器",
+              "readingTime": 10,
+              "difficulty": "intermediate"
+            },
+            {
+              "id": "multi-agent-best-practices",
+              "title": "多智能体最佳实践",
+              "summary": "编排模式选择与检查点策略",
+              "readingTime": 12,
+              "difficulty": "advanced"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

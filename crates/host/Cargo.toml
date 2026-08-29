@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "ACP server host for the Rust Agent Framework — serves multiple agent systems to ACP-compatible clients (e.g. GPUI-based AI products)"
+publish = false
 
 [[bin]]
 name = "rust-agent-host"

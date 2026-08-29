@@ -165,3 +165,14 @@
 | [15.4](15-appendix/faq.md) | 常见问题 |
 | [15.5](15-appendix/migration-from-maf.md) | 从 MAF 迁移指南 |
 | [15.6](15-appendix/performance-tuning.md) | 性能调优指南 |
+
+## 第 16 章：最佳实践
+
+| 小节 | 标题 |
+|------|------|
+| [16.1](16-best-practices/project-structure.md) | 项目组织与 Crates |
+| [16.2](16-best-practices/agent-design.md) | Agent 设计指南 |
+| [16.3](16-best-practices/common-pitfalls.md) | 常见陷阱与排查 |
+| [16.4](16-best-practices/performance-tuning.md) | 性能调优 |
+| [16.5](16-best-practices/declarative-vs-builder.md) | 声明式 vs AgentBuilder |
+| [16.6](16-best-practices/multi-agent-best-practices.md) | 多智能体最佳实践 |

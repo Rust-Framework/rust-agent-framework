@@ -33,12 +33,14 @@
 | 第 13 章 | [扩展能力](13-extensions/) | 网络搜索、RAG、Wiki、代码沙箱、OpenAPI 工具、Rhai 脚本、MCP |
 | 第 14 章 | [宿主服务](14-host-service/) | ACP 协议、Stdio/WebSocket 传输、Agent 注册 |
 | 第 15 章 | [附录](15-appendix/) | Crate 地图、API 速查、术语表、常见问题 |
+| 第 16 章 | [最佳实践](16-best-practices/) | 项目组织、Agent 设计、常见陷阱、性能调优 |
 
 ## 快速导航
 
 - [完整目录索引](INDEX.md)
 - [第 1 章：快速入门](01-quick-start/)
 - [API 速查表](15-appendix/api-reference.md)
+- [第 16 章：最佳实践](16-best-practices/) — 阅读最佳实践，掌握项目组织、工具设计与性能调优
 
 ## 阅读建议
 
