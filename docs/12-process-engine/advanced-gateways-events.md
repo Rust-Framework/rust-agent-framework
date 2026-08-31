@@ -1,4 +1,4 @@
-﻿# 12.5 增强网关、事件与定时调度
+# 12.5 增强网关、事件与定时调度
 
 workflow 引擎层在原有 ParallelGateway / ExclusiveGateway / InclusiveGateway 基础上，新增 EventBasedGateway、ComplexGateway、BoundaryEvent、IntermediateEvent 和 TimerTrigger / CronTrigger 调度原语。
 

@@ -1,4 +1,4 @@
-﻿# 12.6 SAGA 事务与补偿链
+# 12.6 SAGA 事务与补偿链
 
 `SagaOrchestrator` 提供声明式分布式事务编排，基于引擎已有的 `ICompensable` 和逆序 `compensate()` 机制，支持向前恢复和向后恢复两种策略。
 

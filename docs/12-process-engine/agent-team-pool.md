@@ -1,4 +1,4 @@
-﻿# 12.7 Agent 团队与池化管理
+# 12.7 Agent 团队与池化管理
 
 workflow-pro 提供 Agent 团队组织（`AgentTeam`）、连接池管理（`AgentPool`）和动态路由（`DynamicRouter`）能力，支持多 Agent 系统中的角色划分、负载均衡和智能调度。
 

@@ -1,4 +1,4 @@
-﻿# 12.2 流程定义与编译
+# 12.2 流程定义与编译
 
 `ProcessDefinition` 是 workflow-pro 提供的声明式流程定义 DSL，支持 YAML/JSON 序列化，并编译为 `WorkflowGraph` 由引擎驱动执行。本章全面介绍流程定义的建模语言、节点类型、边规则和编译机制。
 
