@@ -1,9 +1,9 @@
 {
   "meta": {
-    "title": "rust-agent-framework",
+    "title": "Rust Agent Framework",
     "subtitle": "异步·流式·多智能体编排平台",
-    "docTitle": "rust-agent-framework 开发者手册",
-    "description": "A modular, async-native Rust framework for LLM-powered AI agents with streaming, tool-calling, human-in-the-loop approval, and multi-agent orchestration — inspired by Microsoft Agent Framework.",
+    "docTitle": "Rust Agent Framework 开发者手册",
+    "description": "企业级 Rust AI 智能体框架 — 流式输出、工具调用、人机协同审批与六种多智能体编排模式。 | Async-native LLM agent framework with streaming, tool-calling, HITL approval, and multi-agent orchestration.",
     "category": "library",
     "tags": ["rust", "agent", "llm", "multi-agent", "workflow", "ai", "streaming"],
     "repoUrl": "https://github.com/Rust-Framework/rust-agent-framework",
@@ -553,7 +553,7 @@
             {
               "id": "handoff-workflow",
               "title": "HandoffWorkflow 交接编排",
-              "summary": "Agent 间意图交接与会活物传递",
+              "summary": "Agent 间意图交接与会话上下文传递",
               "readingTime": 12,
               "difficulty": "intermediate"
             },
@@ -567,7 +567,7 @@
             {
               "id": "vote-workflow",
               "title": "VoteWorkflow 投票聚合",
-              "summary": "多 Agent 投票与器名聚合",
+              "summary": "多 Agent 投票与加权聚合",
               "readingTime": 10,
               "difficulty": "intermediate"
             },
@@ -788,7 +788,7 @@
             {
               "id": "agent-registry",
               "title": "Agent 注册与发现",
-              "summary": "注册或秘 Agent 与动态发现",
+              "summary": "注册与发现 Agent",
               "readingTime": 10,
               "difficulty": "intermediate"
             },
