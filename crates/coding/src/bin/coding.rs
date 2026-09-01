@@ -6,8 +6,8 @@
 //! cargo run -p rust-agent-coding -- "实现一个 TODO 应用" --workspace ./my-project
 //! ```
 //!
-//! API key 优先读取 `AGNES_API_KEY` 环境变量；缺失时回退到内置硬编码 key，
-//! 与测试同源，方便随时运行。`--workspace` 未指定时使用独立临时目录，
+//! API key 从 `AGNES_API_KEY` 环境变量读取（必填）。
+//! `--workspace` 未指定时使用独立临时目录，
 //! 避免 agent 写入当前目录（可能是框架源码树）。
 
 use std::io::{self, BufRead, Write};
@@ -19,18 +19,17 @@ use rust_agent_coding::build_dev_pipeline;
 use rust_agent_core::ChatMessage;
 use rust_agent_workflow::{ResumeCommand, WorkflowEvent, WorkflowRuntime};
 
-/// 从环境变量或硬编码回退获取 API key（与 real_llm_smoke 测试同源）。
-fn resolve_api_key() -> String {
-    if let Ok(key) = std::env::var("AGNES_API_KEY") {
-        return key;
-    }
-    "sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m".to_string()
+/// 从 `AGNES_API_KEY` 环境变量获取 API key。
+fn resolve_api_key() -> anyhow::Result<String> {
+    std::env::var("AGNES_API_KEY").map_err(|_| {
+        anyhow::anyhow!("missing AGNES_API_KEY environment variable (do not hardcode API keys)")
+    })
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // ── 解析参数 ──
-    let api_key = resolve_api_key();
+    let api_key = resolve_api_key()?;
     let (requirement, workspace_root) = parse_args()?;
 
     println!("=== 6 阶段开发流水线启动 ===");

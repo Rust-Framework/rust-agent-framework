@@ -6,7 +6,7 @@
 //! cargo test -p rust-agent-coding --test prompt_smoke -- --ignored --nocapture
 //! ```
 //!
-//! 优先读取 `AGNES_API_KEY` 环境变量；缺失时回退到内置硬编码 key。
+//! 需要设置 `AGNES_API_KEY` 环境变量；缺失时测试会 panic。
 
 use std::sync::Arc;
 
@@ -26,10 +26,9 @@ use rust_agent_workflow::{
 use rust_agent_workflow::engine::event::NodeChunk;
 
 fn resolve_api_key() -> String {
-    if let Ok(key) = std::env::var("AGNES_API_KEY") {
-        return key;
-    }
-    "sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m".to_string()
+    std::env::var("AGNES_API_KEY").expect(
+        "AGNES_API_KEY must be set to run ignored real-LLM tests (do not hardcode API keys)",
+    )
 }
 
 /// 取字符串前 N 个字符（UTF-8 安全）。

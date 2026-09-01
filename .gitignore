@@ -17,6 +17,11 @@ Cargo.lock
 binary_output.txt
 test_output.txt
 
+# Local secrets / env files
+.env
+.env.*
+!.env.example
+
 # IDE / AI agent helpers (do not publish)
 .cursor/
 .trae/

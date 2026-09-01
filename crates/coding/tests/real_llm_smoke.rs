@@ -6,7 +6,7 @@
 //! cargo test -p rust-agent-coding --test real_llm_smoke -- --ignored --nocapture
 //! ```
 //!
-//! 优先读取 `AGNES_API_KEY` 环境变量；缺失时回退到内置硬编码 key，方便随时运行测试。
+//! 需要设置 `AGNES_API_KEY` 环境变量；缺失时测试会 panic。
 
 use std::sync::Arc;
 
@@ -23,12 +23,11 @@ use rust_agent_workflow::{
     WorkflowEvent, WorkflowOutput, WorkflowRuntime,
 };
 
-/// 从环境变量或硬编码回退获取 API key。
+/// 从 `AGNES_API_KEY` 环境变量获取 API key。
 fn resolve_api_key() -> String {
-    if let Ok(key) = std::env::var("AGNES_API_KEY") {
-        return key;
-    }
-    "sk-RpQIC1kFNEVBZ8NBbeyBLjD4HDOURVK6uS5ZkV60N7Yxvj4m".to_string()
+    std::env::var("AGNES_API_KEY").expect(
+        "AGNES_API_KEY must be set to run ignored real-LLM tests (do not hardcode API keys)",
+    )
 }
 
 /// 构建一个调用 `yield_output` 的终点节点。
